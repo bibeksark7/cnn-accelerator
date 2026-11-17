@@ -124,7 +124,7 @@ run_artifact_regen() {
 phase_0() {
   echo "Phase 0: toolchain"
   check "tool versions (python 3.14 venv, icarus 12, verilator >= 5.036, yosys, sby)" check_tool_versions
-  check "counter test passes on icarus and verilator" check_pytest counter 2 testbench/unit/test_counter.py
+  check "unit tests pass on icarus and verilator (counter replaced by real RTL in Phase 2)" check_pytest unit 2 testbench/unit
   check "RTL lint (verilator -Wall, iverilog, yosys)" scripts/lint.sh
   check "ruff format + ruff check clean" check_ruff
   run_local_checks "optional local repository checks"
