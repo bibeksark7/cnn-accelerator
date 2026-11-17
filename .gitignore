@@ -1,6 +1,15 @@
+# Python
 .venv/
 __pycache__/
+.pytest_cache/
+.ruff_cache/
+
+# Simulation outputs
 sim_build/
 results.xml
+*.result.xml
 *.fst
 *.vcd
+
+# Dataset downloads (never committed)
+data/
