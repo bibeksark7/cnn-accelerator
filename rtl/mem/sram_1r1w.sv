@@ -3,7 +3,8 @@
 // Parameters:
 //   WIDTH     - word width in bits
 //   DEPTH     - number of words
-//   INIT_FILE - optional $readmemh file loaded at configuration/start of simulation ("" = none)
+//   INIT_FILE - optional $readmemh file loaded at configuration/start of simulation ("" = none);
+//               the initial block exists only when a file is given
 //
 // Ports:
 //   clk     - clock (no reset: contents survive rst, spec §10.2)
@@ -31,13 +32,18 @@ module sram_1r1w #(
     output logic [        WIDTH-1:0] o_rdata
 );
 
-  logic [WIDTH-1:0] mem[DEPTH];
+  // Quartus: map to M9K blocks. no_rw_check drops the read-during-write bypass logic, which is
+  // safe because the design never reads and writes the same address in one cycle.
+  (* ramstyle = "M9K, no_rw_check" *) logic [WIDTH-1:0] mem[0:DEPTH-1];
 
-  initial begin
-    if (INIT_FILE != "") begin
-      $readmemh(INIT_FILE, mem);
+  // Explicit generate/endgenerate: Quartus Prime Lite 22.1 rejects a bare generate-if here.
+  generate
+    if (INIT_FILE != "") begin : g_init
+      initial begin
+        $readmemh(INIT_FILE, mem);
+      end
     end
-  end
+  endgenerate
 
   always_ff @(posedge clk) begin
     if (i_we) begin
