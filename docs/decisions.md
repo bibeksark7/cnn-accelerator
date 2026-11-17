@@ -226,7 +226,8 @@ leaves room to refactor RTL without changing the spec.
   keeps the interface implementable by the weight-stationary array (D-015).
 - The signed-multiply note prevents a classic Verilog bug: mixing signed and unsigned operands
   makes the whole multiply unsigned.
-- A single-cycle multiply-round-saturate path would not close at 50 MHz on the MAX 10.
+- Pipelining the multiply → round/shift → saturate path gives timing margin at 50 MHz on the
+  MAX 10. Whether a single-cycle path would close was not evaluated.
 
 ## D-015 — The `systolic_array` interface (spec §11.2) is implementable weight-stationary (Phase 1 review)
 
@@ -248,9 +249,12 @@ array row `r` will need.
   cycle it is copied, so two registers per PE suffice.
 - **Activations.** Each array row has a double-buffered N-byte register. Step `r` of a block
   fills one bank while the previous block's bank is streamed out over N cycles.
+- **Block start.** A block starts streaming only after all N of its steps have arrived (or, for a
+  partial last block, after it is padded at drain). Each row's skew is measured from that start,
+  so gaps between steps, including gaps inside a block, only delay the block. They cannot
+  misalign partial sums, which is why §11.2 allows them.
 - **Throughput.** A block takes N cycles to arrive and N cycles to stream, so one step per cycle
-  is sustained indefinitely. `i_valid` therefore needs no `ready`. Gaps between steps only delay
-  a block's start and are harmless, which is why §11.2 allows them.
+  is sustained indefinitely. `i_valid` therefore needs no `ready`.
 - **Drain.** On `i_drain` a partial last block is padded internally with zero steps. The
   pipeline is flushed, and rows are emitted from the accumulator bank through the same
   `o_row_*` handshake. The extra latency is allowed because drain latency is
@@ -263,3 +267,26 @@ array row `r` will need.
 
 **Conclusion.** Workable. Testbenches written against §11.2 (handshakes only, no cycle counts)
 run unchanged on both arrays.
+
+## D-016 — Spec review round 2: rounding width, array handshake ordering, START condition (Phase 1 review)
+
+**Decision** (approved in the Phase 1 review, round 2). `docs/spec.md` now requires:
+- **§3.1:** the rounding constant is a signed value at least 49 bits wide (e.g.
+  `49'sd1 <<< (S − 1)`), and `>>>` is applied to a signed operand.
+- **§11.2:**
+  - `i_clear` never coincides with `i_valid`;
+  - `i_drain` never coincides with the last `i_valid` (it comes in a later cycle).
+- **§9 / §10.2:** `START` is accepted only when the accelerator is idle and no memory-port read
+  is pending; otherwise it is ignored.
+
+D-015 now states explicitly that a weight-stationary block starts streaming only after all N of
+its steps have arrived.
+
+**Reason.**
+- In Verilog, a narrow or unsigned rounding constant truncates or makes the expression unsigned,
+  and `>>>` on an unsigned operand is a logical shift. Either bug corrupts negative results.
+- Forbidding same-cycle `i_clear`/`i_valid` and `i_drain`/last `i_valid` removes ordering
+  ambiguities that an output-stationary and a weight-stationary array could otherwise resolve
+  differently.
+- Refusing `START` while a memory-port read is in flight keeps the port's response from
+  colliding with a run's buffer accesses.

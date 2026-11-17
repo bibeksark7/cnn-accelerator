@@ -118,7 +118,12 @@ All values are two's complement. `>>>` is an arithmetic right shift.
   Multiplying a signed `y` by an unsigned `M` directly would make Verilog treat the whole
   expression as unsigned and corrupt negative products. The 32 × 17 signed product is 49 bits wide
   and its value always fits in 48 bits (`|y| < 2^31`, `M < 2^16`).
-- **Pipelining.** To meet 50 MHz, post-processing is pipelined in at least three register stages:
+- **Rounding and shift.** The rounding constant is a signed value at least 49 bits wide, for
+  example `49'sd1 <<< (S − 1)`, added to the sign-extended product. The arithmetic shift `>>>` must
+  be applied to a signed operand: in Verilog, `>>>` on an unsigned operand is a logical shift and
+  would turn negative results positive.
+- **Pipelining.** For timing margin at 50 MHz, post-processing is pipelined in at least three
+  register stages:
   1. bias add and multiply (`y`, then `p`);
   2. rounding add and arithmetic shift (`r`);
   3. saturate and ReLU (`q8`).
@@ -242,13 +247,15 @@ All other bits are reserved and must be 0. The network's table is
 
 ## 9. Execution semantics
 
-**Run.** Writing `CTRL.START = 1` while idle:
+**Run.** Writing `CTRL.START = 1` while the accelerator is idle (`BUSY = 0`) and no memory-port
+read is pending (§10.3):
 1. clears `DONE`, `ERROR` and the performance counters;
 2. latches `IMG_SEL`;
 3. sets `BUSY`;
 4. executes descriptors 0, 1, 2, … in order until one with `last = 1` completes.
 
-At the end of the run, `BUSY` is cleared and `DONE` is set. `START` while busy is ignored.
+At the end of the run, `BUSY` is cleared and `DONE` is set. A `START` written at any other time
+(busy, or a memory-port read pending) is ignored.
 
 **Image selection.** When `src = IMG`, the effective source base is
 `src_base + IMG_SEL · IMG_SIZE`. The descriptor table is static; only `IMG_SEL` changes between
@@ -308,7 +315,7 @@ addresses read as 0 and ignore writes.
 |---|---|---|---|---|
 | 0x000 | `ID` | RO | constant | `0x434E4E31` ("CNN1") |
 | 0x004 | `CONFIG` | RO | constant | [7:0] `N`, [15:8] `DATA_W`, [23:16] `ACC_W`, [31:24] `DESC_DEPTH` |
-| 0x010 | `CTRL` | WO | 0 | [0] `START` (write 1; ignored while busy); reads 0 |
+| 0x010 | `CTRL` | WO | 0 | [0] `START` (write 1; ignored unless idle with no memory-port read pending, §9); reads 0 |
 | 0x014 | `STATUS` | RO | 0 | [0] `BUSY`, [1] `DONE`, [2] `ERROR`, [11:8] index of the current (or last) layer |
 | 0x018 | `IMG_SEL` | RW | 0 | [3:0] image index; latched at START; writes while busy are ignored |
 | 0x01C | `RESULT` | RO | 0 | [7:0] predicted class (valid when `DONE` and not `ERROR`) |
@@ -372,11 +379,11 @@ then drain the `N × N` result. Input skewing is internal.
 
 | Signal | Dir | Width | Meaning |
 |---|---|---|---|
-| `i_clear` | in | 1 | zero all accumulators; only while no step is in flight |
+| `i_clear` | in | 1 | zero all accumulators; only while no step is in flight, never in the same cycle as `i_valid` |
 | `i_valid` | in | 1 | one reduction step this cycle (no backpressure: always accepted); may deassert between steps |
 | `i_a` | in | `N·DATA_W` | byte `i` = `A[row i][k]` |
 | `i_b` | in | `N·DATA_W` | byte `j` = `B[k][col j]` |
-| `i_drain` | in | 1 | pulse after the last step: begin emitting the result |
+| `i_drain` | in | 1 | pulse in a cycle after the last step (never the same cycle as the last `i_valid`): begin emitting the result |
 | `o_row_valid` | out | 1 | a result row is available |
 | `i_row_ready` | in | 1 | consumer accepts the row (`valid && ready`) |
 | `o_row_data` | out | `N·ACC_W` | word `j` = `C[row][col j]` (int32) |
