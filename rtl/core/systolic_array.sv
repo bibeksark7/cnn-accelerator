@@ -21,7 +21,8 @@
 //   i_row_ready   - consumer accepts the row
 //   o_row_data    - N signed ACC_W words, word j = C[row][j]
 //   o_row_last    - marks row N-1
-//   o_idle        - no step in flight and no drain pending
+//   o_idle        - no step in flight and no drain pending (registered state only; a step
+//                   presented in the current cycle is not yet counted)
 //
 // Latency: after i_drain the array waits until every step in flight has been accumulated
 // (at most 2N-2 cycles after the last step), then emits rows 0..N-1, one per accepted
@@ -51,10 +52,11 @@ module systolic_array #(
 
   // ---------------------------------------------------------------- input skew
   // Stage s of each delay line holds the input from s+1 cycles ago. Row/column i taps
-  // the input directly (i = 0) or stage i-1.
-  logic [N*DATA_W-1:0] a_dly_q[DLY];
-  logic [N*DATA_W-1:0] b_dly_q[DLY];
-  logic [     DLY-1:0] v_dly_q;
+  // the input directly (i = 0) or stage i-1. Lane i never reads stages >= i, so synthesis
+  // removes them and the flop count equals a triangular arrangement.
+  logic [DLY-1:0][N*DATA_W-1:0] a_dly_q;
+  logic [DLY-1:0][N*DATA_W-1:0] b_dly_q;
+  logic [DLY-1:0]               v_dly_q;
 
   always_ff @(posedge clk) begin
     a_dly_q[0] <= i_a;
@@ -76,26 +78,26 @@ module systolic_array #(
     end
   end
 
+  // Quartus Prime Lite 22.1 needs module-scope genvars and explicit generate/endgenerate.
+  genvar gi, gj;
+
   logic [N*DATA_W-1:0] a_edge;  // skewed A entering column 0, byte i for row i
   logic [N*DATA_W-1:0] b_edge;  // skewed B entering row 0, byte j for column j
   logic [       N-1:0] v_edge;  // skewed valid entering column 0, bit i for row i
 
-  always_comb begin
-    a_edge = '0;
-    b_edge = '0;
-    v_edge = '0;
-    for (int i = 0; i < N; i++) begin
-      if (i == 0) begin
-        a_edge[i*DATA_W+:DATA_W] = i_a[i*DATA_W+:DATA_W];
-        b_edge[i*DATA_W+:DATA_W] = i_b[i*DATA_W+:DATA_W];
-        v_edge[i]                = i_valid;
-      end else begin
-        a_edge[i*DATA_W+:DATA_W] = a_dly_q[i-1][i*DATA_W+:DATA_W];
-        b_edge[i*DATA_W+:DATA_W] = b_dly_q[i-1][i*DATA_W+:DATA_W];
-        v_edge[i]                = v_dly_q[i-1];
+  generate
+    for (gi = 0; gi < N; gi = gi + 1) begin : g_edge
+      if (gi == 0) begin : g_tap_in
+        assign a_edge[gi*DATA_W+:DATA_W] = i_a[gi*DATA_W+:DATA_W];
+        assign b_edge[gi*DATA_W+:DATA_W] = i_b[gi*DATA_W+:DATA_W];
+        assign v_edge[gi]                = i_valid;
+      end else begin : g_tap_dly
+        assign a_edge[gi*DATA_W+:DATA_W] = a_dly_q[gi-1][gi*DATA_W+:DATA_W];
+        assign b_edge[gi*DATA_W+:DATA_W] = b_dly_q[gi-1][gi*DATA_W+:DATA_W];
+        assign v_edge[gi]                = v_dly_q[gi-1];
       end
     end
-  end
+  endgenerate
 
   // ---------------------------------------------------------------- PE grid
   // Flat busses indexed by PE (i, j) -> i*N + j.
@@ -107,46 +109,49 @@ module systolic_array #(
   logic [       N*N-1:0] pe_v_out;
   logic [ N*N*ACC_W-1:0] acc_flat;
 
-  for (genvar i = 0; i < N; i++) begin : g_row
-    for (genvar j = 0; j < N; j++) begin : g_col
-      logic              v_in;
-      logic [DATA_W-1:0] a_in, b_in;
+  generate
+    for (gi = 0; gi < N; gi = gi + 1) begin : g_row
+      for (gj = 0; gj < N; gj = gj + 1) begin : g_col
+        logic              v_in;
+        logic [DATA_W-1:0] a_in, b_in;
 
-      if (j == 0) begin : g_left
-        assign v_in = v_edge[i];
-        assign a_in = a_edge[i*DATA_W+:DATA_W];
-      end else begin : g_inner_h
-        assign v_in = pe_v_out[i*N+j-1];
-        assign a_in = pe_a_out[(i*N+j-1)*DATA_W+:DATA_W];
+        if (gj == 0) begin : g_left
+          assign v_in = v_edge[gi];
+          assign a_in = a_edge[gi*DATA_W+:DATA_W];
+        end else begin : g_inner_h
+          assign v_in = pe_v_out[gi*N+gj-1];
+          assign a_in = pe_a_out[(gi*N+gj-1)*DATA_W+:DATA_W];
+        end
+
+        if (gi == 0) begin : g_top
+          assign b_in = b_edge[gj*DATA_W+:DATA_W];
+        end else begin : g_inner_v
+          assign b_in = pe_b_out[((gi-1)*N+gj)*DATA_W+:DATA_W];
+        end
+
+        mac_cell #(
+            .DATA_W(DATA_W),
+            .ACC_W (ACC_W)
+        ) u_mac_cell (
+            .clk    (clk),
+            .rst    (rst),
+            .i_clear(i_clear),
+            .i_valid(v_in),
+            .i_a    (a_in),
+            .i_b    (b_in),
+            .o_valid(pe_v_out[gi*N+gj]),
+            .o_a    (pe_a_out[(gi*N+gj)*DATA_W+:DATA_W]),
+            .o_b    (pe_b_out[(gi*N+gj)*DATA_W+:DATA_W]),
+            .o_acc  (acc_flat[(gi*N+gj)*ACC_W+:ACC_W])
+        );
       end
-
-      if (i == 0) begin : g_top
-        assign b_in = b_edge[j*DATA_W+:DATA_W];
-      end else begin : g_inner_v
-        assign b_in = pe_b_out[((i-1)*N+j)*DATA_W+:DATA_W];
-      end
-
-      mac_cell #(
-          .DATA_W(DATA_W),
-          .ACC_W (ACC_W)
-      ) u_mac_cell (
-          .clk    (clk),
-          .rst    (rst),
-          .i_clear(i_clear),
-          .i_valid(v_in),
-          .i_a    (a_in),
-          .i_b    (b_in),
-          .o_valid(pe_v_out[i*N+j]),
-          .o_a    (pe_a_out[(i*N+j)*DATA_W+:DATA_W]),
-          .o_b    (pe_b_out[(i*N+j)*DATA_W+:DATA_W]),
-          .o_acc  (acc_flat[(i*N+j)*ACC_W+:ACC_W])
-      );
     end
-  end
+  endgenerate
 
   // A step is in flight while its valid bit is anywhere in the skew lines or the grid.
+  // Built only from registers, so o_idle has no combinational path from any input.
   logic in_flight;
-  assign in_flight = i_valid || (|v_dly_q) || (|pe_v_out);
+  assign in_flight = (|v_dly_q) || (|pe_v_out);
 
   // ---------------------------------------------------------------- drain
   typedef enum logic [1:0] {
