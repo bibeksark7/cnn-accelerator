@@ -290,3 +290,41 @@ its steps have arrived.
   differently.
 - Refusing `START` while a memory-port read is in flight keeps the port's response from
   colliding with a run's buffer accesses.
+
+## D-017 — Output-stationary array implementation (Phase 2)
+
+**Decision.** `systolic_array`:
+- **Skew:** input skew uses one tapped delay line per operand; row/column `i` taps stage `i − 1`.
+- **Flush detection:** a step is "in flight" while its valid bit is anywhere in the skew line
+  or the PE grid. The drain FSM (`S_IDLE → S_FLUSH → S_EMIT`) waits for that to clear, then
+  emits rows 0…N−1 through a row multiplexer.
+- **No fixed flush latency:** the wait is computed from the valid bits, not a counter.
+
+**Alternatives.**
+- Triangular per-row shift registers (fewer flops, more generate code).
+- A cycle counter for the flush (would encode a latency).
+- Shifting accumulators out of the grid (cheaper than a mux, slower drain).
+
+**Reason.** Valid-tracking makes the flush correct for any step timing, including gaps, which
+§11.2 now allows. It also makes `o_idle` exact. The row multiplexer keeps drain logic trivial; its
+size (8 × 256-bit 8:1) is acceptable on the MAX 10. The synthesis report in Phase 4 will confirm.
+
+**Note for Phase 3 mutation testing.** Removing the grid valid bits from the flush condition is
+an equivalent mutant for output data: rows are emitted in order at most one per cycle, so emission
+always trails the diagonal wavefront. It only makes `o_idle` early, which the engine never relies on.
+
+## D-018 — Testbench conventions (Phase 2)
+
+**Decision.**
+- **Drive and sample timing:** inputs are driven after a falling edge; outputs are sampled in
+  `ReadOnly`. A valid/ready transfer is counted only from values sampled before the rising edge
+  that performs it (`testbench/common/handshake.py`; see BUG-003).
+- **Signed values:** packed into unsigned integers in the testbench (`common/bits.py`).
+- **Seeds:** every random test logs its seed (`TB_SEED`, fixed default).
+- **Expected values:** come from `model/golden.py` wherever the golden model defines the
+  arithmetic.
+- **Timeouts:** only hang guards, never expected latencies.
+
+**Reason.** One sampling rule for every interface removes a whole class of off-by-one-edge
+testbench bugs. Reproducible seeds make failures debuggable. Checking against the golden model
+keeps RTL and model bit-exact by construction.

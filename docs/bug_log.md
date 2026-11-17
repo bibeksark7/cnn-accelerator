@@ -40,3 +40,22 @@ requantization, nested-loop convolution, pack/unpack round-trips) in `model/test
 - **Regression test.** No automated test of the checkpoint script. Verified by running
   `scripts/checkpoint.sh 1` with the uncommitted Phase 1 tree: it now reports
   `[FAIL] … uncommitted or untracked changes` and `CHECKPOINT 1: FAIL`.
+
+## BUG-003 — Array testbench recorded result rows one clock edge early (Phase 2)
+
+- **Symptom.** `test_systolic_array` timed out in every test after the first, waiting for
+  `o_idle` before clearing the next tile. The array was stuck in its row-emit state, holding a
+  row nobody had taken.
+- **How found.** Logging `o_idle` and the drain state in the failing test: `state_q = S_EMIT` at
+  the start of the second tile.
+- **Root cause (testbench).** The row collector checked `o_row_valid && i_row_ready` in
+  `ReadOnly` *after* a rising edge and counted that as a transfer. A valid/ready transfer happens
+  at a rising edge using the values from *before* it. The collector then changed
+  `i_row_ready` (randomly, often to 0) at the next falling edge, so the last row was "received"
+  by the test but never accepted by the array.
+- **Fix.** Set `i_row_ready` after a falling edge, then sample `valid`, `ready` and `data` in
+  `ReadOnly` of that same time step, which are the values the next rising edge uses. Count a
+  transfer only then.
+- **Regression test.** `test_systolic_array.py` now passes with random row backpressure on N =
+  8 (Icarus and Verilator), 3 and 1. A wrong-skew RTL mutant still fails it. The same sampling
+  rule is used for every valid/ready interface in later testbenches.

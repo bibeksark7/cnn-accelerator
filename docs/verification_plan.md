@@ -27,12 +27,12 @@ Status values: **done** (test exists and passes in CI), **planned** (phase in br
 
 | Feature | Test(s) | Coverage items | Status |
 |---|---|---|---|
-| MAC cell: multiply-accumulate, clear | `test_mac.py` (directed + random) | int8 extremes, clear during idle | planned [2] |
-| Systolic array (§11.2): tile result = A·B | `test_systolic_array.py`: random tiles vs NumPy | K = 1, K = `K_TILE`, all zeros, int8 extremes, back-to-back tiles, row backpressure | planned [2] |
+| MAC cell: multiply-accumulate, clear, wrap | `testbench/unit/test_mac_cell.py` (directed + 2000 random steps) | int8 extremes, idle gaps, clear, wrap past 2^31 | done |
+| Systolic array (§11.2): tile result = A·B | `testbench/unit/test_systolic_array.py`: directed + random tiles vs NumPy, handshakes only | K = 0, 1, N±1, 128; all zeros; int8 extremes; back-to-back tiles; step gaps; row backpressure; N = 8, 3, 1 | done |
 | GEMM engine: tiling over M, Ncols, K with zero padding | `test_gemm_engine.py`: random GEMMs vs golden | M, Ncols not multiples of N; K > `K_TILE` (multiple chunks); K = 1; maximum K | planned [2] |
-| Buffers: 1-cycle synchronous read, preload | `test_buffers.py` | read-after-write, init file | planned [2] |
+| Buffers: 1-cycle synchronous read, preload | `testbench/unit/test_sram_1r1w.py` | `$readmemh` preload, read hold, concurrent read/write to different addresses | done |
 | Address generators: im2col, linear, window | `test_addr_gen.py`: address streams vs Python | edge tiles, C_in = 1 and > 1, odd pool sizes | planned [2] |
-| Post-processing (§3) | `test_postproc.py`: random vs `golden.requantize` | saturation high/low hit, ReLU clamp hit, S = 1 and 47, M min/max, FC bypass | planned [2] |
+| Post-processing (§3, §3.1) | `testbench/unit/test_postproc.py`: directed + 2400 random vs `golden.requantize` | rounding ties ±, saturation high/low, ReLU clamp, S = 1 and 47, M min/max, int32 extremes of y, FC bypass, gaps + backpressure | done |
 | Pool unit | `test_pool.py` vs `golden.maxpool2` | odd sizes (floor), negative values | planned [2] |
 | Argmax unit | `test_argmax.py` | ties, all equal, int32 extremes | planned [2] |
 | CSR block (§10.2) | `test_csr.py` | every register; RO/WO; START while busy ignored; writes while busy ignored | planned [2] |
