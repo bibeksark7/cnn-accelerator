@@ -18,6 +18,7 @@ from cocotb_tools.runner import get_runner
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RTL_DIR = REPO_ROOT / "rtl"
 SIM_BUILD_DIR = REPO_ROOT / "sim_build"
+SVA_DIR = REPO_ROOT / "testbench" / "sva"
 
 # Simulators every unit test can be parameterized over.
 SIMULATORS = ("icarus", "verilator")
@@ -60,6 +61,8 @@ def run_cocotb(
     seed: int | None = None,
     testcase: str | None = None,
     waves: bool | None = None,
+    extra_env: Mapping[str, str] | None = None,
+    log_file: Path | None = None,
 ) -> Path:
     """Build ``sources`` for ``sim`` and run the cocotb tests in ``test_module``.
 
@@ -67,6 +70,7 @@ def run_cocotb(
     pytest result never depends on the simulator exit code alone.
 
     Waveforms are off by default; set ``WAVES=1`` in the environment to record them.
+    ``extra_env`` is passed to the simulation process; ``log_file`` captures its output.
     """
     params = dict(parameters or {})
     if waves is None:
@@ -98,6 +102,8 @@ def run_cocotb(
         testcase=testcase,
         timescale=("1ns", "1ps"),
         waves=waves,
+        extra_env=dict(extra_env or {}),
+        log_file=log_file,
     )
 
     num_tests, num_failed = get_results(results_xml)

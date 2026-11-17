@@ -5,6 +5,7 @@ collected with random backpressure until o_row_last is accepted. The same test i
 unchanged on the weight-stationary array (Phase 7).
 """
 
+import os
 from pathlib import Path
 
 import cocotb
@@ -13,11 +14,13 @@ import pytest
 from cocotb.triggers import FallingEdge, ReadOnly, RisingEdge
 
 from common.bits import pack, to_signed, unpack
-from common.runner import RTL_DIR, SIMULATORS, run_cocotb
+from common.runner import RTL_DIR, SIM_BUILD_DIR, SIMULATORS, SVA_DIR, run_cocotb
 from common.sim import seeded_rng, start_clock_and_reset, wait_until
 
 DATA_W, ACC_W = 8, 32
 SOURCES = [RTL_DIR / "core" / "mac_cell.sv", RTL_DIR / "core" / "systolic_array.sv"]
+SVA_SOURCES = [SVA_DIR / "systolic_array_sva.sv"]
+SVA_VIOLATION = os.environ.get("SVA_VIOLATION", "")
 
 
 def n_of(dut) -> int:
@@ -33,17 +36,19 @@ def idle(dut) -> None:
     dut.i_row_ready.value = 0
 
 
-async def run_tile(dut, a: np.ndarray, b: np.ndarray, rng, gap_prob: float, ready_prob: float):
-    """Clear, stream K steps, drain, and return the N x N result read through the handshake."""
-    n = n_of(dut)
-    k_len = a.shape[1]
-    await wait_until(dut, lambda: int(dut.o_idle.value) == 1, 200, "o_idle before clear")
+async def clear_when_idle(dut) -> None:
+    """Wait for o_idle (generous hang guard), then pulse i_clear for one cycle."""
+    await wait_until(dut, lambda: int(dut.o_idle.value) == 1, 500, "o_idle before clear")
     await FallingEdge(dut.clk)
     dut.i_clear.value = 1
     await FallingEdge(dut.clk)
     dut.i_clear.value = 0
+
+
+async def stream_steps(dut, a: np.ndarray, b: np.ndarray, rng, gap_prob: float) -> None:
+    """Present the K reduction steps (column k of A, row k of B) with random gaps."""
     k = 0
-    while k < k_len:
+    while k < a.shape[1]:
         if rng.random() < gap_prob:
             dut.i_valid.value = 0
         else:
@@ -53,6 +58,11 @@ async def run_tile(dut, a: np.ndarray, b: np.ndarray, rng, gap_prob: float, read
             k += 1
         await FallingEdge(dut.clk)
     dut.i_valid.value = 0
+
+
+async def drain_rows(dut, rng, ready_prob: float, guard: int) -> np.ndarray:
+    """Pulse i_drain and collect the N result rows through the row handshake."""
+    n = n_of(dut)
     for _ in range(rng.choice([0, 0, 1, 3])):  # optional gap before the drain pulse
         await FallingEdge(dut.clk)
     dut.i_drain.value = 1
@@ -63,7 +73,7 @@ async def run_tile(dut, a: np.ndarray, b: np.ndarray, rng, gap_prob: float, read
     # that same time step, i.e. the values the next rising edge will see. A transfer happens at
     # that rising edge iff both are high.
     rows: list[list[int]] = []
-    for _ in range(100 * n + 4 * k_len + 100):  # generous hang guard, not a latency
+    for _ in range(guard):  # generous hang guard, not a latency
         dut.i_row_ready.value = int(rng.random() < ready_prob)
         await ReadOnly()
         fire = int(dut.o_row_valid.value) and int(dut.i_row_ready.value)
@@ -79,6 +89,13 @@ async def run_tile(dut, a: np.ndarray, b: np.ndarray, rng, gap_prob: float, read
         raise TimeoutError("result rows never completed")
     dut.i_row_ready.value = 0
     return np.array(rows, dtype=np.int64)
+
+
+async def run_tile(dut, a: np.ndarray, b: np.ndarray, rng, gap_prob: float, ready_prob: float):
+    """Clear, stream K steps, drain, and return the N x N result read through the handshake."""
+    await clear_when_idle(dut)
+    await stream_steps(dut, a, b, rng, gap_prob)
+    return await drain_rows(dut, rng, ready_prob, 100 * n_of(dut) + 4 * a.shape[1] + 100)
 
 
 def expected(a: np.ndarray, b: np.ndarray) -> np.ndarray:
@@ -136,13 +153,40 @@ async def test_drain_without_steps_gives_zeros(dut):
 
 
 @cocotb.test()
+async def test_idle_then_clear_discards_partial_sums(dut):
+    """Steps streamed without a drain, then: wait for o_idle, clear, drain -> all zeros.
+
+    o_idle (spec §11.2: no step in flight) must not rise while any step is still being
+    accumulated; a clear issued as soon as o_idle rises must leave every accumulator at 0.
+    """
+    rng = seeded_rng(dut, "idle_clear")
+    n = n_of(dut)
+    idle(dut)
+    await start_clock_and_reset(dut)
+    for k_len in (1, 2, n, 2 * n + 1):
+        a, b = rand_int8(rng, (n, k_len)), rand_int8(rng, (k_len, n))
+        await clear_when_idle(dut)
+        await stream_steps(dut, a, b, rng, gap_prob=0.0)
+        await clear_when_idle(dut)  # clears as early as o_idle allows
+        got = await drain_rows(dut, rng, 1.0, 100 * n + 100)
+        np.testing.assert_array_equal(got, np.zeros((n, n)), err_msg=f"K={k_len}")
+
+
+def random_tile_count() -> int:
+    """More random tiles on Verilator, where simulation is fast."""
+    return 60 if cocotb.SIM_NAME.lower().startswith("verilator") else 12
+
+
+@cocotb.test()
 async def test_random_tiles_with_gaps_and_backpressure(dut):
     """Back-to-back random tiles; random step gaps and row backpressure; K up to 128."""
     rng = seeded_rng(dut, "random")
     n = n_of(dut)
     idle(dut)
     await start_clock_and_reset(dut)
-    for t in range(12):
+    tiles = random_tile_count()
+    dut._log.info("random tiles: %d on %s", tiles, cocotb.SIM_NAME)
+    for t in range(tiles):
         k_len = rng.choice([1, 2, 3, n - 1 or 1, n, n + 1, 17, 64, 128])
         a, b = rand_int8(rng, (n, k_len)), rand_int8(rng, (k_len, n))
         gap = rng.choice([0.0, 0.2, 0.6])
@@ -151,15 +195,57 @@ async def test_random_tiles_with_gaps_and_backpressure(dut):
         np.testing.assert_array_equal(got, expected(a, b), err_msg=f"tile {t}, K={k_len}")
 
 
+@cocotb.test(skip=SVA_VIOLATION != "clear_with_valid")
+async def sva_violation_clear_with_valid(dut):
+    """Deliberately breaks the input protocol; only run by test_sva_assertions_fire."""
+    idle(dut)
+    await start_clock_and_reset(dut)
+    await FallingEdge(dut.clk)
+    dut.i_clear.value = 1
+    dut.i_valid.value = 1
+    for _ in range(3):
+        await FallingEdge(dut.clk)
+    idle(dut)
+
+
+def build_config(sim: str) -> tuple[list[Path], list[str]]:
+    """Verilator runs compile the SVA bind file with assertions enabled; Icarus cannot."""
+    if sim == "verilator":
+        return SOURCES + SVA_SOURCES, ["--assert"]
+    return SOURCES, []
+
+
 @pytest.mark.parametrize(
     ("sim", "n"),
     [(s, 8) for s in SIMULATORS] + [("icarus", 3), ("icarus", 1)],
 )
 def test_systolic_array(sim: str, n: int) -> None:
+    sources, build_args = build_config(sim)
     run_cocotb(
         sim=sim,
         toplevel="systolic_array",
-        sources=SOURCES,
+        sources=sources,
         test_module=Path(__file__).stem,
         parameters={"N": n, "DATA_W": DATA_W, "ACC_W": ACC_W},
+        extra_build_args=build_args,
     )
+
+
+def test_sva_assertions_fire() -> None:
+    """The bound assertions are live: a protocol violation must fail the simulation."""
+    sources, build_args = build_config("verilator")
+    log = SIM_BUILD_DIR / "systolic_array_sva_violation.log"
+    # The runner reports a failed simulation as SystemExit, or RuntimeError when logging to a file.
+    with pytest.raises((SystemExit, RuntimeError)):
+        run_cocotb(
+            sim="verilator",
+            toplevel="systolic_array",
+            sources=sources,
+            test_module=Path(__file__).stem,
+            parameters={"N": 8, "DATA_W": DATA_W, "ACC_W": ACC_W},
+            extra_build_args=build_args,
+            testcase="sva_violation_clear_with_valid",
+            extra_env={"SVA_VIOLATION": "clear_with_valid"},
+            log_file=log,
+        )
+    assert "a_clear_not_with_valid" in log.read_text()
