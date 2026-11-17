@@ -6,7 +6,7 @@ Exit status 1 if any violation is found. Quartus cannot run in CI, so these rule
 Rules:
   QC1  named generate block (`begin : g_...`) outside an explicit generate/endgenerate region
   QC2  `for (` or `if (` at module scope outside generate/endgenerate (a bare generate construct)
-  QC3  unary minus applied to a size cast, e.g. `-R_W'(128)`
+  QC3  unary minus applied to a size cast, e.g. `-R_W'(128)` (binary `a - N'(b)` is fine)
   QC4  inline genvar declaration, `for (genvar ...)`
   QC5  procedural block (always*/initial/final) whose body is not a begin/end block; the checker
        needs begin/end to know where procedural code ends (the project style requires it anyway)
@@ -24,7 +24,9 @@ from pathlib import Path
 
 PROC_KEYWORDS = {"always", "always_ff", "always_comb", "always_latch", "initial", "final"}
 TOKEN_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_$]*|\d+'[sS]?[bBoOdDhH][0-9a-fA-F_xXzZ?]+|\S")
-SIZE_CAST_NEG_RE = re.compile(r"-\s*[A-Za-z0-9_]+\s*'\s*\(")
+# Unary minus only: the '-' must follow the start of the line, an opening bracket, an assignment,
+# a comma or another operator. Binary subtraction such as `h - N'(2)` is accepted by Quartus.
+SIZE_CAST_NEG_RE = re.compile(r"(?:^|[=(\[{,?:&|^~!<>+*/%])\s*-\s*[A-Za-z0-9_]+\s*'\s*\(")
 
 
 @dataclass

@@ -78,6 +78,24 @@ def test_rule_fires(src, rule):
     assert rule in rules(src)
 
 
+@pytest.mark.parametrize(
+    "expr",
+    [
+        "wire [7:0] w = -A'(3);",
+        "wire [7:0] w = (-A'(3));",
+        "wire [7:0] w = b * -A'(3);",
+        "assign x = c ? -A'(3) : 0;",
+    ],
+)
+def test_unary_minus_on_cast_fires(expr):
+    assert "QC3" in rules(f"module m; localparam int A = 5; {expr} endmodule")
+
+
+@pytest.mark.parametrize("expr", ["wire [7:0] w = b - A'(3);", "assign x = (b) - A'(1);"])
+def test_binary_minus_before_cast_is_fine(expr):
+    assert "QC3" not in rules(f"module m; localparam int A = 5; {expr} endmodule")
+
+
 def test_comments_are_ignored():
     assert rules("module m; // if (1) begin : g_x end\n /* for (genvar i */ endmodule") == []
 
