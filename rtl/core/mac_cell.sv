@@ -35,20 +35,14 @@ module mac_cell #(
     output logic signed [ ACC_W-1:0] o_acc
 );
 
-  localparam int PROD_W = 2 * DATA_W;
+  logic signed [ACC_W-1:0] acc_q;
 
-  logic signed [PROD_W-1:0] prod;
-  logic signed [ ACC_W-1:0] prod_ext;
-  logic signed [ ACC_W-1:0] acc_q;
-
-  assign prod     = i_a * i_b;  // both operands signed: signed multiply
-  assign prod_ext = $signed({{(ACC_W - PROD_W) {prod[PROD_W-1]}}, prod});
-
+  // The size cast evaluates the signed product at ACC_W bits (operands sign-extended first).
   always_ff @(posedge clk) begin
     if (rst || i_clear) begin
       acc_q <= '0;
     end else if (i_valid) begin
-      acc_q <= acc_q + prod_ext;
+      acc_q <= acc_q + ACC_W'(i_a * i_b);
     end
   end
 
