@@ -7,7 +7,7 @@ import random
 
 import cocotb
 from cocotb.clock import Clock
-from cocotb.triggers import ClockCycles, ReadOnly, RisingEdge
+from cocotb.triggers import ClockCycles, FallingEdge, ReadOnly, RisingEdge
 
 CLK_PERIOD_NS = 10
 DEFAULT_SEED = 20261117
@@ -23,10 +23,14 @@ def seeded_rng(dut, name: str = "") -> random.Random:
 
 
 async def start_clock_and_reset(dut, cycles: int = 3) -> None:
-    """Start `clk`, hold `rst` high for `cycles` rising edges, release it after an edge."""
+    """Start `clk`, hold `rst` high for `cycles` rising edges, then release it on a falling edge.
+
+    Releasing away from the rising edge avoids any race between the reset change and the edge.
+    """
     cocotb.start_soon(Clock(dut.clk, CLK_PERIOD_NS, unit="ns").start())
     dut.rst.value = 1
     await ClockCycles(dut.clk, cycles)
+    await FallingEdge(dut.clk)
     dut.rst.value = 0
 
 
