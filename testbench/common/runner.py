@@ -7,6 +7,7 @@ The cocotb coroutines live in the same file, so ``test_module`` is normally
 
 from __future__ import annotations
 
+import hashlib
 import os
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -31,9 +32,21 @@ _SIM_WAVE_ARGS: dict[str, list[str]] = {
 }
 
 
+def _param_tag(value: object) -> str:
+    """Integers appear literally in build-dir names; anything else (paths, strings) is hashed."""
+    if isinstance(value, int):
+        return str(value)
+    return hashlib.sha1(str(value).encode()).hexdigest()[:8]
+
+
 def _build_dir_name(toplevel: str, sim: str, parameters: Mapping[str, object]) -> str:
-    tag = "_".join(f"{k}{v}" for k, v in sorted(parameters.items()))
+    tag = "_".join(f"{k}{_param_tag(v)}" for k, v in sorted(parameters.items()))
     return f"{toplevel}_{sim}" + (f"_{tag}" if tag else "")
+
+
+def sv_string(value: object) -> str:
+    """Quote a value for use as a SystemVerilog string parameter (e.g. an init file path)."""
+    return f'"{value}"'
 
 
 def run_cocotb(
