@@ -75,6 +75,16 @@ jobs:
         if: always()
         run: python scripts/check_junit.py sim_build/unit.xml
 
+      - name: Script tests (lint fixtures, Quartus compatibility checker)
+        if: always()
+        run: |
+          source scripts/env.sh
+          pytest scripts/tests --junitxml=sim_build/scripts.xml
+
+      - name: Check script test results file
+        if: always()
+        run: python scripts/check_junit.py sim_build/scripts.xml --min-tests 10
+
       - name: Golden model and artifact tests
         if: always()
         run: pytest model/tests --junitxml=sim_build/model.xml

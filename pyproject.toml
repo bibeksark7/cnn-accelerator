@@ -5,7 +5,7 @@ description = "Verified int8 CNN inference accelerator in SystemVerilog"
 requires-python = ">=3.14"
 
 [tool.pytest.ini_options]
-testpaths = ["testbench", "model/tests"]
+testpaths = ["testbench", "model/tests", "scripts/tests"]
 # Makes testbench/common and the model package importable both by pytest and, via
 # PYTHONPATH, by the cocotb test modules running inside the simulator.
 pythonpath = ["testbench", "."]

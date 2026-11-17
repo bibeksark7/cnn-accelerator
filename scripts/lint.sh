@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Lint every RTL file:
-#   Verilator --lint-only -Wall   (any warning fails; waivers are inline and commented)
-#   Icarus parse/elaborate        (any output, including warnings and "sorry" messages, fails)
-#   Yosys synth with the file's module as top (errors fail; warnings are printed)
-#   Quartus Prime Lite 22.1 compatibility (Quartus cannot run in CI, see BUG-005):
-#     - no inline genvar declarations: `for (genvar ...)`
-#     - named generate blocks (`begin : g_...`) only inside explicit generate/endgenerate
+#   Quartus compatibility  scripts/check_quartus_compat.py (Quartus cannot run in CI; BUG-005)
+#   Verilator              --lint-only -Wall (any warning fails; waivers are inline and commented)
+#   Icarus                 parse/elaborate (any output, including warnings and "sorry", fails)
+#   Yosys                  hierarchy -check; proc; opt; memory -nomap; check -assert
+#                          with the file's module as top: conflicting drivers between cells,
+#                          combinational loops and used-but-undriven wires fail (a plain
+#                          double `assign` alias is caught by Verilator's MULTIDRIVEN instead)
 # Usage: scripts/lint.sh [file.sv ...]   (default: all of rtl/**/*.sv)
 set -euo pipefail
 
@@ -37,12 +38,8 @@ fail=0
 for f in "${files[@]}"; do
   top="$(basename "$f" .sv)"
   printf 'lint %-40s ' "$f"
-  if grep -nE 'for[[:space:]]*\([[:space:]]*genvar' "$f"; then
-    echo "FAIL (quartus compat: inline genvar declaration)"; fail=1; continue
-  fi
-  if grep -qE 'begin[[:space:]]*:[[:space:]]*g_' "$f" \
-     && { ! grep -qE '^[[:space:]]*generate\b' "$f" || ! grep -qE '^[[:space:]]*endgenerate\b' "$f"; }; then
-    echo "FAIL (quartus compat: generate block without generate/endgenerate)"; fail=1; continue
+  if ! out=$(python scripts/check_quartus_compat.py "$f" 2>&1); then
+    echo "FAIL (quartus compat)"; echo "$out"; fail=1; continue
   fi
   if ! out=$(verilator --lint-only -Wall --top-module "$top" "${lib[@]}" "${waivers[@]}" "$f" 2>&1); then
     echo "FAIL (verilator)"; echo "$out"; fail=1; continue
@@ -51,8 +48,10 @@ for f in "${files[@]}"; do
   if [ -n "$out" ]; then
     echo "FAIL (iverilog output)"; echo "$out"; fail=1; continue
   fi
-  if ! out=$(yosys -q -p "read_verilog -sv ${all_rtl[*]}; synth -top $top" 2>&1); then
-    echo "FAIL (yosys synth)"; echo "$out"; fail=1; continue
+  # Read the file under test plus every RTL file (for submodules), without duplicates.
+  mapfile -t ys_src < <(printf '%s\n' "$f" "${all_rtl[@]}" | awk '!seen[$0]++')
+  if ! out=$(yosys -q -p "read_verilog -sv ${ys_src[*]}; hierarchy -check -top $top; proc; opt; memory -nomap; check -assert" 2>&1); then
+    echo "FAIL (yosys check)"; echo "$out"; fail=1; continue
   fi
   echo "ok"
   [ -n "$out" ] && echo "$out" | sed 's/^/    yosys: /'
