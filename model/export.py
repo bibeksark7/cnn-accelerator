@@ -1,6 +1,6 @@
 """Export the committed test vectors and hardware memory images.
 
-Usage: python -m model.export
+Usage: python -m model.export [--params FILE] [--out DIR]
 
 Inputs:  model/artifacts/params.npz, MNIST (data/ cache)
 Outputs (committed, under model/artifacts/):
@@ -10,10 +10,12 @@ Outputs (committed, under model/artifacts/):
   mem/param.hex      parameter buffer image (bias, M, S), one 64-bit word per line
   mem/desc.hex       layer descriptor table, one 32-bit word per line
   mem/layout.json    per-layer bases, sizes and decoded descriptors
+With --out DIR, the outputs go to DIR/artifacts/ instead; --params selects another params.npz.
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 
@@ -23,7 +25,6 @@ from model import golden, hwmap, net
 from model.data import load_mnist
 
 ARTIFACTS = Path(__file__).resolve().parent / "artifacts"
-MEM_DIR = ARTIFACTS / "mem"
 QUICK_PER_CLASS = 5
 
 
@@ -38,7 +39,15 @@ def write_hex(path: Path, words: np.ndarray, digits: int) -> None:
 
 
 def main() -> None:
-    params = golden.QuantParams.load()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--params", type=Path, default=golden.PARAMS_FILE)
+    parser.add_argument("--out", type=Path, help="write outputs under this directory instead")
+    args = parser.parse_args()
+    out_artifacts = args.out / "artifacts" if args.out else ARTIFACTS
+    mem_dir = out_artifacts / "mem"
+    out_artifacts.mkdir(parents=True, exist_ok=True)
+
+    params = golden.QuantParams.load(args.params)
     params.validate()
     data = load_mnist()
 
@@ -47,7 +56,7 @@ def main() -> None:
     q = golden.preprocess(pixels)
     out = golden.infer(params, q)
     np.savez(
-        ARTIFACTS / "quick_subset.npz",
+        out_artifacts / "quick_subset.npz",
         test_index=idx.astype(np.int32),
         pixels=pixels,
         q=q,
@@ -59,11 +68,11 @@ def main() -> None:
     print(f"quick subset: {len(idx)} images, golden correct {correct}/{len(idx)}")
 
     mem = hwmap.build_memory_image(params)
-    MEM_DIR.mkdir(parents=True, exist_ok=True)
-    write_hex(MEM_DIR / "wgt.hex", mem.wgt, 16)
-    write_hex(MEM_DIR / "param.hex", mem.param, 16)
-    write_hex(MEM_DIR / "desc.hex", mem.desc, 8)
-    (MEM_DIR / "layout.json").write_text(json.dumps(mem.layout, indent=2) + "\n")
+    mem_dir.mkdir(parents=True, exist_ok=True)
+    write_hex(mem_dir / "wgt.hex", mem.wgt, 16)
+    write_hex(mem_dir / "param.hex", mem.param, 16)
+    write_hex(mem_dir / "desc.hex", mem.desc, 8)
+    (mem_dir / "layout.json").write_text(json.dumps(mem.layout, indent=2) + "\n")
     t = mem.layout["_totals"]
     print(
         f"memory image: {t['wgt_words']} weight words, {t['param_words']} param words, "

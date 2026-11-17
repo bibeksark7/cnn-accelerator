@@ -93,20 +93,23 @@ check_docs_exist() {
   return "$ok"
 }
 
-# Regenerates params, report and exported artifacts from the committed float weights and
-# checks they are byte-identical to what is committed. Needs the MNIST cache in data/.
+# Regenerates params, report and exported artifacts from the committed float weights into a
+# temporary directory and checks they are byte-identical to the committed files. Never writes
+# into model/. Needs the MNIST cache in data/.
 check_artifacts_reproducible() {
-  local tmp f
+  local tmp f rc=0
   tmp="$(mktemp -d)"
-  cp -r model/artifacts model/reports "$tmp/"
-  python -m model.quantize >/dev/null && python -m model.export >/dev/null || { rm -rf "$tmp"; return 1; }
-  for f in model/artifacts/params.npz model/artifacts/quick_subset.npz model/artifacts/mem/wgt.hex \
-           model/artifacts/mem/param.hex model/artifacts/mem/desc.hex model/artifacts/mem/layout.json \
-           model/reports/quantize.json; do
-    cmp -s "$f" "$tmp/${f#model/}" || { echo "differs after regeneration: $f"; cp -r "$tmp"/artifacts "$tmp"/reports model/; rm -rf "$tmp"; return 1; }
+  if ! python -m model.quantize --out "$tmp" >/dev/null \
+     || ! python -m model.export --params "$tmp/artifacts/params.npz" --out "$tmp" >/dev/null; then
+    rm -rf "$tmp"; return 1
+  fi
+  for f in artifacts/params.npz artifacts/quick_subset.npz artifacts/mem/wgt.hex \
+           artifacts/mem/param.hex artifacts/mem/desc.hex artifacts/mem/layout.json \
+           reports/quantize.json; do
+    cmp -s "model/$f" "$tmp/$f" || { echo "regenerated $f differs from model/$f"; rc=1; }
   done
   rm -rf "$tmp"
-  git diff --quiet -- model/artifacts model/reports || { echo "regenerated artifacts differ from git"; return 1; }
+  return "$rc"
 }
 
 run_artifact_regen() {

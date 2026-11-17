@@ -1,11 +1,12 @@
 """Post-training quantization of the float CNN to the integer format in docs/spec.md.
 
-Usage: python -m model.quantize [--seed S]
+Usage: python -m model.quantize [--seed S] [--out DIR]
 
 Inputs:  model/artifacts/float_weights.npz (from model/train.py), MNIST (data/ cache)
 Outputs (committed):
   model/artifacts/params.npz      integer weights, biases, M, S (+ the float scales, for reference)
   model/reports/quantize.json     scales, M/S, calibration choice, float vs integer accuracy
+With --out DIR, the outputs go to DIR/artifacts/ and DIR/reports/ instead (inputs are unchanged).
 
 Scheme (symmetric, zero-point 0 everywhere):
   conv weights  per-output-channel  s_w[c] = max|w[c]| / 127, q = round(w / s_w[c]) in [-127, 127]
@@ -158,7 +159,10 @@ def accuracy(pred: np.ndarray, labels: np.ndarray) -> float:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--seed", type=int, default=1, help="must match model/train.py")
+    parser.add_argument("--out", type=Path, help="write outputs under this directory instead")
     args = parser.parse_args()
+    out_artifacts = args.out / "artifacts" if args.out else ARTIFACTS
+    out_reports = args.out / "reports" if args.out else REPORTS
 
     with np.load(ARTIFACTS / "float_weights.npz") as f:
         fw = {k: f[k] for k in f.files}
@@ -199,8 +203,9 @@ def main() -> None:
     )
     print(f"int/float prediction agreement {agreement:.4f}")
 
-    ARTIFACTS.mkdir(exist_ok=True)
-    save_params(params, scales, ARTIFACTS / "params.npz")
+    out_artifacts.mkdir(parents=True, exist_ok=True)
+    out_reports.mkdir(parents=True, exist_ok=True)
+    save_params(params, scales, out_artifacts / "params.npz")
     report = {
         "script": "model/quantize.py",
         "calibration_images": CALIB_IMAGES,
@@ -219,7 +224,7 @@ def main() -> None:
         "int_float_prediction_agreement": agreement,
         "max_abs_logit": int(np.abs(test_logits_int).max()),
     }
-    (REPORTS / "quantize.json").write_text(json.dumps(report, indent=2) + "\n")
+    (out_reports / "quantize.json").write_text(json.dumps(report, indent=2) + "\n")
 
 
 if __name__ == "__main__":
