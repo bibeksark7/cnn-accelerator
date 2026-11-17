@@ -65,6 +65,7 @@ run_local_checks() { # run_local_checks "<description>"
 check_ci_green_on_head() {
   local head json status conclusion sha
   head="$(git rev-parse HEAD)"
+  [ -z "$(git status --porcelain)" ] || { echo "uncommitted or untracked changes:"; git status --short; return 1; }
   [ "$(git rev-parse '@{u}' 2>/dev/null)" = "$head" ] || { echo "HEAD is not pushed to its upstream"; return 1; }
   json="$(gh run list --branch main --limit 1 --json status,conclusion,headSha,url)" || return 1
   status="$(echo "$json" | python -c 'import json,sys; r=json.load(sys.stdin); print(r[0]["status"] if r else "")')"
@@ -73,6 +74,47 @@ check_ci_green_on_head() {
   echo "$json"
   [ "$sha" = "$head" ] || { echo "latest CI run on main is for $sha, not HEAD $head"; return 1; }
   [ "$status" = "completed" ] && [ "$conclusion" = "success" ] || { echo "CI status=$status conclusion=$conclusion"; return 1; }
+}
+
+check_accuracy_report() {
+  python - <<'PY'
+import json, sys
+r = json.load(open("model/reports/quantize.json"))
+f, i, n = r["float_test_accuracy"], r["int_test_accuracy"], r["test_images"]
+print(f"float {f:.4f}  int {i:.4f}  gap {f - i:+.4f}  on {n} test images")
+ok = n == 10000 and f >= 0.97 and (f - i) <= 0.01
+sys.exit(0 if ok else 1)
+PY
+}
+
+check_docs_exist() {
+  local f ok=0
+  for f in "$@"; do [ -s "$f" ] || { echo "missing or empty: $f"; ok=1; }; done
+  return "$ok"
+}
+
+# Regenerates params, report and exported artifacts from the committed float weights and
+# checks they are byte-identical to what is committed. Needs the MNIST cache in data/.
+check_artifacts_reproducible() {
+  local tmp f
+  tmp="$(mktemp -d)"
+  cp -r model/artifacts model/reports "$tmp/"
+  python -m model.quantize >/dev/null && python -m model.export >/dev/null || { rm -rf "$tmp"; return 1; }
+  for f in model/artifacts/params.npz model/artifacts/quick_subset.npz model/artifacts/mem/wgt.hex \
+           model/artifacts/mem/param.hex model/artifacts/mem/desc.hex model/artifacts/mem/layout.json \
+           model/reports/quantize.json; do
+    cmp -s "$f" "$tmp/${f#model/}" || { echo "differs after regeneration: $f"; cp -r "$tmp"/artifacts "$tmp"/reports model/; rm -rf "$tmp"; return 1; }
+  done
+  rm -rf "$tmp"
+  git diff --quiet -- model/artifacts model/reports || { echo "regenerated artifacts differ from git"; return 1; }
+}
+
+run_artifact_regen() {
+  if [ -f data/mnist.npz ]; then
+    check "artifacts regenerate byte-identically (quantize + export)" check_artifacts_reproducible
+  else
+    skip "artifacts regenerate byte-identically (no MNIST cache in data/)"
+  fi
 }
 
 # ---------------------------------------------------------------- phases
@@ -86,10 +128,22 @@ phase_0() {
   check "latest CI run on main is green for HEAD" check_ci_green_on_head
 }
 
+phase_1() {
+  echo "Phase 1: model and spec"
+  check "integer accuracy within 1% of float on the full test set (model/reports/quantize.json)" check_accuracy_report
+  check "golden model tests (quick-subset logits bit-exact, primitives, artifacts)" check_pytest model 20 model/tests
+  run_artifact_regen
+  check "spec.md and verification_plan.md present" check_docs_exist docs/spec.md docs/verification_plan.md
+  check "ruff format + ruff check clean" check_ruff
+  run_local_checks "optional local repository checks"
+  check "latest CI run on main is green for HEAD" check_ci_green_on_head
+}
+
 phase="${1:-}"
 case "$phase" in
   0) phase_0 ;;
-  *) echo "usage: $0 <phase>   (implemented: 0)" >&2; exit 2 ;;
+  1) phase_1 ;;
+  *) echo "usage: $0 <phase>   (implemented: 0, 1)" >&2; exit 2 ;;
 esac
 
 echo

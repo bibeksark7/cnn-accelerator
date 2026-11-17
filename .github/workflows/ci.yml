@@ -75,6 +75,14 @@ jobs:
         if: always()
         run: python scripts/check_junit.py sim_build/unit.xml
 
+      - name: Golden model and artifact tests
+        if: always()
+        run: pytest model/tests --junitxml=sim_build/model.xml
+
+      - name: Check golden model results file
+        if: always()
+        run: python scripts/check_junit.py sim_build/model.xml --min-tests 20
+
       - name: Upload simulation results
         if: failure()
         uses: actions/upload-artifact@v7
