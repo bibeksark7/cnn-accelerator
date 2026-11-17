@@ -1,0 +1,145 @@
+{
+  "conv1": {
+    "index": 0,
+    "kind": "conv",
+    "wgt_base": 0,
+    "wgt_words": 9,
+    "param_base": 0,
+    "param_words": 8,
+    "descriptor": {
+      "op": 0,
+      "relu_en": 1,
+      "requant_en": 1,
+      "last": 0,
+      "src": 0,
+      "dst": 1,
+      "src_base": 0,
+      "dst_base": 0,
+      "h_in": 28,
+      "w_in": 28,
+      "c_in": 1,
+      "c_out": 8,
+      "wgt_base": 0,
+      "param_base": 0
+    },
+    "out_elems": 5408
+  },
+  "pool1": {
+    "index": 1,
+    "kind": "pool",
+    "descriptor": {
+      "op": 1,
+      "relu_en": 0,
+      "requant_en": 0,
+      "last": 0,
+      "src": 1,
+      "dst": 2,
+      "src_base": 0,
+      "dst_base": 0,
+      "h_in": 26,
+      "w_in": 26,
+      "c_in": 8,
+      "c_out": 8,
+      "wgt_base": 0,
+      "param_base": 0
+    },
+    "out_elems": 1352
+  },
+  "conv2": {
+    "index": 2,
+    "kind": "conv",
+    "wgt_base": 9,
+    "wgt_words": 144,
+    "param_base": 8,
+    "param_words": 16,
+    "descriptor": {
+      "op": 0,
+      "relu_en": 1,
+      "requant_en": 1,
+      "last": 0,
+      "src": 2,
+      "dst": 1,
+      "src_base": 0,
+      "dst_base": 0,
+      "h_in": 13,
+      "w_in": 13,
+      "c_in": 8,
+      "c_out": 16,
+      "wgt_base": 9,
+      "param_base": 8
+    },
+    "out_elems": 1936
+  },
+  "pool2": {
+    "index": 3,
+    "kind": "pool",
+    "descriptor": {
+      "op": 1,
+      "relu_en": 0,
+      "requant_en": 0,
+      "last": 0,
+      "src": 1,
+      "dst": 2,
+      "src_base": 0,
+      "dst_base": 0,
+      "h_in": 11,
+      "w_in": 11,
+      "c_in": 16,
+      "c_out": 16,
+      "wgt_base": 0,
+      "param_base": 0
+    },
+    "out_elems": 400
+  },
+  "fc": {
+    "index": 4,
+    "kind": "fc",
+    "wgt_base": 153,
+    "wgt_words": 800,
+    "param_base": 24,
+    "param_words": 10,
+    "descriptor": {
+      "op": 2,
+      "relu_en": 0,
+      "requant_en": 0,
+      "last": 0,
+      "src": 2,
+      "dst": 3,
+      "src_base": 0,
+      "dst_base": 0,
+      "h_in": 5,
+      "w_in": 5,
+      "c_in": 16,
+      "c_out": 10,
+      "wgt_base": 153,
+      "param_base": 24
+    },
+    "out_elems": 10
+  },
+  "argmax": {
+    "index": 5,
+    "kind": "argmax",
+    "descriptor": {
+      "op": 3,
+      "relu_en": 0,
+      "requant_en": 0,
+      "last": 1,
+      "src": 3,
+      "dst": 3,
+      "src_base": 0,
+      "dst_base": 0,
+      "h_in": 1,
+      "w_in": 1,
+      "c_in": 10,
+      "c_out": 1,
+      "wgt_base": 0,
+      "param_base": 0
+    },
+    "out_elems": 1
+  },
+  "_totals": {
+    "wgt_words": 953,
+    "param_words": 34,
+    "layers": 6
+  }
+}
