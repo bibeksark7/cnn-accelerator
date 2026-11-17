@@ -18,3 +18,8 @@ Every real bug found during the project is logged here, newest at the bottom.
   sized the increment constant (`8'd1`) so the file is also `verilator --lint-only -Wall` clean.
 - **Regression test.** `scripts/lint.sh` (Verilator `-Wall`, Icarus, Yosys on every RTL file) now
   runs in CI on every push, and `testbench/unit/test_counter.py` runs the counter on both simulators.
+
+## Phase 1 — model and golden model
+
+No defects found. The golden model was checked against independent references (Python big-int
+requantization, nested-loop convolution, pack/unpack round-trips) in `model/tests/test_golden.py`.

@@ -86,3 +86,121 @@ check.
 
 **Reason.** Matches the local tool versions exactly, needs no Verilator source build, and the
 cache keeps runs fast after the first.
+
+## D-006 — Network channel counts kept as specified (Phase 1)
+
+**Decision.** Keep conv1 = 8 and conv2 = 16 channels (5,258 parameters).
+
+**Reason.** The float model reaches the required accuracy without changes
+(`model/reports/train.json`, from `model/train.py`).
+
+## D-007 — HWC activation layout; FC flatten in HWC order at training time (Phase 1)
+
+**Decision.**
+- All activations are channel-last (HWC). The im2col reduction index is
+  `k = (ky·3 + kx)·C_in + ci`.
+- The PyTorch model flattens pool2's output in HWC order (`permute(0, 2, 3, 1)`) before the FC
+  layer, so the trained FC weights are already in hardware order.
+
+**Alternatives.** CHW layout (PyTorch's native one); permuting FC weights at export.
+
+**Reason.**
+- With HWC, one 3×3 kernel tap reads `C_in` consecutive bytes, and the CONV output
+  `(m, co)` lands at `m·C_out + co`, which is directly the next layer's HWC input. No layout
+  conversion is needed between layers.
+- Training in HWC order removes a permutation step that would be an easy place for a silent
+  bug.
+
+## D-008 — Quantization details (Phase 1)
+
+**Decision.**
+- **Weights:** clamped to [−127, 127] (symmetric, −128 unused).
+- **Activation scales:** calibrated as the maximum post-ReLU activation over 10,000 training
+  images. That was chosen over 99.999/99.99/99.9 percentiles by integer accuracy on the 5,000-image
+  validation split; ties go to the larger percentile.
+- **`M`, `S`:** `S = 15 − ⌊log2 m⌋`, `M = round(m·2^S)`, with a carry fix if rounding reaches
+  2^16.
+- **Test set:** used only for the final reported numbers.
+
+**Alternatives.** Percentile calibration; quantization-aware training.
+
+**Reason.** Post-training quantization with max calibration already stays well within the 1%
+budget (`model/reports/quantize.json`), so the simpler method wins. A side effect: real MNIST
+data never saturates the requantizer, so saturation coverage comes from directed tests (see
+`docs/verification_plan.md`).
+
+## D-009 — Buffer bandwidth: staged A, pre-packed wide B words (Phase 1)
+
+**Decision.**
+- **B:** weights are packed offline into `N·DATA_W`-bit words (one reduction step per word,
+  column-tile major).
+- **A:** activations are gathered one byte per cycle by the im2col/linear address generator into
+  N byte-wide staging banks of depth `K_TILE = 128`. They are then streamed N bytes per cycle.
+  GEMMs with K > `K_TILE` (fc, K = 400) run in K chunks with the output-stationary accumulators
+  kept between chunks.
+
+**Alternatives.**
+- N-banked activation buffers (im2col rows are not contiguous, so bank conflicts need a complex
+  layout).
+- Staging whole K for every tile (3.2 KB of A storage for fc).
+- Double-buffered staging (faster, more control logic).
+
+**Reason.** Simplest scheme that is clearly correct. Weight bandwidth comes for free from the
+offline packing. `K_TILE = 128` keeps each staging bank in one MAX 10 M9K block, and it makes the
+real network exercise K-chunking (fc), so the system test covers that path. The utilization cost
+is accepted for Milestone 1.
+
+## D-010 — Image selection by CSR offset, separate image buffer (Phase 1)
+
+**Decision.** Input images live in a dedicated IMG buffer. Conv1's descriptor reads `src = IMG`,
+and the effective base is `src_base + IMG_SEL · 784`, with `IMG_SEL` a CSR latched at START.
+
+**Alternatives.** The host rewrites conv1's descriptor for every image; images in ACT0.
+
+**Reason.** The descriptor table stays static (the network is pure data), the FPGA top only
+drives `IMG_SEL` from the switches, and ping-pong layers can never overwrite an image, so images
+run back to back without reloading.
+
+## D-011 — Committed model artifacts and generation flow (Phase 1)
+
+**Decision.**
+- **Committed:**
+  - `model/artifacts/float_weights.npz` (trained float weights);
+  - `params.npz` (integer parameters);
+  - `quick_subset.npz` (50 images: the first 5 of each class in test-set order, with expected
+    logits);
+  - `mem/*.hex` + `mem/layout.json` (weight, parameter and descriptor memory images).
+- **Generation:** `train.py` → `quantize.py` → `export.py`. Quantize and export are
+  deterministic, and `scripts/checkpoint.sh 1` regenerates them and requires byte-identical
+  output.
+- **FPGA init files** for the 16 board images (and their labels) are generated in Phase 4, when
+  the board top defines them.
+
+**Reason.**
+- Training is not bit-reproducible across machines. Committing the float weights lets anyone
+  re-run quantization and export exactly, and CI needs only NumPy.
+- A class-balanced quick subset exercises every output class.
+
+## D-012 — Golden-model overflow check by an order-independent bound (Phase 1)
+
+**Decision.** For every GEMM, the golden model asserts `Σ_k |A·B| + |bias| ≤ 2^31 − 1` rather than
+checking only the final sums.
+
+**Reason.** The hardware accumulates in a different order than NumPy, with K chunks and bias added
+last. The bound guarantees that no partial sum overflows in any order, so a passing golden run
+proves that 32-bit accumulators (which wrap rather than saturate) are always exact.
+
+## D-013 — Spec scope: what is normative (Phase 1)
+
+**Decision.** `docs/spec.md` fixes as normative:
+- the arithmetic, data layouts and memory formats;
+- the descriptor format and execution semantics;
+- the CSR map, CSR bus and memory port;
+- the interfaces of `accel_top` and `systolic_array`.
+
+Internal module interfaces are defined in module headers during Phase 2 and summarized in
+`docs/architecture.md`. Buffer read latency (1 cycle) is the only fixed latency.
+
+**Reason.** These are the contracts that tests, firmware (Milestone 2) and the
+weight-stationary array (Milestone 3) depend on. Keeping internal partitioning out of the spec
+leaves room to refactor RTL without changing the spec.
