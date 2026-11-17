@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Same snapshot as the local toolchain (docs/decisions.md). Provides Verilator, Yosys, SymbiYosys.
+  OSS_CAD_SUITE_TAG: "2026-11-01"
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install Icarus Verilog 12
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends iverilog
+
+      - name: Cache OSS CAD Suite
+        id: oss-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/tools/oss-cad-suite
+          key: oss-cad-suite-linux-x64-${{ env.OSS_CAD_SUITE_TAG }}
+
+      - name: Download OSS CAD Suite
+        if: steps.oss-cache.outputs.cache-hit != 'true'
+        run: |
+          tag="$OSS_CAD_SUITE_TAG"
+          mkdir -p "$HOME/tools"
+          curl -fsSL --retry 3 \
+            "https://github.com/YosysHQ/oss-cad-suite-build/releases/download/${tag}/oss-cad-suite-linux-x64-${tag//-/}.tgz" \
+            | tar -xz -C "$HOME/tools"
+
+      - name: Tool versions
+        run: |
+          source scripts/env.sh
+          echo "python:    $(command -v python) $(python --version)"
+          echo "iverilog:  $(command -v iverilog) $(iverilog -V 2>&1 | head -1)"
+          echo "verilator: $(command -v verilator) $(verilator --version)"
+          echo "yosys:     $(yosys -V)"
+          iverilog -V 2>&1 | head -1 | grep -q "version 12\." || { echo "need Icarus 12"; exit 1; }
+          [ "$(command -v iverilog)" = /usr/bin/iverilog ] || { echo "Icarus must come from the system, not the suite"; exit 1; }
+
+      - name: Ruff
+        run: |
+          ruff format --check .
+          ruff check .
+
+      - name: RTL lint (Verilator -Wall, Icarus, Yosys)
+        run: scripts/lint.sh
+
+      - name: Unit tests (Icarus + Verilator)
+        run: |
+          source scripts/env.sh
+          pytest testbench/unit --junitxml=sim_build/unit.xml
+
+      - name: Check unit test results file
+        if: always()
+        run: python scripts/check_junit.py sim_build/unit.xml
+
+      - name: Upload simulation results
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sim-results
+          path: |
+            sim_build/**/*.xml
+            sim_build/**/*.fst
+          if-no-files-found: ignore
