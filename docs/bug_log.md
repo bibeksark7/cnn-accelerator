@@ -21,7 +21,8 @@ Every real bug found during the project is logged here, newest at the bottom.
 
 ## Phase 1 — model and golden model
 
-No defects found. The golden model was checked against independent references (Python big-int
+No defects in the model code. (BUG-002, below, is a Phase 1 defect in the checkpoint script.)
+The golden model was checked against independent references (Python big-int
 requantization, nested-loop convolution, pack/unpack round-trips) in `model/tests/test_golden.py`.
 
 ## BUG-002 — Phase checkpoint passed with all of the phase's work uncommitted (Phase 1)
