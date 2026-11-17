@@ -1,0 +1,16 @@
+Analysis & Synthesis Status : Successful - Tue Nov 17 17:58:49 2026
+Quartus Prime Version : 22.1std.0 Build 915 10/25/2022 SC Lite Edition
+Revision Name : probe_systolic_array
+Top-level Entity Name : systolic_array
+Family : MAX 10
+Total logic elements : 4,549
+    Total combinational functions : 3,396
+    Dedicated logic registers : 3,228
+Total registers : 3228
+Total pins : 1
+Total virtual pins : 392
+Total memory bits : 128
+Embedded Multiplier 9-bit elements : 64
+Total PLLs : 0
+UFM blocks : 0
+ADC blocks : 0
