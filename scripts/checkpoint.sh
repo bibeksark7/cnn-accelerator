@@ -120,6 +120,28 @@ run_artifact_regen() {
   fi
 }
 
+# Quartus Analysis & Synthesis probe of every RTL module as top (local only: Quartus is a
+# Windows install). SKIPs when Quartus is not available (quartus_probe.sh exits 2).
+run_quartus_probes() {
+  local f top rc=0 status
+  mapfile -t rtl_files < <(find rtl -name '*.sv' | sort)
+  for f in "${rtl_files[@]}"; do
+    top="$(basename "$f" .sv)"
+    status=0
+    scripts/quartus_probe.sh --out "sim_build/quartus/$top" "$top" "${rtl_files[@]}" \
+      >"$REPORT_DIR/quartus_$top.log" 2>&1 || status=$?
+    if [ "$status" -eq 2 ]; then
+      skip "Quartus Analysis & Synthesis probes (Quartus not available)"
+      return 0
+    fi
+    if [ "$status" -ne 0 ]; then
+      echo "  quartus probe failed for $top:"; sed 's/^/    /' "sim_build/quartus/$top/messages.txt"
+      rc=1
+    fi
+  done
+  if [ "$rc" -eq 0 ]; then pass "Quartus Analysis & Synthesis probes (${#rtl_files[@]} modules)"; else fail "Quartus Analysis & Synthesis probes"; fi
+}
+
 # ---------------------------------------------------------------- phases
 phase_0() {
   echo "Phase 0: toolchain"
@@ -142,11 +164,23 @@ phase_1() {
   check "latest CI run on main is green for HEAD" check_ci_green_on_head
 }
 
+phase_2() {
+  echo "Phase 2: core RTL"
+  check "unit tests pass (testbench/unit, Icarus and Verilator with SVA)" check_pytest unit 10 testbench/unit
+  check "script tests pass (lint fixtures, Quartus compatibility checker)" check_pytest scripts 10 scripts/tests
+  check "RTL lint (Quartus compat, Verilator -Wall, Icarus, Yosys check)" scripts/lint.sh
+  check "ruff format + ruff check clean" check_ruff
+  run_quartus_probes
+  run_local_checks "optional local repository checks"
+  check "latest CI run on main is green for HEAD" check_ci_green_on_head
+}
+
 phase="${1:-}"
 case "$phase" in
   0) phase_0 ;;
   1) phase_1 ;;
-  *) echo "usage: $0 <phase>   (implemented: 0, 1)" >&2; exit 2 ;;
+  2) phase_2 ;;
+  *) echo "usage: $0 <phase>   (implemented: 0, 1, 2)" >&2; exit 2 ;;
 esac
 
 echo
