@@ -471,3 +471,31 @@ Sources: `timing_setup_worst.rpt`, `timing_hold_worst.rpt`, `probe_<module>.sta.
 - **Post-v1.0 option:** narrow the supported `S` range. Spec §3 allows `S` in [1, 47]; a
   narrower range shrinks the barrel shifter. This is a spec change, and the offline quantizer
   would have to assert the new range.
+
+## D-025 — Address generators: incremental counters, engine-driven commands (Phase 2)
+
+**Decision.**
+- **`agen_a` (CONV im2col and FC linear) and `agen_pool` (2×2 window scan) use only counters and
+  adders.** Values that would need a multiply are built by repeated addition during a short setup:
+  the row stride `W·C`, and FC's `K = H·W·C`. CONV's `K = 9·C` is `(C << 3) + C`. Yosys finds no
+  `$mul` cells and Quartus uses no embedded multipliers for either module.
+- **Cheap address steps.** Inside one 3×3 kernel row the `3·C` source bytes are contiguous (HWC),
+  so the im2col address advances by 1 except at kernel-row wraps (`+W·C`). Output pixels advance
+  by `C`, or `3·C` at the end of an output row.
+- **K chunks without division.** All rows of a tile cover the same `k` range, so the generator
+  saves the reduction-index state where a chunk ends and restores it for each row. A chunk can
+  therefore start mid-kernel-row.
+- **Only valid rows are staged.** Rows of a tile beyond the last output pixel are not emitted;
+  `o_row_mask` tells the engine which staging banks are valid, and the engine feeds zeros for the
+  others. FC (M = 1) stages one row instead of N.
+- **Engine-driven commands.** `agen_a` takes `STAGE`, `NEXT_CHUNK`, `REWIND_K` and `NEXT_TILE`
+  over a handshake, so tiling order stays in the engine.
+- **Degenerate shapes.** A layer with K = 0 (C = 0) has no valid tiles. POOL with H or W below 2,
+  or C = 0, produces no addresses.
+
+**Alternatives.** Multipliers for `(oy·W + ox)·C` (uses DSP blocks the array needs and lengthens
+the address path); dividing `k` into (ky, kx, ci) at each chunk start (needs dividers); emitting
+padded rows as explicit zeros (N·Kc cycles wasted per padded tile, 7 of 8 rows for FC).
+
+**Reason.** Small and fast hardware with obviously bounded logic depth. The tests compare every
+address with a direct formula and with the golden model's data layout.
