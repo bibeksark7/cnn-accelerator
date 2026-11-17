@@ -28,11 +28,13 @@ Status values: **done** (test exists and passes in CI), **planned** (phase in br
 | Feature | Test(s) | Coverage items | Status |
 |---|---|---|---|
 | MAC cell: multiply-accumulate, clear, wrap | `testbench/unit/test_mac_cell.py` (directed + 2000 random steps) | int8 extremes, idle gaps, clear, wrap past 2^31 | done |
-| Systolic array (§11.2): tile result = A·B | `testbench/unit/test_systolic_array.py`: directed + random tiles vs NumPy, handshakes only | K = 0, 1, N±1, 128; all zeros; int8 extremes; back-to-back tiles; step gaps; row backpressure; N = 8, 3, 1 | done |
+| Systolic array (§11.2): tile result = A·B | `testbench/unit/test_systolic_array.py`: directed + random tiles vs NumPy (12 random tiles on Icarus, 60 on Verilator), handshakes only | K = 0, 1, N±1, 128; all zeros; int8 extremes; back-to-back tiles; step gaps; row backpressure; N = 8, 3, 1 | done |
+| Systolic array `o_idle` (§11.2): idle only when no step is in flight | `test_systolic_array.py::test_idle_then_clear_discards_partial_sums`; SVA `a_idle_means_empty` | clear issued as soon as `o_idle` rises, K = 1, 2, N, 2N+1 | done |
+| Systolic array protocol assertions | `testbench/sva/systolic_array_sva.sv` (bound in every Verilator run); `test_sva_assertions_fire` proves they are live | clear vs valid, clear only when idle, drain-window quiet, row stable under backpressure, idle means empty | done |
 | GEMM engine: tiling over M, Ncols, K with zero padding | `test_gemm_engine.py`: random GEMMs vs golden | M, Ncols not multiples of N; K > `K_TILE` (multiple chunks); K = 1; maximum K | planned [2] |
 | Buffers: 1-cycle synchronous read, preload | `testbench/unit/test_sram_1r1w.py` | `$readmemh` preload, read hold, concurrent read/write to different addresses | done |
 | Address generators: im2col, linear, window | `test_addr_gen.py`: address streams vs Python | edge tiles, C_in = 1 and > 1, odd pool sizes | planned [2] |
-| Post-processing (§3, §3.1) | `testbench/unit/test_postproc.py`: directed + 2400 random vs `golden.requantize` | rounding ties ±, saturation high/low, ReLU clamp, S = 1 and 47, M min/max, int32 extremes of y, FC bypass, gaps + backpressure | done |
+| Post-processing (§3, §3.1), 4-stage pipeline | `testbench/unit/test_postproc.py`: directed + 2400 random vs `golden.requantize`; Yosys netlist also passes it | rounding ties ±, saturation high/low, ReLU clamp, S = 1 and 47, M min/max, int32 extremes of y, FC bypass, gaps + backpressure | done |
 | Pool unit | `test_pool.py` vs `golden.maxpool2` | odd sizes (floor), negative values | planned [2] |
 | Argmax unit | `test_argmax.py` | ties, all equal, int32 extremes | planned [2] |
 | CSR block (§10.2) | `test_csr.py` | every register; RO/WO; START while busy ignored; writes while busy ignored | planned [2] |
@@ -54,7 +56,8 @@ Status values: **done** (test exists and passes in CI), **planned** (phase in br
 | Item | Where | Status |
 |---|---|---|
 | Handshake stability (valid held until ready, payload stable) | SVA bind files, Verilator | planned [3] |
-| No buffer address out of range; legal FSM states; no X after reset | SVA | planned [3] |
+| No buffer address out of range; legal FSM states | SVA | planned [3] |
+| No X on outputs after reset, **valid-qualified**: every `o_*valid` / `o_idle` / `o_ready` / status output is never X after reset; a data output is never X in a cycle where its qualifying valid is high (data under a low valid may be X) | SVA (Verilator is 2-state, so X checks run on Icarus with a cocotb monitor) | planned [3] |
 | Formal: MAC accumulate/clear; argmax lowest-index max; one valid/ready buffer | SymbiYosys | planned [3] |
 | Bug injection: 8–10 mutants, all caught | `scripts/mutation.sh`, `testbench/reports/mutation.md` | planned [3] |
 

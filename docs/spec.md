@@ -123,8 +123,10 @@ All values are two's complement. `>>>` is an arithmetic right shift.
   be applied to a signed operand: in Verilog, `>>>` on an unsigned operand is a logical shift and
   would turn negative results positive.
 - **Pipelining.** For timing margin at 50 MHz, post-processing is pipelined in at least three
-  register stages:
-  1. bias add and multiply (`y`, then `p`);
+  register stages, in this order:
+  1. bias add and multiply (`y`, then `p`). This may take two stages: register `y`, `M` and `S`,
+     then multiply the registered operands into a registered product so the multiplier maps
+     onto DSP blocks;
   2. rounding add and arithmetic shift (`r`);
   3. saturate and ReLU (`q8`).
 

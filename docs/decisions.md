@@ -300,18 +300,28 @@ its steps have arrived.
   emits rows 0…N−1 through a row multiplexer.
 - **No fixed flush latency:** the wait is computed from the valid bits, not a counter.
 
+- **`o_idle`:** built only from registered state (the skew-line and grid valid bits plus the
+  drain FSM), so it has no combinational path from any input. A step presented in the current
+  cycle is not yet counted.
+- **Delay lines:** packed 2D arrays, with taps assigned in a named generate loop.
+
 **Alternatives.**
-- Triangular per-row shift registers (fewer flops, more generate code).
+- Triangular per-row shift registers. Not fewer flops: lane `i` never reads stages `≥ i` of the
+  tapped line, so synthesis removes them and both give the same flop count. The tapped line is
+  simply less generate code.
 - A cycle counter for the flush (would encode a latency).
 - Shifting accumulators out of the grid (cheaper than a mux, slower drain).
 
 **Reason.** Valid-tracking makes the flush correct for any step timing, including gaps, which
-§11.2 now allows. It also makes `o_idle` exact. The row multiplexer keeps drain logic trivial; its
-size (8 × 256-bit 8:1) is acceptable on the MAX 10. The synthesis report in Phase 4 will confirm.
+§11.2 allows, and makes `o_idle` exact. The row multiplexer keeps drain logic trivial; its cost
+will be measured in the Phase 4 synthesis report.
 
-**Note for Phase 3 mutation testing.** Removing the grid valid bits from the flush condition is
-an equivalent mutant for output data: rows are emitted in order at most one per cycle, so emission
-always trails the diagonal wavefront. It only makes `o_idle` early, which the engine never relies on.
+**Correction (Phase 2 batch 1 review).** An earlier version of this entry called "remove the grid
+valid bits from the flush condition" an *equivalent* mutant. That was wrong. Output rows are
+unaffected (emission trails the wavefront), but `o_idle` is part of the §11.2 interface. With the
+mutant, `o_idle` rises while later PEs are still accumulating, and a clear issued then leaves stale
+products in the accumulators. `test_idle_then_clear_discards_partial_sums` and the
+`a_idle_means_empty` assertion now both catch it (BUG-004).
 
 ## D-018 — Testbench conventions (Phase 2)
 
@@ -328,3 +338,59 @@ always trails the diagonal wavefront. It only makes `o_idle` early, which the en
 **Reason.** One sampling rule for every interface removes a whole class of off-by-one-edge
 testbench bugs. Reproducible seeds make failures debuggable. Checking against the golden model
 keeps RTL and model bit-exact by construction.
+
+## D-019 — Spec §3.1: post-processing stage list allows a split multiply stage (Phase 2)
+
+**Decision** (approved in the Phase 2 batch 1 review). §3.1 already required "at least three"
+register stages. Its stage list now states that the first step (bias add and multiply) may take
+two stages: register `y`, `M` and `S`, then multiply the registered operands into a registered
+product. `postproc` uses four stages: y/M/S → multiply → round/shift → saturate/ReLU.
+
+**Reason.** A multiplier with registered inputs and outputs maps onto the MAX 10's DSP blocks and
+keeps the 32-bit bias add off the multiplier's path. Order and arithmetic are unchanged, and the
+latency is still not part of any interface.
+
+## D-020 — Post-v1.0 performance ideas, deferred (Phase 2)
+
+Not implemented before `v1.0` (Milestone 1 is correctness-first). Recorded so they are not lost:
+- **Overlap staging with drain.** While the array drains and post-processes one output tile, the
+  A loader could already stage the next tile's A chunk. This needs a second staging bank set
+  (double buffering) and a slightly more involved engine FSM. It hides most of the drain time.
+- **Byte-enabled staging RAM.** Replace the N byte-wide staging banks with one `N·DATA_W`-wide RAM
+  with byte enables. Quartus maps that to fewer, fuller M9K blocks. The A loader keeps writing one
+  byte per cycle (one byte enable), and streaming reads one full word.
+
+## D-021 — MAX 10 configuration mode for initialized block RAM (Phase 2)
+
+**Decision.** Every Quartus project for this design sets
+`INTERNAL_FLASH_UPDATE_MODE "SINGLE IMAGE WITH ERAM"` (single uncompressed image with memory
+initialization). Phase 4's `build.tcl` must include it.
+
+**Evidence.** A Quartus Prime Lite 22.1std Analysis & Synthesis probe of `sram_1r1w` (1024 × 64,
+`$readmemh` init file) on the 10M50DAF484C7G:
+- **Default configuration mode:** Quartus reported `RAM logic "mem" is uninferred because MIF is
+  not supported for the selected family`. It built the memory from registers and logic.
+- **With the setting:** it inferred an M9K simple-dual-port RAM, and its generated MIF matched the
+  init file word for word.
+
+The probe was run by hand from a temporary Windows build directory; Phase 4's build scripts will
+make it reproducible.
+
+**Reason.** The FPGA demo preloads weights, parameters, descriptors and images through init
+files. Without memory initialization, the buffers would not map to block RAM at all.
+
+## D-022 — RTL rules for Quartus Prime Lite 22.1 compatibility (Phase 2)
+
+**Decision.** In addition to the coding rules in the project's RTL style:
+- generate constructs always use explicit `generate … endgenerate`;
+- genvars are declared at module scope (`genvar gi, gj;`), never inline in `for`, and loops step
+  with `gi = gi + 1`;
+- no unary minus applied to a size cast (`-N'(x)`); use typed signed localparams for such
+  constants;
+- every new module gets a Quartus Analysis & Synthesis probe before it is committed, until the
+  Phase 4 build covers the whole design.
+
+`scripts/lint.sh` enforces the first two rules (BUG-005).
+
+**Reason.** Quartus is the one required tool that cannot run in CI, and its front end rejected
+constructs the other three accept. Encoding the rules in lint keeps CI meaningful for it.

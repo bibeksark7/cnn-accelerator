@@ -59,3 +59,52 @@ requantization, nested-loop convolution, pack/unpack round-trips) in `model/test
 - **Regression test.** `test_systolic_array.py` now passes with random row backpressure on N =
   8 (Icarus and Verilator), 3 and 1. A wrong-skew RTL mutant still fails it. The same sampling
   rule is used for every valid/ready interface in later testbenches.
+
+## BUG-004 — Array `o_idle` semantics untested; a real mutant was misclassified as equivalent (Phase 2)
+
+- **Symptom.** A mutant that left the PE-grid valid bits out of the "in flight" condition passed
+  every array test. I recorded it in D-017 as equivalent.
+- **How found.** Phase 2 batch 1 review: `o_idle` is part of the §11.2 interface, so a mutant that
+  changes it cannot be equivalent.
+- **Root cause.**
+  - **Test gap:** every test cleared the array only after a completed drain. That is long after
+    the grid empties, so an early `o_idle` was never observable.
+  - **Analysis error:** the equivalence argument considered only output rows, not every output
+    of the interface.
+- **Fix.**
+  - `o_idle` is now built only from registered state (`i_valid` removed from the in-flight term).
+  - New test `test_idle_then_clear_discards_partial_sums`: stream steps without a drain, clear as
+    soon as `o_idle` rises, drain, expect zeros.
+  - New SVA `a_idle_means_empty` (`o_idle` implies no valid bit in the skew lines or the grid).
+- **Regression test.** With the mutant re-applied, the new test fails on Icarus (N = 8), and on
+  Verilator the assertion `a_idle_means_empty` fires. D-017 is corrected.
+
+## BUG-005 — Quartus rejected RTL that Verilator, Icarus and Yosys all accepted (Phase 2)
+
+- **Symptom.** Quartus Prime Lite 22.1std Analysis & Synthesis failed on three files:
+  - `sram_1r1w.sv`: `Error (10170): ... near text: "if"; expecting "endmodule"` (a generate-if
+    with no `generate` keyword);
+  - `systolic_array.sv`: `Error (10170): ... near text: "for"; expecting "endmodule"` and
+    `Error (10149): ... identifier "i" is already declared` (generate-for loops with inline
+    `genvar` and no `generate` keyword);
+  - `postproc.sv`: `Error (10170): ... near text: "'"; expecting ","` on `-R_W'(128)` (unary minus
+    applied to a size cast).
+- **How found.** Quartus probe compiles: the `sram_1r1w` M9K probe (D-021), then the same check
+  on every batch 1 module. Verilator `-Wall`, Icarus and Yosys had accepted all three files.
+- **Root cause.** Quartus 22.1 Lite's SystemVerilog front end is stricter than the other three
+  tools:
+  - it needs explicit `generate … endgenerate`;
+  - it treats `for (genvar i …)` as a module-scope declaration, so two loops both using `i`
+    collide;
+  - it cannot parse `-N'(x)`.
+- **Fix.**
+  - Explicit `generate … endgenerate` blocks with module-scope genvars (`genvar gi, gj;`) and
+    `gi = gi + 1` steps.
+  - Typed signed localparams for the saturation bounds.
+- **Regression test.**
+  - All three modules now pass Quartus Analysis & Synthesis with 0 errors and 0 warnings.
+  - Quartus cannot run in CI (Windows-only), so `scripts/lint.sh` gained two grep-based checks
+    that run everywhere: no inline `for (genvar …)`, and named `g_*` generate blocks only inside
+    explicit `generate/endgenerate`. They reject the original `systolic_array.sv` and the bare
+    generate-if version of `sram_1r1w.sv`.
+  - Phase 4's full Quartus build is the final regression.
