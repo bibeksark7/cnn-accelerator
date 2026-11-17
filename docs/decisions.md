@@ -204,3 +204,62 @@ Internal module interfaces are defined in module headers during Phase 2 and summ
 **Reason.** These are the contracts that tests, firmware (Milestone 2) and the
 weight-stationary array (Milestone 3) depend on. Keeping internal partitioning out of the spec
 leaves room to refactor RTL without changing the spec.
+
+## D-014 — Spec review changes before Phase 2 (Phase 1 review)
+
+**Decision** (approved in the Phase 1 review). `docs/spec.md` now specifies:
+- **Reset values** for every CSR (§10.2): 0 unless stated; `ID`/`CONFIG` are constants. `rst`
+  does not clear the descriptor table or any buffer.
+- **Array step timing** (§11.2): `i_valid` may deassert between steps (including between K
+  chunks). Accumulators hold, and results depend only on the step sequence, not its timing.
+- **Drain window** (§11.2): from `i_drain` until the last row is accepted, the producer asserts
+  neither `i_valid` nor `i_clear`.
+- **Optional A reuse** (§5): when `K ≤ K_TILE`, the staged A tile may be reused across all column
+  tiles of a row tile.
+- **Post-processing implementation** (§3.1): `M` is multiplied as `$signed({1'b0, M})`, and the
+  datapath is pipelined (multiply → round/shift → saturate/ReLU).
+
+**Reason.**
+- Reset values make the post-reset state testable ("no X after reset").
+- Not clearing buffers lets a reset recover without reloading.
+- Gap-tolerant step timing lets the GEMM engine stall between steps (staging, buffer latency) and
+  keeps the interface implementable by the weight-stationary array (D-015).
+- The signed-multiply note prevents a classic Verilog bug: mixing signed and unsigned operands
+  makes the whole multiply unsigned.
+- A single-cycle multiply-round-saturate path would not close at 50 MHz on the MAX 10.
+
+## D-015 — The `systolic_array` interface (spec §11.2) is implementable weight-stationary (Phase 1 review)
+
+**Decision.** Freeze §11.2 for both arrays. This sketch shows `systolic_array_ws` can implement it
+with no backpressure and no interface change.
+
+**Mapping.** Reduction steps are grouped into blocks of N (`g = k / N`, `r = k mod N`). PE
+`(r, j)` holds weight `B[gN + r][j]`. For output row `i`, array row `r` receives `A[i][gN + r]`
+(skewed by `r`). Partial sums flow down the columns, and the bottom of column `j` yields
+`Σ_r A[i][gN+r] · B[gN+r][j]`. That value is added into an N × N int32 accumulator bank (the same
+storage the output-stationary array keeps in its PEs).
+
+**How the interface's data arrives.** Step `k` delivers `i_b` = `B[k][0..N−1]` and
+`i_a` = `A[0..N−1][k]`. That is exactly one weight row for array row `r` and the N activations
+array row `r` will need.
+- **Weights.** Each PE has an active and a shadow weight register. Step `r` of block `g + 1`
+  writes `i_b` into the shadow registers of row `r`. Row `r` copies shadow → active at the start
+  of its (skewed) streaming window for that block. A row's shadow is rewritten no earlier than the
+  cycle it is copied, so two registers per PE suffice.
+- **Activations.** Each array row has a double-buffered N-byte register. Step `r` of a block
+  fills one bank while the previous block's bank is streamed out over N cycles.
+- **Throughput.** A block takes N cycles to arrive and N cycles to stream, so one step per cycle
+  is sustained indefinitely. `i_valid` therefore needs no `ready`. Gaps between steps only delay
+  a block's start and are harmless, which is why §11.2 allows them.
+- **Drain.** On `i_drain` a partial last block is padded internally with zero steps. The
+  pipeline is flushed, and rows are emitted from the accumulator bank through the same
+  `o_row_*` handshake. The extra latency is allowed because drain latency is
+  implementation-specific.
+- **Clear.** `i_clear` zeroes the accumulator bank.
+
+**Cost compared with output-stationary.**
+- Extra storage: two weight registers per PE (2·N²·8 bits) and 2·N·N activation bytes.
+- Same accumulator bank and multiplier count.
+
+**Conclusion.** Workable. Testbenches written against §11.2 (handshakes only, no cycle counts)
+run unchanged on both arrays.

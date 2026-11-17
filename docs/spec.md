@@ -111,6 +111,20 @@ All values are two's complement. `>>>` is an arithmetic right shift.
 - **Weights** are int8 in [−127, 127] (symmetric). Activations after ReLU are in [0, 127]. The
   arithmetic is still defined for any int8 inputs (including −128), and unit tests use the full range.
 
+### 3.1 Post-processing implementation
+
+- **Signed multiply.** `M` is unsigned, but the accumulator path is signed, so the multiplier
+  operand is zero-extended to 17 bits and treated as signed: `p = $signed(y) * $signed({1'b0, M})`.
+  Multiplying a signed `y` by an unsigned `M` directly would make Verilog treat the whole
+  expression as unsigned and corrupt negative products. The 32 × 17 signed product is 49 bits wide
+  and its value always fits in 48 bits (`|y| < 2^31`, `M < 2^16`).
+- **Pipelining.** To meet 50 MHz, post-processing is pipelined in at least three register stages:
+  1. bias add and multiply (`y`, then `p`);
+  2. rounding add and arithmetic shift (`r`);
+  3. saturate and ReLU (`q8`).
+
+  The pipeline uses valid/ready handshakes; its latency is not part of any interface.
+
 Scales and how `M`, `S` and biases are derived are in `model/quantize.py`; the hardware only sees
 the integers.
 
@@ -155,6 +169,10 @@ the integers.
      (zero padding of edge tiles).
   2. **Stream.** For each `k` in the chunk, all N staging banks are read in parallel (N A-values)
      together with one WGT word (N B-values) and presented to the array as one step.
+
+  **Optional reuse.** When `K ≤ K_TILE` (a single chunk), the engine may keep the staged A tile and
+  reuse it for every column tile `nt` of the same row tile instead of restaging it. Buffer
+  contents after the layer are identical either way.
 
   Staging costs `N · Kc` cycles per chunk against `Kc` cycles of streaming. That limits MAC
   utilization, which is acceptable for Milestone 1 (correctness first, no cycle target).
@@ -286,21 +304,26 @@ addresses read as 0 and ignore writes.
 
 ### 10.2 CSR map
 
-| Offset | Name | Access | Bits |
-|---|---|---|---|
-| 0x000 | `ID` | RO | `0x434E4E31` ("CNN1") |
-| 0x004 | `CONFIG` | RO | [7:0] `N`, [15:8] `DATA_W`, [23:16] `ACC_W`, [31:24] `DESC_DEPTH` |
-| 0x010 | `CTRL` | WO | [0] `START` (write 1; ignored while busy); reads 0 |
-| 0x014 | `STATUS` | RO | [0] `BUSY`, [1] `DONE`, [2] `ERROR`, [11:8] index of the current (or last) layer |
-| 0x018 | `IMG_SEL` | RW | [3:0] image index; latched at START; writes while busy are ignored |
-| 0x01C | `RESULT` | RO | [7:0] predicted class (valid when `DONE` and not `ERROR`) |
-| 0x020 | `CYC_TOTAL` | RO | cycles from START to DONE |
-| 0x024 | `CYC_MAC` | RO | cycles in which the array consumed a reduction step |
-| 0x028 | `BUF_RD` | RO | buffer reads issued by the engine, pool and argmax units |
-| 0x02C | `BUF_WR` | RO | buffer writes issued by the engine and pool unit |
-| 0x040 + 4L | `LAYER_CYC[L]` | RO | cycles spent in layer `L`, `L < DESC_DEPTH` |
-| 0x080 + 4i | `LOGIT[i]` | RO | int32 logit `i`, `i < LOGIT_DEPTH` |
-| 0x100 + 4w | `DESC[w]` | RW | descriptor word `w`, `w < 4 · DESC_DEPTH`; writes while busy are ignored |
+| Offset | Name | Access | Reset | Bits |
+|---|---|---|---|---|
+| 0x000 | `ID` | RO | constant | `0x434E4E31` ("CNN1") |
+| 0x004 | `CONFIG` | RO | constant | [7:0] `N`, [15:8] `DATA_W`, [23:16] `ACC_W`, [31:24] `DESC_DEPTH` |
+| 0x010 | `CTRL` | WO | 0 | [0] `START` (write 1; ignored while busy); reads 0 |
+| 0x014 | `STATUS` | RO | 0 | [0] `BUSY`, [1] `DONE`, [2] `ERROR`, [11:8] index of the current (or last) layer |
+| 0x018 | `IMG_SEL` | RW | 0 | [3:0] image index; latched at START; writes while busy are ignored |
+| 0x01C | `RESULT` | RO | 0 | [7:0] predicted class (valid when `DONE` and not `ERROR`) |
+| 0x020 | `CYC_TOTAL` | RO | 0 | cycles from START to DONE |
+| 0x024 | `CYC_MAC` | RO | 0 | cycles in which the array consumed a reduction step |
+| 0x028 | `BUF_RD` | RO | 0 | buffer reads issued by the engine, pool and argmax units |
+| 0x02C | `BUF_WR` | RO | 0 | buffer writes issued by the engine and pool unit |
+| 0x040 + 4L | `LAYER_CYC[L]` | RO | 0 | cycles spent in layer `L`, `L < DESC_DEPTH` |
+| 0x080 + 4i | `LOGIT[i]` | RO | 0 | int32 logit `i`, `i < LOGIT_DEPTH` |
+| 0x100 + 4w | `DESC[w]` | RW | not reset | descriptor word `w`, `w < 4 · DESC_DEPTH`; writes while busy are ignored |
+
+**Reset.** `rst` returns every CSR to the value in the Reset column (0 unless stated) and aborts
+any run in progress (`BUSY = 0`, `DONE = 0`). It does **not** clear the descriptor table or any
+buffer (IMG, ACT0, ACT1, WGT, PARAM): they keep their preloaded or last-written contents, so a
+reset never requires reloading weights, images or descriptors.
 
 Performance counters are cleared at START, count while `BUSY`, and hold their values afterwards.
 They saturate at 2^32 − 1.
@@ -350,7 +373,7 @@ then drain the `N × N` result. Input skewing is internal.
 | Signal | Dir | Width | Meaning |
 |---|---|---|---|
 | `i_clear` | in | 1 | zero all accumulators; only while no step is in flight |
-| `i_valid` | in | 1 | one reduction step this cycle (no backpressure: always accepted) |
+| `i_valid` | in | 1 | one reduction step this cycle (no backpressure: always accepted); may deassert between steps |
 | `i_a` | in | `N·DATA_W` | byte `i` = `A[row i][k]` |
 | `i_b` | in | `N·DATA_W` | byte `j` = `B[k][col j]` |
 | `i_drain` | in | 1 | pulse after the last step: begin emitting the result |
@@ -359,6 +382,14 @@ then drain the `N × N` result. Input skewing is internal.
 | `o_row_data` | out | `N·ACC_W` | word `j` = `C[row][col j]` (int32) |
 | `o_row_last` | out | 1 | marks row `N − 1` |
 | `o_idle` | out | 1 | no step in flight and no drain pending |
+
+**Step timing.** `i_valid` may deassert for any number of cycles between steps, including
+between K chunks. The accumulators hold their values while no step is presented, and the result
+depends only on the sequence of steps, never on their timing. A weight-stationary implementation
+of this interface is outlined in D-015.
+
+**Drain window.** From the cycle `i_drain` is asserted until the cycle the last row (`o_row_last`)
+is accepted, the producer must not assert `i_valid` or `i_clear`.
 
 Rows are emitted in order 0 … N−1. The latency from `i_drain` to the first row is
 implementation-specific. Consumers use the handshake, never a cycle count. After the last row
