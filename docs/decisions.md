@@ -346,19 +346,42 @@ register stages. Its stage list now states that the first step (bias add and mul
 two stages: register `y`, `M` and `S`, then multiply the registered operands into a registered
 product. `postproc` uses four stages: y/M/S → multiply → round/shift → saturate/ReLU.
 
-**Reason.** A multiplier with registered inputs and outputs maps onto the MAX 10's DSP blocks and
-keeps the 32-bit bias add off the multiplier's path. Order and arithmetic are unchanged, and the
-latency is still not part of any interface.
+**Reason.** Giving the multiply its own stage, with registered operands, keeps the 32-bit bias
+add off the multiplier's path. In the Quartus probe (`fpga/probe_reports/postproc/`, D-024), the
+32 × 17 multiply maps onto the MAX 10's embedded DSP multipliers, while the pipeline registers
+around it stay in logic. Order and arithmetic are unchanged, and the latency is still not part of
+any interface.
 
-## D-020 — Post-v1.0 performance ideas, deferred (Phase 2)
+## D-020 — Post-v1.0 performance and area ideas, deferred (Phase 2)
 
-Not implemented before `v1.0` (Milestone 1 is correctness-first). Recorded so they are not lost:
+Not implemented before `v1.0` (Milestone 1 is correctness-first). Recorded so they are not lost.
+
+Performance:
 - **Overlap staging with drain.** While the array drains and post-processes one output tile, the
-  A loader could already stage the next tile's A chunk. This needs a second staging bank set
-  (double buffering) and a slightly more involved engine FSM. It hides most of the drain time.
+  A loader could already stage the next tile's A chunk.
+  - **No second staging bank set is needed.** The banks are free as soon as streaming ends,
+    because the accumulators, not the banks, hold the tile being drained.
+  - Only overlapping staging with *streaming* would need double-buffered banks.
+  - **Conflict with A reuse (§5):** reuse keeps the staged A across all column tiles of a row
+    tile, so the banks are not free during the drain unless the next tile starts a new row
+    tile.
+  - With the three-FSM engine (D-023), this is a scheduling change, not a datapath change.
 - **Byte-enabled staging RAM.** Replace the N byte-wide staging banks with one `N·DATA_W`-wide RAM
   with byte enables. Quartus maps that to fewer, fuller M9K blocks. The A loader keeps writing one
   byte per cycle (one byte enable), and streaming reads one full word.
+
+Area:
+- **Post-processing flags.** `requant_en` and `relu_en` are constant for a whole layer, so they
+  need not travel through every pipeline stage (today they are registered into stage 3 alongside
+  each element). They could come straight from the layer configuration.
+- **Shared post-processing output register.** `o_q8` and `o_y` are never both used for the same
+  element (requantized int8 for CONV, int32 for FC). Stage 4 could register one 32-bit result
+  instead of two.
+- **Row multiplexer.** The drain's N:1 multiplexer over `N·ACC_W`-bit rows could be replaced by
+  shifting accumulators down the columns during the drain, trading logic for drain cycles.
+- **Accumulator width.** The golden model's overflow bound gives the largest accumulator magnitude
+  for a given network. A narrower `ACC_W` (a spec change) would shrink every PE accumulator and
+  the drain path. `ACC_W = 32` stays the spec for generality.
 
 ## D-021 — MAX 10 configuration mode for initialized block RAM (Phase 2)
 
@@ -373,11 +396,15 @@ initialization). Phase 4's `build.tcl` must include it.
 - **With the setting:** it inferred an M9K simple-dual-port RAM, and its generated MIF matched the
   init file word for word.
 
-The probe was run by hand from a temporary Windows build directory; Phase 4's build scripts will
-make it reproducible.
+The first probe was run by hand. `scripts/quartus_probe.sh` now generates every probe project
+from a template that always includes this setting.
 
 **Reason.** The FPGA demo preloads weights, parameters, descriptors and images through init
 files. Without memory initialization, the buffers would not map to block RAM at all.
+
+**Trade-off.** This mode gives up the MAX 10's dual-image configuration (two images in internal
+flash, for remote update or fallback) and configuration bitstream compression. Neither is needed
+for this project.
 
 ## D-022 — RTL rules for Quartus Prime Lite 22.1 compatibility (Phase 2)
 
@@ -390,7 +417,57 @@ files. Without memory initialization, the buffers would not map to block RAM at 
 - every new module gets a Quartus Analysis & Synthesis probe before it is committed, until the
   Phase 4 build covers the whole design.
 
-`scripts/lint.sh` enforces the first two rules (BUG-005).
+`scripts/check_quartus_compat.py` (run by `scripts/lint.sh`) enforces the first three rules
+(BUG-005); `scripts/quartus_probe.sh` runs the probes.
 
 **Reason.** Quartus is the one required tool that cannot run in CI, and its front end rejected
 constructs the other three accept. Encoding the rules in lint keeps CI meaningful for it.
+
+## D-023 — GEMM engine structure: three FSMs linked by handshakes (Phase 2)
+
+**Decision.** The GEMM engine is three small FSMs:
+- **A load:** stages one A chunk into the staging banks through the address generator;
+- **stream:** reads the staging banks and WGT words and presents reduction steps to the array;
+- **drain:** pulses `i_drain`, takes result rows, and feeds post-processing and write-back.
+
+They are linked by valid/ready-style start/done handshakes. A small top-level sequencer runs them
+strictly one after another for each (row tile, column tile, K chunk) in `v1.0`.
+
+**Alternatives.** One monolithic FSM (simplest to write, hardest to change and to verify); an
+overlapped pipeline now (faster, but conflicts with the correctness-first M1 goal).
+
+**Reason.**
+- Each FSM is small enough to unit-test and to cover exhaustively.
+- Because they communicate only through handshakes, the D-020 overlaps become scheduling changes
+  in the sequencer, not rewrites of the datapath FSMs.
+
+## D-024 — Quartus fit and timing probes of the array and post-processing (Phase 2)
+
+**Decision.** `systolic_array` (N = 8) and `postproc` are fitted and timed on their own with
+`scripts/quartus_probe.sh --fit --virtual-pins --clock clk:20.000`:
+- 50 MHz `create_clock`;
+- every `i_*`/`o_*` port and `rst` a virtual pin, so the clock stays a real pin.
+
+Reports are committed under `fpga/probe_reports/<module>/`.
+
+**Results** (slow 1200 mV 85 °C model unless noted):
+
+| Module | Worst setup slack | Worst hold slack (fast 0 °C) | Fmax | Critical path |
+|---|---|---|---|---|
+| `systolic_array` | +10.970 ns | +0.090 ns | 110.74 MHz | `g_row[4].g_col[0].u_mac_cell\|o_a[0]` → `g_row[4].g_col[1].u_mac_cell\|acc_q[31]`: forwarded A operand, 8 × 8 multiply and 32-bit accumulate in the right-hand neighbour (data delay 9.014 ns) |
+| `postproc` | +5.882 ns | +0.149 ns | 70.83 MHz | `s2_q[0]` → `r3_q[6]`: shift amount through the rounding constant, the 49-bit add and the variable arithmetic shift (data delay 13.925 ns) |
+
+Sources: `timing_setup_worst.rpt`, `timing_hold_worst.rpt`, `probe_<module>.sta.summary` and
+`fmax.rpt` in each report directory.
+
+**Reading.**
+- Both blocks close timing at 50 MHz with margin on every corner. The whole design will be
+  checked again in Phase 4.
+- `postproc`'s critical path is the variable shifter: the arithmetic right shift by `S`, a
+  barrel shifter over the 49-bit rounding intermediate, together with the rounding add that
+  feeds it. It is the longer of the two blocks' paths.
+- If the full design gets tight, the first remedy is another split (shift, then round), which
+  §3.1 already allows.
+- **Post-v1.0 option:** narrow the supported `S` range. Spec §3 allows `S` in [1, 47]; a
+  narrower range shrinks the barrel shifter. This is a spec change, and the offline quantizer
+  would have to assert the new range.

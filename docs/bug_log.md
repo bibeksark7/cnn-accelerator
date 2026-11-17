@@ -103,8 +103,41 @@ requantization, nested-loop convolution, pack/unpack round-trips) in `model/test
   - Typed signed localparams for the saturation bounds.
 - **Regression test.**
   - All three modules now pass Quartus Analysis & Synthesis with 0 errors and 0 warnings.
-  - Quartus cannot run in CI (Windows-only), so `scripts/lint.sh` gained two grep-based checks
-    that run everywhere: no inline `for (genvar …)`, and named `g_*` generate blocks only inside
-    explicit `generate/endgenerate`. They reject the original `systolic_array.sv` and the bare
-    generate-if version of `sram_1r1w.sv`.
+  - Quartus cannot run in CI (Windows-only), so `scripts/lint.sh` runs
+    `scripts/check_quartus_compat.py` everywhere. It tracks generate nesting and flags named
+    `g_*` blocks or module-scope `for (`/`if (` outside `generate/endgenerate`, inline genvars,
+    and unary minus on a size cast. It rejects the original `systolic_array.sv`, the bare
+    generate-if `sram_1r1w.sv` and the `-R_W'(128)` form; its own tests are in
+    `scripts/tests/`.
   - Phase 4's full Quartus build is the final regression.
+
+## BUG-006 — Quartus probe script made the clock a virtual pin (Phase 2)
+
+- **Symptom.** The first fit/timing probes of `systolic_array` and `postproc` reported
+  `Total pins : 0`. Quartus also warned `Ignored 6800 Virtual Pin logic option assignments`.
+- **How found.** Reading the fit summary before trusting the timing numbers: a design with a
+  clock must keep at least the clock pin.
+- **Root cause.** `scripts/quartus_probe.sh` assigned `VIRTUAL_PIN ON -to *` and then
+  `VIRTUAL_PIN OFF -to clk`. The wildcard won, so the clock was driven from logic and the timing
+  was not representative.
+- **Fix.** Virtual pins are assigned by the port naming convention: `-to i_*`, `-to o_*`, `-to rst`.
+  The clock is never matched.
+- **Regression test.** The committed probe reports show `Total pins : 1` for both modules. The
+  timing numbers in D-024 are from the corrected run.
+
+## BUG-007 — lint.sh's Yosys step did not read the file under test (Phase 2)
+
+- **Symptom.** Linting a file outside `rtl/` would have failed in Yosys with "module not found"
+  instead of reporting the file's real problems.
+- **How found.** While writing `scripts/tests/test_lint.py`, which lints known-bad fixture files.
+- **Root cause.** The Yosys command read only `rtl/**/*.sv` (for submodules), not the file
+  being linted.
+- **Fix.** Yosys reads the file under test plus every RTL file, de-duplicated.
+- **Regression test.** `scripts/tests/test_lint.py` lints five fixtures and expects each to fail:
+  - a bare generate-if;
+  - an Icarus "sorry" construct;
+  - two cells driving one net;
+  - a combinational loop;
+  - an undriven wire.
+
+  It also expects the committed RTL to pass. It runs in CI.
