@@ -19,7 +19,11 @@ from common.sim import seeded_rng, start_clock_and_reset, wait_until
 
 DATA_W, ACC_W = 8, 32
 SOURCES = [RTL_DIR / "core" / "mac_cell.sv", RTL_DIR / "core" / "systolic_array.sv"]
-SVA_SOURCES = [SVA_DIR / "systolic_array_sva.sv"]
+SVA_SOURCES = [
+    SVA_DIR / "systolic_array_if_sva.sv",
+    SVA_DIR / "systolic_array_os_sva.sv",
+    SVA_DIR / "systolic_array_bind.sv",
+]
 SVA_VIOLATION = os.environ.get("SVA_VIOLATION", "")
 
 
@@ -195,9 +199,14 @@ async def test_random_tiles_with_gaps_and_backpressure(dut):
         np.testing.assert_array_equal(got, expected(a, b), err_msg=f"tile {t}, K={k_len}")
 
 
+# ---------------------------------------------------------------- deliberate violations
+# Each runs only under test_sva_assertions_fire (selected by SVA_VIOLATION) and breaks exactly one
+# producer obligation of the interface SVA.
+
+
 @cocotb.test(skip=SVA_VIOLATION != "clear_with_valid")
 async def sva_violation_clear_with_valid(dut):
-    """Deliberately breaks the input protocol; only run by test_sva_assertions_fire."""
+    """i_clear and i_valid in the same cycle."""
     idle(dut)
     await start_clock_and_reset(dut)
     await FallingEdge(dut.clk)
@@ -208,8 +217,38 @@ async def sva_violation_clear_with_valid(dut):
     idle(dut)
 
 
+@cocotb.test(skip=SVA_VIOLATION != "clear_not_idle")
+async def sva_violation_clear_not_idle(dut):
+    """i_clear one cycle after a step, while the step is still in flight (o_idle low)."""
+    idle(dut)
+    await start_clock_and_reset(dut)
+    await FallingEdge(dut.clk)
+    dut.i_valid.value = 1
+    await FallingEdge(dut.clk)
+    dut.i_valid.value = 0
+    dut.i_clear.value = 1
+    for _ in range(3):
+        await FallingEdge(dut.clk)
+    idle(dut)
+
+
+@cocotb.test(skip=SVA_VIOLATION != "valid_in_drain")
+async def sva_violation_valid_in_drain(dut):
+    """A reduction step presented inside the drain window."""
+    idle(dut)
+    await start_clock_and_reset(dut)
+    await FallingEdge(dut.clk)
+    dut.i_drain.value = 1
+    await FallingEdge(dut.clk)
+    dut.i_drain.value = 0
+    dut.i_valid.value = 1
+    for _ in range(3):
+        await FallingEdge(dut.clk)
+    idle(dut)
+
+
 def build_config(sim: str) -> tuple[list[Path], list[str]]:
-    """Verilator runs compile the SVA bind file with assertions enabled; Icarus cannot."""
+    """Verilator runs compile the SVA files with assertions enabled; Icarus cannot."""
     if sim == "verilator":
         return SOURCES + SVA_SOURCES, ["--assert"]
     return SOURCES, []
@@ -217,7 +256,7 @@ def build_config(sim: str) -> tuple[list[Path], list[str]]:
 
 @pytest.mark.parametrize(
     ("sim", "n"),
-    [(s, 8) for s in SIMULATORS] + [("icarus", 3), ("icarus", 1)],
+    [(s, 8) for s in SIMULATORS] + [("verilator", 3), ("icarus", 3), ("icarus", 1)],
 )
 def test_systolic_array(sim: str, n: int) -> None:
     sources, build_args = build_config(sim)
@@ -231,10 +270,18 @@ def test_systolic_array(sim: str, n: int) -> None:
     )
 
 
-def test_sva_assertions_fire() -> None:
-    """The bound assertions are live: a protocol violation must fail the simulation."""
+@pytest.mark.parametrize(
+    ("violation", "assertion"),
+    [
+        ("clear_with_valid", "a_clear_not_with_valid"),
+        ("clear_not_idle", "a_clear_only_when_idle"),
+        ("valid_in_drain", "a_drain_window_quiet"),
+    ],
+)
+def test_sva_assertions_fire(violation: str, assertion: str) -> None:
+    """Each producer obligation is live: violating it fails the run with that assertion."""
     sources, build_args = build_config("verilator")
-    log = SIM_BUILD_DIR / "systolic_array_sva_violation.log"
+    log = SIM_BUILD_DIR / f"systolic_array_sva_violation_{violation}.log"
     # The runner reports a failed simulation as SystemExit, or RuntimeError when logging to a file.
     with pytest.raises((SystemExit, RuntimeError)):
         run_cocotb(
@@ -244,8 +291,11 @@ def test_sva_assertions_fire() -> None:
             test_module=Path(__file__).stem,
             parameters={"N": 8, "DATA_W": DATA_W, "ACC_W": ACC_W},
             extra_build_args=build_args,
-            testcase="sva_violation_clear_with_valid",
-            extra_env={"SVA_VIOLATION": "clear_with_valid"},
+            testcase=f"sva_violation_{violation}",
+            extra_env={"SVA_VIOLATION": violation},
             log_file=log,
+            build_tag="sva_violation",
         )
-    assert "a_clear_not_with_valid" in log.read_text()
+    failed = [line for line in log.read_text().splitlines() if "Assertion failed" in line]
+    assert failed, f"no assertion fired; see {log}"
+    assert assertion in failed[0], f"first failing assertion was not {assertion}: {failed[0]}"

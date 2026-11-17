@@ -40,9 +40,12 @@ def _param_tag(value: object) -> str:
     return hashlib.sha1(str(value).encode()).hexdigest()[:8]
 
 
-def _build_dir_name(toplevel: str, sim: str, parameters: Mapping[str, object]) -> str:
+def _build_dir_name(
+    toplevel: str, sim: str, parameters: Mapping[str, object], build_tag: str = ""
+) -> str:
     tag = "_".join(f"{k}{_param_tag(v)}" for k, v in sorted(parameters.items()))
-    return f"{toplevel}_{sim}" + (f"_{tag}" if tag else "")
+    name = f"{toplevel}_{sim}" + (f"_{tag}" if tag else "")
+    return f"{name}_{build_tag}" if build_tag else name
 
 
 def sv_string(value: object) -> str:
@@ -63,6 +66,7 @@ def run_cocotb(
     waves: bool | None = None,
     extra_env: Mapping[str, str] | None = None,
     log_file: Path | None = None,
+    build_tag: str = "",
 ) -> Path:
     """Build ``sources`` for ``sim`` and run the cocotb tests in ``test_module``.
 
@@ -71,12 +75,13 @@ def run_cocotb(
 
     Waveforms are off by default; set ``WAVES=1`` in the environment to record them.
     ``extra_env`` is passed to the simulation process; ``log_file`` captures its output.
+    ``build_tag`` gives the run its own build directory (e.g. for deliberately failing runs).
     """
     params = dict(parameters or {})
     if waves is None:
         waves = os.environ.get("WAVES", "0") == "1"
 
-    build_dir = SIM_BUILD_DIR / _build_dir_name(toplevel, sim, params)
+    build_dir = SIM_BUILD_DIR / _build_dir_name(toplevel, sim, params, build_tag)
     build_args = [*_SIM_BUILD_ARGS.get(sim, []), *extra_build_args]
     if waves:
         build_args += _SIM_WAVE_ARGS.get(sim, [])
