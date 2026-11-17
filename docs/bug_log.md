@@ -23,3 +23,19 @@ Every real bug found during the project is logged here, newest at the bottom.
 
 No defects found. The golden model was checked against independent references (Python big-int
 requantization, nested-loop convolution, pack/unpack round-trips) in `model/tests/test_golden.py`.
+
+## BUG-002 — Phase checkpoint passed with all of the phase's work uncommitted (Phase 1)
+
+- **Symptom.** `scripts/checkpoint.sh 1` reported `[PASS] latest CI run on main is green for HEAD`
+  and `CHECKPOINT 1: PASS` while every Phase 1 file was still untracked or modified, so the green CI
+  run was for the previous phase's commit.
+- **How found.** Running the checkpoint locally before committing. A pass was unexpected, since
+  the work had never been pushed.
+- **Root cause.** The check only compared the latest CI run's commit with `HEAD` and `HEAD` with its
+  upstream. Uncommitted work leaves `HEAD` unchanged, so all three agreed.
+- **Fix.** The check now first requires `git status --porcelain` to be empty (no modified,
+  staged or untracked non-ignored files). Only then does it compare `HEAD`, upstream and the CI
+  run.
+- **Regression test.** No automated test of the checkpoint script. Verified by running
+  `scripts/checkpoint.sh 1` with the uncommitted Phase 1 tree: it now reports
+  `[FAIL] … uncommitted or untracked changes` and `CHECKPOINT 1: FAIL`.
