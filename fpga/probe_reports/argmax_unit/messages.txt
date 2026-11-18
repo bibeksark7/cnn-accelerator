@@ -1,0 +1,8 @@
+Warning (292013): Feature LogicLock is only available with a valid subscription license. You can purchase a software subscription to gain full access to this feature.
+Warning (15714): Some pins have incomplete I/O assignments. Refer to the I/O Assignment Warnings report for details
+Info: Quartus Prime Analysis & Synthesis was successful. 0 errors, 0 warnings
+Info (170137): Fitter placement was successful
+Info: Quartus Prime Fitter was successful. 0 errors, 3 warnings
+Info: Quartus Prime Timing Analyzer was successful. 0 errors, 0 warnings
+Info (23030): Evaluation of Tcl script probe_argmax_unit.tcl was successful
+Info: Quartus Prime Shell was successful. 0 errors, 3 warnings

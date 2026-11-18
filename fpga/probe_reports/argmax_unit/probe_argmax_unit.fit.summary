@@ -1,0 +1,18 @@
+Fitter Status : Successful - Tue Nov 17 19:39:51 2026
+Quartus Prime Version : 22.1std.0 Build 915 10/25/2022 SC Lite Edition
+Revision Name : probe_argmax_unit
+Top-level Entity Name : argmax_unit
+Family : MAX 10
+Device : 10M50DAF484C7G
+Timing Models : Final
+Total logic elements : 123 / 49,760 ( < 1 % )
+    Total combinational functions : 117 / 49,760 ( < 1 % )
+    Dedicated logic registers : 77 / 49,760 ( < 1 % )
+Total registers : 77
+Total pins : 1 / 360 ( < 1 % )
+Total virtual pins : 101
+Total memory bits : 0 / 1,677,312 ( 0 % )
+Embedded Multiplier 9-bit elements : 0 / 288 ( 0 % )
+Total PLLs : 0 / 4 ( 0 % )
+UFM blocks : 0 / 1 ( 0 % )
+ADC blocks : 0 / 2 ( 0 % )

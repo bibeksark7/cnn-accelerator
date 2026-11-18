@@ -1,0 +1,16 @@
+Analysis & Synthesis Status : Successful - Tue Nov 17 19:41:14 2026
+Quartus Prime Version : 22.1std.0 Build 915 10/25/2022 SC Lite Edition
+Revision Name : probe_pool_unit
+Top-level Entity Name : pool_unit
+Family : MAX 10
+Total logic elements : 445
+    Total combinational functions : 348
+    Dedicated logic registers : 246
+Total registers : 246
+Total pins : 1
+Total virtual pins : 110
+Total memory bits : 0
+Embedded Multiplier 9-bit elements : 0
+Total PLLs : 0
+UFM blocks : 0
+ADC blocks : 0
