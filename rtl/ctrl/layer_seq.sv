@@ -6,8 +6,9 @@
 //      every unit configuration output comes from these registers, so it is stable while the
 //      unit runs;
 //   2. checks it (spec §9 errors): a reserved op; a CONV, POOL or FC with dst = IMG or with
-//      src = dst; a CONV or POOL with src = LOGIT or dst = LOGIT. An error ends the run with ERROR = 1, DONE = 1, BUSY = 0, without starting the
-//      layer; STATUS keeps its index;
+//      src = dst or src = LOGIT (only ARGMAX reads LOGIT); a CONV or POOL with dst = LOGIT.
+//      An error ends the run with ERROR = 1, DONE = 1, BUSY = 0, without starting the layer;
+//      STATUS keeps its index;
 //   3. computes the effective source base: src_base + IMG_SEL * IMG_SIZE when src = IMG. The
 //      image offset is computed once at START by shift-and-add over the set bits of the
 //      constant IMG_SIZE (784 = 512 + 256 + 16), not with a multiplier;
@@ -22,8 +23,7 @@
 // pool unit its src and dst buffers; ARGMAX needs none (it reads the LOGIT registers). Between
 // layers nobody owns anything. The owner registers change only while every unit is idle: they
 // are loaded the cycle before a unit is started and cleared the cycle after it is done.
-// Requests of a non-owner never reach a buffer (buf_port_mux), and src = LOGIT for an FC reads 0
-// (not detected, spec §9).
+// Requests of a non-owner never reach a buffer (buf_port_mux).
 //
 // Parameters:
 //   DESC_DEPTH - descriptor table depth (layers, <= 16)
@@ -178,10 +178,12 @@ module layer_seq #(
   assign own_act0_d = ((src == B_ACT0) || (writes_dst && (dst == B_ACT0))) ? unit_own : 3'b000;
   assign own_act1_d = ((src == B_ACT1) || (writes_dst && (dst == B_ACT1))) ? unit_own : 3'b000;
 
-  // §9 errors, checked before the layer starts. CONV and POOL are the ops that write dst.
+  // §9 errors, checked before the layer starts. Only ARGMAX reads LOGIT; CONV and POOL are the
+  // ops that write dst (FC writes the LOGIT registers).
   logic err_desc;
-  assign err_desc = (op > OP_ARGMAX) || (unit_op && ((dst == B_IMG) || (src == dst)))
-                 || (writes_dst && ((src == B_LOGIT) || (dst == B_LOGIT)));
+  assign err_desc = (op > OP_ARGMAX)
+                 || (unit_op && ((dst == B_IMG) || (src == dst) || (src == B_LOGIT)))
+                 || (writes_dst && (dst == B_LOGIT));
 
   logic unit_done;
   assign unit_done = uses_gemm ? i_gemm_done : (uses_pool ? i_pool_done : i_argmax_done);

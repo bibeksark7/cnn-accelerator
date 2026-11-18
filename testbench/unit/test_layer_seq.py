@@ -12,8 +12,9 @@ runs, and the final status. Checked on every run:
   - o_layer_start / o_layer_done pair up with the unit's start and done;
   - final BUSY / DONE / ERROR and the layer index; o_clear only on an accepted START.
 Tests: the network's table for every IMG_SEL; random valid tables; every §9 error (reserved op,
-dst = IMG, src = dst, src or dst = LOGIT for CONV and POOL, missing last) followed by a clean
-run; START ignored while busy or while a memory-port read is pending; reset mid-run.
+dst = IMG, src = dst, src = LOGIT for CONV/POOL/FC, dst = LOGIT for CONV/POOL, missing last)
+followed by a clean run; START ignored while busy or while a memory-port read is pending; reset
+mid-run.
 """
 
 from __future__ import annotations
@@ -54,7 +55,9 @@ def expected_run(table: list[D], img_sel: int, depth: int) -> Expected:
     starts = []
     for i, d in enumerate(table[:depth]):
         unit_op = d.op in (OP_CONV, OP_POOL, OP_FC)
-        logit = BUF_LOGIT in (d.src, d.dst) and d.op in (OP_CONV, OP_POOL)
+        logit = (unit_op and d.src == BUF_LOGIT) or (
+            d.op in (OP_CONV, OP_POOL) and d.dst == BUF_LOGIT
+        )
         if d.op > OP_ARGMAX or (unit_op and (d.dst == BUF_IMG or d.src == d.dst)) or logit:
             return Expected(starts, True, i)
         unit = {OP_CONV: "gemm", OP_FC: "gemm", OP_POOL: "pool", OP_ARGMAX: "argmax"}[d.op]
@@ -219,8 +222,8 @@ def rand_desc(rng, last: int) -> D:
     op = rng.choice([OP_CONV, OP_POOL, OP_FC, OP_ARGMAX])
     if op == OP_ARGMAX:
         src, dst = BUF_LOGIT, rng.randrange(4)  # dst is ignored by ARGMAX
-    elif op == OP_FC:  # FC writes the LOGIT registers; src = LOGIT is legal (reads 0)
-        src = rng.choice([BUF_IMG, BUF_ACT0, BUF_ACT1, BUF_LOGIT])
+    elif op == OP_FC:  # FC writes the LOGIT registers; only ARGMAX may read them
+        src = rng.choice([BUF_IMG, BUF_ACT0, BUF_ACT1])
         dst = rng.choice([b for b in (BUF_ACT0, BUF_ACT1, BUF_LOGIT) if b != src])
     else:  # CONV and POOL: neither src nor dst may be LOGIT
         src = rng.choice([BUF_IMG, BUF_ACT0, BUF_ACT1])
@@ -279,6 +282,10 @@ async def test_every_error(dut):
                     replace(good[2], op=op, src=b, dst=BUF_LOGIT),
                 )
             )
+    for b in (BUF_IMG, BUF_ACT0, BUF_ACT1):
+        cases.append(
+            (f"FC with src = LOGIT, dst = {b}", replace(good[2], op=OP_FC, src=BUF_LOGIT, dst=b))
+        )
     for what, bad in cases:
         table = [*good[:2], bad, *good[3:]]
         want = await run_table(dut, h, table, rng.randrange(16), what)

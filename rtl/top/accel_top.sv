@@ -286,7 +286,7 @@ module accel_top #(
       2'd0:    src_rdata = img_rdata;
       2'd1:    src_rdata = act0_rdata;
       2'd2:    src_rdata = act1_rdata;
-      default: src_rdata = '0;  // LOGIT is not a byte buffer (FC with src = LOGIT reads 0)
+      default: src_rdata = '0;  // src = LOGIT: a §9 error, the layer never starts
     endcase
   end
 

@@ -350,6 +350,7 @@ async def test_errors(dut):
         ("CONV dst = LOGIT", 0, replace(table0[0], dst=hwmap.BUF_LOGIT)),
         ("POOL src = LOGIT", 3, replace(table0[3], src=hwmap.BUF_LOGIT)),
         ("POOL dst = LOGIT", 1, replace(table0[1], dst=hwmap.BUF_LOGIT)),
+        ("FC src = LOGIT", 4, replace(table0[4], src=hwmap.BUF_LOGIT, dst=hwmap.BUF_ACT1)),
     ]
     for what, layer, bad in cases:
         table = [*table0[:layer], bad, *table0[layer + 1 :]]

@@ -316,17 +316,17 @@ images can run back to back without reloading.
 - a descriptor has a reserved `op`;
 - a CONV, POOL or FC descriptor has `dst = IMG`;
 - a CONV, POOL or FC descriptor has `src = dst`;
-- a CONV or POOL descriptor has `src = LOGIT` or `dst = LOGIT`;
+- a CONV, POOL or FC descriptor has `src = LOGIT` (only ARGMAX reads LOGIT);
+- a CONV or POOL descriptor has `dst = LOGIT`;
 - `DESC_DEPTH` descriptors execute without one having `last = 1`.
 
-The first four are checked before the layer starts: the layer is not executed, `STATUS` reports
+The first five are checked before the layer starts: the layer is not executed, `STATUS` reports
 its index, and its `LAYER_CYC` stays 0. For the last one, `STATUS` reports index
 `DESC_DEPTH − 1`. ARGMAX ignores `dst`, so neither `dst = IMG` nor `src = dst` is an error for it.
 
 Other inconsistent descriptors are not detected and give undefined buffer contents, but never an
 out-of-range access:
 - sizes exceeding a buffer (addresses wrap, §5);
-- `src = LOGIT` for FC (the engine reads 0);
 - a non-HWC-consistent `c_out` for POOL.
 
 ## 10. Host interface (Milestone 1)

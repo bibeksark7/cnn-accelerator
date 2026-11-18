@@ -678,12 +678,12 @@ reuse the address generators and the 1-cycle read convention already verified.
 - **`src = dst` is a §9 error** for CONV, POOL and FC (a layer never reads and writes one buffer,
   which the single-owner, single-port scheme relies on). ARGMAX ignores `dst`, so neither
   `src = dst` nor `dst = IMG` is an error for it.
-- **`src = LOGIT` or `dst = LOGIT` is a §9 error for CONV and POOL.** LOGIT is not a byte buffer:
-  without the check the unit would read 0 or its writes would be dropped, silently. FC writes the
-  LOGIT registers by definition; an FC with `src = LOGIT` (and another `dst`) stays undetected
-  and reads 0.
-- **A failing layer never starts.** The first four errors are checked before the layer's unit is
-  started: `STATUS` shows the layer's index and its `LAYER_CYC` stays 0.
+- **LOGIT as a buffer.** Only ARGMAX reads LOGIT: `src = LOGIT` is a §9 error for CONV, POOL and
+  FC. `dst = LOGIT` is a §9 error for CONV and POOL; FC writes the LOGIT registers by definition.
+  LOGIT is not a byte buffer, so without these checks a unit would read 0 or its writes would be
+  dropped, silently.
+- **A failing layer never starts.** The descriptor errors (all but a missing `last`) are checked
+  before the layer's unit is started: `STATUS` shows the layer's index and its `LAYER_CYC` stays 0.
 - **`DESC` reads during a run** wait (`o_csr_ready` low) until the sequencer is not fetching,
   instead of returning 0 (§10.1).
 - **A memory-port read accepted in the same cycle as START** completes normally (§10.3; see
