@@ -43,6 +43,7 @@ formats) implement this specification in software. The RTL must match them bit f
 | `PARAM_DEPTH` | 64 | parameter buffer, 64-bit words |
 | `LOGIT_DEPTH` | 16 | logit register file, int32 entries |
 | `DESC_DEPTH` | 8 | descriptor table, layers |
+| `PERF_W` | 32 | performance counter width (§10.2) |
 
 One clock domain (`clk`), synchronous active-high reset (`rst`). Target: 50 MHz on the MAX 10.
 
@@ -164,6 +165,23 @@ the integers.
   each kind.
 - Buffers can be preloaded from `$readmemh` files (FPGA) and are always reachable through the
   memory port (§10.3) while the accelerator is idle.
+- **Addresses.** Every depth is a power of two, and addresses are taken modulo the depth: bits
+  above a buffer's address width are ignored. With the default depths the widths are IMG 14 bits
+  (16 images × 784 bytes = 12,544 bytes need 14), ACT0 and ACT1 13, WGT 10, PARAM 6, LOGIT 4 and
+  the descriptor table 5 (word addresses). No access is ever out of range; a descriptor whose
+  addresses exceed a buffer wraps around inside it (not detected, §9).
+- **Ownership.** IMG, ACT0, ACT1, WGT and PARAM each have at most one owner at a time, given by
+  a registered one-hot owner vector per buffer:
+  - while idle, the memory port owns every buffer;
+  - during a run, the unit executing the current layer owns the buffers its descriptor names
+    (CONV and FC: `src`, WGT and PARAM, plus CONV's `dst`; POOL: `src` and `dst`; ARGMAX: none);
+  - between layers, nothing is owned.
+
+  Requests from a non-owner never reach a buffer. The owner vectors change only while every unit
+  is idle (checked by an assertion in simulation).
+- **Read-data return.** Read data goes to every requester. The data returned to the units is
+  selected by the layer's `src` field, which is registered before the layer starts and stays
+  constant while it runs. The memory port registers its buffer select with each read.
 
 **Bandwidth scheme.** The array consumes N A-values and N B-values per cycle.
 - **B (weights)** are pre-packed offline so that one `N·DATA_W`-bit WGT word holds the N
@@ -237,7 +255,14 @@ words `4L .. 4L+3`. The table is written through the CSR window (§10.2) or prel
 | 3 | [15:0] | `wgt_base` | WGT word address of the layer's packed B (CONV/FC) |
 | 3 | [23:16] | `param_base` | PARAM word address of the layer's channel 0 (CONV/FC) |
 
-All other bits are reserved and must be 0. The network's table is
+All other bits are reserved and must be 0.
+
+**Registered fields.** Before starting a layer, the sequencer reads the descriptor's four words
+into registers, and the units are configured from those registers. The configuration is therefore
+constant while a layer runs, and the table itself (writable only while idle) is read once per
+layer.
+
+The network's table is
 `model/artifacts/mem/desc.hex`:
 
 | L | op | src → dst | h_in × w_in × c_in → c_out | flags |
@@ -290,10 +315,19 @@ images can run back to back without reloading.
 **Errors.** The run stops with `ERROR = 1`, `DONE = 1`, `BUSY = 0` if:
 - a descriptor has a reserved `op`;
 - a CONV, POOL or FC descriptor has `dst = IMG`;
+- a CONV, POOL or FC descriptor has `src = dst`;
+- a CONV or POOL descriptor has `src = LOGIT` or `dst = LOGIT`;
 - `DESC_DEPTH` descriptors execute without one having `last = 1`.
 
-Other inconsistent descriptors (src = dst, sizes exceeding a buffer, a non-HWC-consistent
-`c_out` for POOL) are not detected and give undefined buffer contents.
+The first four are checked before the layer starts: the layer is not executed, `STATUS` reports
+its index, and its `LAYER_CYC` stays 0. For the last one, `STATUS` reports index
+`DESC_DEPTH − 1`. ARGMAX ignores `dst`, so neither `dst = IMG` nor `src = dst` is an error for it.
+
+Other inconsistent descriptors are not detected and give undefined buffer contents, but never an
+out-of-range access:
+- sizes exceeding a buffer (addresses wrap, §5);
+- `src = LOGIT` for FC (the engine reads 0);
+- a non-HWC-consistent `c_out` for POOL.
 
 ## 10. Host interface (Milestone 1)
 
@@ -310,7 +344,8 @@ Other inconsistent descriptors (src = dst, sizes exceeding a buffer, a non-HWC-c
 | `o_csr_ready` | out | 1 | request accepted in a cycle with `valid && ready` |
 | `o_csr_rdata` | out | 32 | read data, valid in the accepting cycle |
 
-Latency from `valid` to `ready` is not fixed (descriptor reads take an extra cycle). Unmapped
+Latency from `valid` to `ready` is not fixed: descriptor reads take an extra cycle, and during a
+run they also wait while the sequencer is fetching a descriptor (a few cycles). Unmapped
 addresses read as 0 and ignore writes.
 
 ### 10.2 CSR map
@@ -339,8 +374,12 @@ reset never requires reloading weights, images or descriptors.
 Performance counters are cleared at START, count while `BUSY`, and hold their values afterwards.
 `BUF_RD` and `BUF_WR` count accesses to the buffers of §5 only: not the GEMM engine's internal
 staging banks, the LOGIT register file, the descriptor table, or memory-port accesses (which
-happen only while idle).
-They saturate at 2^32 − 1.
+happen only while idle). They are taken at the outputs of the buffers' port multiplexers: each
+cycle, `BUF_RD` adds the number of reads issued to IMG, ACT0, ACT1, WGT and PARAM (0–5) and
+`BUF_WR` the number of writes to ACT0 and ACT1 (0–2).
+
+Every performance counter is `PERF_W` bits wide (zero-extended in its register) and saturates
+at 2^`PERF_W` − 1.
 
 ### 10.3 Memory port
 
@@ -360,12 +399,21 @@ activations for debugging).
 
 At most one read is outstanding. Read-data latency is not fixed; masters wait for `o_mem_rvalid`.
 
+**Word writes.** One accepted write writes one whole buffer word:
+- IMG, ACT0, ACT1: from `i_mem_wdata[7:0]`;
+- WGT: from `i_mem_wdata[N·DATA_W − 1 : 0]`, all 64 bits for the default N = 8 (wider words
+  would be zero-extended, so full WGT access needs `N·DATA_W ≤ 64`);
+- PARAM: from all 64 bits.
+
+A read accepted in the same cycle as an accepted START (no read was pending yet) completes
+normally: its data returns while `BUSY` is already high.
+
 ## 11. Module interfaces
 
 ### 11.1 `accel_top`
 
-Parameters: those in §1, plus init-file strings `IMG_INIT`, `WGT_INIT`, `PARAM_INIT`, `DESC_INIT`
-(empty = no preload).
+Parameters: those in §1 (including `PERF_W`), plus init-file strings `IMG_INIT`, `WGT_INIT`,
+`PARAM_INIT`, `DESC_INIT` (empty = no preload).
 
 Ports: `clk`, `rst`, the CSR bus (§10.1), the memory port (§10.3), and these status outputs for
 the FPGA top:

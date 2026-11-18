@@ -291,6 +291,15 @@ its steps have arrived.
 - Refusing `START` while a memory-port read is in flight keeps the port's response from
   colliding with a run's buffer accesses.
 
+**Clarification (Phase 2 batch 3 review, approved).** "Pending" means accepted at an earlier
+edge. A read accepted in the same cycle as `START` was not pending when `START` was checked, so
+both are accepted: the buffer is read at that edge, while the memory port still owns it, and the
+data returns with `o_mem_rvalid` while `BUSY` is already high (spec §10.3). The select is
+registered with the read, so the run's buffer traffic cannot disturb the returned word.
+`testbench/system/test_accel_top.py::test_csr_rules` offers a read and `START` in one idle cycle
+and checks that both are accepted, that exactly one `o_mem_rvalid` returns the right word while
+`BUSY` is high, and that the run's logits are unaffected.
+
 ## D-017 — Output-stationary array implementation (Phase 2)
 
 **Decision.** `systolic_array`:
@@ -376,6 +385,14 @@ Performance:
 - **Byte-enabled staging RAM.** Replace the N byte-wide staging banks with one `N·DATA_W`-wide RAM
   with byte enables. Quartus maps that to fewer, fuller M9K blocks. The A loader keeps writing one
   byte per cycle (one byte enable), and streaming reads one full word.
+- **Reuse staged A across column tiles (spec §5 "optional reuse").** When a layer has a single
+  K chunk (`K ≤ K_TILE`), keep the staged A tile for every column tile of a row tile instead of
+  restaging it. conv2 (2 column tiles, K = 72) would save about 8.7k cycles per image
+  (121 · 72 staged bytes). It conflicts with overlapping staging and drain (above).
+- **Exact cycle model.** A `model/perf.py` that predicts every layer's cycle count exactly from
+  the descriptor and the engine's schedule, asserted against `LAYER_CYC` and the engine test's
+  busy cycles. It would make the dataflow study (Phase 7) and any scheduling change measurable
+  before simulation.
 
 Area:
 - **Post-processing flags.** `requant_en` and `relu_en` are constant for a whole layer, so they
@@ -469,7 +486,8 @@ Reports are committed under `fpga/probe_reports/<module>/`.
 | `postproc` | +5.882 ns | +0.149 ns | 70.83 MHz | `s2_q[0]` → `r3_q[6]`: shift amount through the rounding constant, the 49-bit add and the variable arithmetic shift (data delay 13.925 ns) |
 | `gemm_engine` (N = 8, K_TILE = 128; contains the array, post-processing, `agen_a` and 8 staging banks) | +6.722 ns | +0.095 ns | 75.31 MHz | `u_postproc\|s2_q[1]` → `u_postproc\|r3_q[7]`: the post-processing variable shifter again (data delay 13.207 ns) |
 | `pool_unit` (with `agen_pool`) | +11.364 ns | +0.152 ns | 115.79 MHz | `u_agen_pool\|row_stride_q[2]` → `u_agen_pool\|o_addr[15]`: the 4-term source-address sum (data delay 8.258 ns) |
-| `argmax_unit` | +13.161 ns | +0.148 ns | 146.22 MHz | `best_q[0]` → `best_q[1]`: the 32-bit signed compare and update (data delay 6.763 ns) |
+| `argmax_unit` (re-run after the register restructure, D-031) | +12.926 ns | +0.151 ns | 141.36 MHz | `best_q[6]` → `best_q[1]`: the 32-bit signed compare and update (data delay 6.997 ns) |
+| `accel_top` (the whole core, with the network's WGT, PARAM and descriptor init files) | +5.365 ns | +0.079 ns | 68.33 MHz | `u_gemm_engine\|u_postproc\|s2_q[1]` → `u_gemm_engine\|u_postproc\|r3_q[7]`: the post-processing variable shifter, as in the engine probe (data delay 14.572 ns) |
 
 Sources: `timing_setup_worst.rpt`, `timing_hold_worst.rpt`, `probe_<module>.sta.summary` and
 `fmax.rpt` in each report directory.
@@ -478,6 +496,17 @@ The engine probe (`fpga/probe_reports/gemm_engine/`) uses 6,832 logic elements, 
 68 embedded 9-bit multiplier elements (64 for the array, 4 for post-processing) and 12 M9K blocks:
 8 for the staging banks and 4 that Quartus chose for the array's input-skew delay lines
 (RAM-based shift registers, `altshift_taps`).
+
+The `accel_top` probe (`fpga/probe_reports/accel_top/`) uses 9,335 logic elements (19 %), 5,919
+registers, 68 embedded 9-bit multiplier elements and 341,184 memory bits (20 %): every §5 buffer,
+the descriptor table and the staging banks are block RAM (IMG 128 Kbit, ACT0 and ACT1 64 Kbit each,
+WGT 64 Kbit, PARAM 4 Kbit, descriptors 1 Kbit, staging 8 Kbit: 340,992 bits; the other 192 bits
+are the array's input-skew delay lines, as in the engine probe), and Analysis & Synthesis reports
+no warnings, so the init files were accepted (D-021). Its 274 ports are virtual pins.
+An earlier fit of `accel_top`, before the §9 LOGIT checks were added to the sequencer, gave
++6.736 ns with the drain's column select into the bias add as the worst path; the critical path
+inside the engine moves between these two post-processing paths from fit to fit, and both close
+at 50 MHz with more than 5 ns to spare.
 
 **Reading.**
 - Both blocks close timing at 50 MHz with margin on every corner. The whole design will be
@@ -637,3 +666,121 @@ defines:
 
 **Reason.** Simple, fully specified ownership that is easy to check in simulation, and units that
 reuse the address generators and the 1-cycle read convention already verified.
+
+**Spec additions (approved in the batch 3 review; spec §5, §8, §9, §10).**
+- **Read-data return select.** The units' source data is selected by the layer's `src` field,
+  registered before the layer starts; the memory port registers its buffer select with each read.
+  A late or combinational select cannot mix data of two buffers.
+- **Registered owner vectors.** The sequencer's owner vectors are registers. They are loaded the
+  cycle before a unit is started and cleared the cycle after its done pulse, so they change only
+  while every unit is idle; `a_owner_change_when_idle` (`testbench/sva/accel_top_sva.sv`) checks
+  it, outside reset.
+- **`src = dst` is a §9 error** for CONV, POOL and FC (a layer never reads and writes one buffer,
+  which the single-owner, single-port scheme relies on). ARGMAX ignores `dst`, so neither
+  `src = dst` nor `dst = IMG` is an error for it.
+- **`src = LOGIT` or `dst = LOGIT` is a §9 error for CONV and POOL.** LOGIT is not a byte buffer:
+  without the check the unit would read 0 or its writes would be dropped, silently. FC writes the
+  LOGIT registers by definition; an FC with `src = LOGIT` (and another `dst`) stays undetected
+  and reads 0.
+- **A failing layer never starts.** The first four errors are checked before the layer's unit is
+  started: `STATUS` shows the layer's index and its `LAYER_CYC` stays 0.
+- **`DESC` reads during a run** wait (`o_csr_ready` low) until the sequencer is not fetching,
+  instead of returning 0 (§10.1).
+- **A memory-port read accepted in the same cycle as START** completes normally (§10.3; see
+  D-016).
+- **Address-range policy.** Addresses are taken modulo each buffer's power-of-two depth (high bits
+  ignored), as for the memory port. Accesses are never out of range; oversized descriptors wrap
+  and are not detected. Checking ranges would need the layer's extent (a multiply per descriptor)
+  and would add an error path that the network never needs.
+- **Per-buffer address widths.** IMG needs 14 bits (16 · 784 = 12,544 bytes > 2^13), ACT 13,
+  WGT 10, PARAM 6, LOGIT 4. `buf_port_mux`'s default `AW` is now 14 (the widest byte buffer);
+  `accel_top` sets every instance's width explicitly.
+- **`BUF_RD` / `BUF_WR` from the multiplexer outputs.** Each cycle adds the number of read
+  requests leaving the five multiplexers (0–5) and write requests leaving ACT0/ACT1's (0–2), with a
+  saturating add. The width is the new `PERF_W` parameter (spec 32); a 12-bit build tests
+  saturation. All counters saturate (the spec's "They saturate" now names every counter).
+- **Memory-port word writes.** One write is one whole word: bytes from `[7:0]`, WGT from
+  `[N·DATA_W − 1:0]` (64 bits for N = 8), PARAM from all 64 bits.
+- **Registered descriptor fields** (spec §8): the four words are read into registers before the
+  layer starts and every unit is configured from them.
+
+## D-029 — Mutant runner pulled forward from Phase 3 (batch 3 review)
+
+**Decision.** `scripts/run_mutants.py` runs the bug-injection mutants:
+- **Isolation.** Each patch is applied in its own temporary `git worktree` at HEAD, with the
+  current working tree (modified, new and deleted files, ignored files excluded) copied over it,
+  so a run checks exactly the code under review and the main working tree is never modified.
+- **Kill criterion.** The killing test named in `testbench/mutants/README.md` must fail
+  (pytest JUnit file), and a simulation must have run (cocotb results file present), so a build
+  error or a mistyped test id is an `ERROR`, not a kill. When the README names a required
+  assertion (SVA kill, `m15`), an `Assertion failed` line naming it must be in the simulator log;
+  a failure for another reason is `WRONG`.
+- **Baseline.** Every distinct killing test first runs on the unmutated tree and must pass.
+- **Report.** Per mutant: verdict, killing test, and the first failing cocotb test with its
+  message (or the assertion line). `--report` writes `testbench/reports/mutation.md`.
+- **Guards.** `scripts/checkpoint.sh 2` fails if any patch is currently applied to the working
+  tree (`git apply -R --check` must fail for every patch). `scripts/tests/test_mutant_patches.py`
+  checks in CI that every patch applies and that its README row names a collected pytest node.
+
+**Alternatives.** A shell loop applying patches in place (what the review bundle did by hand): a
+crash or interrupt leaves a mutant in the RTL, and exit codes cannot tell a build error from a
+kill.
+
+**Reason.** Phase 3 requires the runner; having it now makes the 20+ existing mutants a
+repeatable regression instead of a one-off check, and the kill criterion is strict enough that a
+mutant cannot be "killed" by an unrelated failure.
+
+## D-030 — One start/busy/done contract for all layer units (batch 3 review)
+
+**Decision.** `testbench/sva/unit_if_sva.sv` replaces `gemm_engine_if_sva.sv` and is bound to the
+GEMM engine, the pool unit and the argmax unit (one bind file each). Parameters: the
+configuration width `CFG_W` and the number of other read and write enables. Properties: start only
+when idle and configuration stable while busy (sequencer obligations); done is a pulse, ends busy,
+only while busy; busy falls only after done (or a reset); no port access while idle;
+`o_src_re |-> o_busy`, `o_dst_we |-> o_busy`. The engine-only "write port matches the mode" check
+moved to `gemm_engine_impl_sva.sv`. Each unit has a fires-test for both sequencer obligations.
+- `gemm_engine_impl_sva`'s drain-active input is now bound as `dstate_q != D_IDLE`, evaluated in
+  the engine's scope, so the assertion file no longer copies the engine's enum encoding.
+- `scripts/check_fsm_names.py` (run by `scripts/tests/`) checks that the testbench's `Q_NAMES` /
+  `D_NAMES` lists equal the engine's `qstate_t` / `dstate_t` enums in order.
+
+**Reason.** The sequencer drives all three units the same way, so one contract, checked in one
+place, catches a sequencer bug against any unit, and the WS array work (Phase 7) does not touch it.
+
+## D-031 — Control path: CSR block, memory port, layer sequencer, accel_top (Phase 2)
+
+**Decision.**
+- **Partitioning.** `csr_block` (bus decode, register map), `perf_counters`, `layer_seq`
+  (descriptor walk, errors, ownership, unit starts), `mem_port` (host handshake, read return),
+  `logit_rf` (LOGIT registers) and `accel_top` (buffers, port multiplexers, request decode).
+- **CSR timing.** Register reads are answered in the cycle they arrive (ready = valid); the read
+  multiplexer is combinational. Descriptor reads take one more cycle (synchronous RAM) and use the
+  table's read port only when the sequencer is not reading it, so DESC is readable during a run
+  (a few cycles of wait at most) instead of reading 0.
+- **LOGIT registers, not RAM.** 16 × 32 bits: the CSR block reads any entry combinationally, the
+  argmax unit through a registered port with the buffers' 1-cycle latency, and reset clears them
+  (the CSR reset value is 0).
+- **RESULT** is the argmax unit's held result register (reset 0), not a copy.
+- **IMG offset.** `IMG_SEL · IMG_SIZE` is computed once at START by shift-and-add over the set
+  bits of the constant (784 = 512 + 256 + 16): no multiplier, no per-layer cost.
+- **Sequencer schedule.** About 7 cycles per layer: 4 descriptor reads plus capture, check,
+  start, done, release. The counter `LAYER_CYC[L]` covers the unit's run only.
+- **Request decode.** Each multiplexer input is the unit's request ANDed with "this buffer is the
+  layer's src (or dst)", so a unit only ever requests the buffers its descriptor names, and the
+  ownership assertions check the decode against the owner registers.
+- **Engine `K_TILE`.** The staging banks hold `max(K_TILE, 2)` bytes, which keeps the bank
+  address at least 1 bit wide; `K_TILE = 1` is legal and is tested (Verilator, N = 3) instead of
+  being documented as forbidden.
+- **Argmax restructure.** Control and result registers (with reset) and datapath registers
+  (without) are in separate `always_ff` blocks; the running maximum's next value comes from one
+  `always_comb` with the start clear first and the compare second (they never coincide).
+
+- **Quartus Analysis & Synthesis** of every new module (D-022): 0 errors. The only warnings are
+  inputs that drive no logic, all ignored by the spec: `i_csr_addr[1:0]` (`csr_block`,
+  `accel_top`) and `i_mem_addr[15:14]` (`accel_top`: IMG, the widest buffer, needs 14 bits). The
+  GEMM engine on its own reports the reserved PARAM bits [63:54] and the base-address bits above
+  the WGT and PARAM address widths. Fit and timing of `accel_top`: D-024.
+
+**Reason.** Small blocks, each with its own unit test against a Python model, and one place
+(`accel_top`) where they are connected and the whole network is checked against the golden model.
+

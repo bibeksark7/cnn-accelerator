@@ -170,3 +170,20 @@ requantization, nested-loop convolution, pack/unpack round-trips) in `model/test
   `i_start` only if the pulse has not come. D-018 now states this rule for every done pulse.
 - **Regression test.** `test_argmax_unit.py` (count 0 among the directed cases) passes on Icarus
   and Verilator. Mutants `m16` (ties to the highest index) and `m17` (unsigned compare) are caught.
+
+## BUG-010 — Assertions fired after a one-cycle reset (Phase 2)
+
+- **Symptom.** The first run of `test_reset_mid_run` (system test) stopped in Verilator with
+  `Assertion failed in accel_top.u_accel_top_sva.a_owner_change_when_idle`; with that fixed,
+  `accel_top.u_gemm_engine.u_unit_if_sva.a_busy_ends_with_done` fired at the same point.
+- **How found.** System test: reset asserted for a single cycle while the GEMM engine was running.
+- **Root cause (assertions).** Both properties compare a cycle with the one before (`$changed`,
+  `$fell`, `$past`). `disable iff (rst)` only disables evaluation while `rst` is high. A one-cycle
+  reset clears the owner registers and the engine's busy flag at the same edge that ends the reset
+  cycle, so the first cycle after reset saw "owners changed while the engine was busy in the
+  previous cycle" and "busy fell without a done pulse". The engine's own reset tests always held
+  `rst` for two cycles, which hid the second case (it existed in the old `gemm_engine_if_sva`).
+- **Fix.** Both antecedents exclude the cycle after a reset (`&& !$past(rst)`); the property
+  headers say why. No RTL change.
+- **Regression test.** `test_accel_top.py::test_reset_mid_run` (one-cycle reset in each of the six
+  layers, then a clean bit-exact run) passes on Verilator with every assertion bound.
