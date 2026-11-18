@@ -324,10 +324,10 @@ addresses read as 0 and ignore writes.
 | 0x018 | `IMG_SEL` | RW | 0 | [3:0] image index; latched at START; writes while busy are ignored |
 | 0x01C | `RESULT` | RO | 0 | [7:0] predicted class (valid when `DONE` and not `ERROR`) |
 | 0x020 | `CYC_TOTAL` | RO | 0 | cycles from START to DONE |
-| 0x024 | `CYC_MAC` | RO | 0 | cycles in which the array consumed a reduction step |
-| 0x028 | `BUF_RD` | RO | 0 | buffer reads issued by the engine, pool and argmax units |
-| 0x02C | `BUF_WR` | RO | 0 | buffer writes issued by the engine and pool unit |
-| 0x040 + 4L | `LAYER_CYC[L]` | RO | 0 | cycles spent in layer `L`, `L < DESC_DEPTH` |
+| 0x024 | `CYC_MAC` | RO | 0 | cycles in which the array consumed a reduction step (the GEMM engine's `o_mac_active`) |
+| 0x028 | `BUF_RD` | RO | 0 | reads of IMG, ACT0, ACT1, WGT and PARAM issued by the engine and pool unit |
+| 0x02C | `BUF_WR` | RO | 0 | writes to ACT0 and ACT1 issued by the engine and pool unit |
+| 0x040 + 4L | `LAYER_CYC[L]` | RO | 0 | cycles of layer `L`, from the cycle the sequencer starts it through the cycle its unit reports done, `L < DESC_DEPTH` |
 | 0x080 + 4i | `LOGIT[i]` | RO | 0 | int32 logit `i`, `i < LOGIT_DEPTH` |
 | 0x100 + 4w | `DESC[w]` | RW | not reset | descriptor word `w`, `w < 4 · DESC_DEPTH`; writes while busy are ignored |
 
@@ -337,6 +337,9 @@ buffer (IMG, ACT0, ACT1, WGT, PARAM): they keep their preloaded or last-written 
 reset never requires reloading weights, images or descriptors.
 
 Performance counters are cleared at START, count while `BUSY`, and hold their values afterwards.
+`BUF_RD` and `BUF_WR` count accesses to the buffers of §5 only: not the GEMM engine's internal
+staging banks, the LOGIT register file, the descriptor table, or memory-port accesses (which
+happen only while idle).
 They saturate at 2^32 − 1.
 
 ### 10.3 Memory port

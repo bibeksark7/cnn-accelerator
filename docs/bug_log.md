@@ -141,3 +141,32 @@ requantization, nested-loop convolution, pack/unpack round-trips) in `model/test
   - an undriven wire.
 
   It also expects the committed RTL to pass. It runs in CI.
+
+## BUG-008 — K-chunking at K_TILE = 128 was covered only by the network test (Phase 2)
+
+- **Symptom.** With `CI=true`, which skips the slow network-layer test on Icarus, the new FSM
+  transition-coverage test failed on the Icarus N = 8, K_TILE = 128 build:
+  `qstate: transitions never hit [('CMD', 'STAGE')]`.
+- **How found.** The engine's FSM transition coverage (`test_fsm_transition_coverage`), which
+  requires every reachable sequencer transition in every configuration.
+- **Root cause (test gap).** `CMD → STAGE` (moving to the next K chunk) only happens when
+  K > K_TILE. The random layers have K ≤ 45 (CONV) or a random FC that only sometimes
+  exceeds 128. In the K_TILE = 128 builds, only the network's FC layer (K = 400) exercised
+  K-chunking, so skipping it in push CI would have left chunking untested on Icarus.
+- **Fix.** `test_random_layers` now always ends with an FC with K = 200 and a CONV with K = 144.
+  Both need several K chunks for any K_TILE ≤ 128, and the CONV covers conv chunking at
+  K_TILE = 128, which no test did before.
+- **Regression test.** The coverage test passes on every configuration with and without
+  `CI=true`.
+
+## BUG-009 — Testbench missed a one-cycle done pulse that came immediately after start (Phase 2)
+
+- **Symptom.** `test_argmax_unit` timed out waiting for `o_done` on both simulators.
+- **How found.** First run of the new argmax test.
+- **Root cause (testbench).** With `i_count = 0`, the unit is done one cycle after `i_start`. The
+  test raised `i_start`, lowered it at the next falling edge and only then started waiting for
+  `o_done`. By then the one-cycle pulse had already passed.
+- **Fix.** The test watches `o_done` from the first rising edge after raising `i_start`, lowering
+  `i_start` only if the pulse has not come. D-018 now states this rule for every done pulse.
+- **Regression test.** `test_argmax_unit.py` (count 0 among the directed cases) passes on Icarus
+  and Verilator. Mutants `m16` (ties to the highest index) and `m17` (unsigned compare) are caught.

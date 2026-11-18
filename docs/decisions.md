@@ -334,6 +334,13 @@ products in the accumulators. `test_idle_then_clear_discards_partial_sums` and t
 - **Expected values:** come from `model/golden.py` wherever the golden model defines the
   arithmetic.
 - **Timeouts:** only hang guards, never expected latencies.
+- **Exception: synchronous-read buffer models.** The engine test's buffer model (`serve()` in
+  `test_gemm_engine.py`) samples read requests with the rule above, but drives the read data
+  *immediately after* the rising edge that accepts the request, not after the next falling edge.
+  It models a RAM's registered output, which changes at the clock edge. The data is then stable
+  for the whole cycle in which the engine consumes it, exactly the 1-cycle latency of spec §5.
+- **Done pulses:** a one-cycle `o_done` is watched from the first rising edge after the cycle that
+  raises `i_start`, because a unit with nothing to do may finish immediately (BUG-009).
 
 **Reason.** One sampling rule for every interface removes a whole class of off-by-one-edge
 testbench bugs. Reproducible seeds make failures debuggable. Checking against the golden model
@@ -437,7 +444,11 @@ strictly one after another for each (row tile, column tile, K chunk) in `v1.0`.
 overlapped pipeline now (faster, but conflicts with the correctness-first M1 goal).
 
 **Reason.**
-- Each FSM is small enough to unit-test and to cover exhaustively.
+- Each control block is small and is covered through the engine-level tests, internal assertions
+  (`testbench/sva/gemm_engine_impl_sva.sv`: each block starts only when idle, stream only on
+  `load_done`, drain only after the last chunk, at most one block active) and FSM transition
+  coverage of the sequencer and drain FSMs (`test_fsm_transition_coverage`). They are not
+  unit-tested as separate modules (D-026).
 - Because they communicate only through handshakes, the D-020 overlaps become scheduling changes
   in the sequencer, not rewrites of the datapath FSMs.
 
@@ -457,6 +468,8 @@ Reports are committed under `fpga/probe_reports/<module>/`.
 | `systolic_array` | +10.970 ns | +0.090 ns | 110.74 MHz | `g_row[4].g_col[0].u_mac_cell\|o_a[0]` → `g_row[4].g_col[1].u_mac_cell\|acc_q[31]`: forwarded A operand, 8 × 8 multiply and 32-bit accumulate in the right-hand neighbour (data delay 9.014 ns) |
 | `postproc` | +5.882 ns | +0.149 ns | 70.83 MHz | `s2_q[0]` → `r3_q[6]`: shift amount through the rounding constant, the 49-bit add and the variable arithmetic shift (data delay 13.925 ns) |
 | `gemm_engine` (N = 8, K_TILE = 128; contains the array, post-processing, `agen_a` and 8 staging banks) | +6.722 ns | +0.095 ns | 75.31 MHz | `u_postproc\|s2_q[1]` → `u_postproc\|r3_q[7]`: the post-processing variable shifter again (data delay 13.207 ns) |
+| `pool_unit` (with `agen_pool`) | +11.364 ns | +0.152 ns | 115.79 MHz | `u_agen_pool\|row_stride_q[2]` → `u_agen_pool\|o_addr[15]`: the 4-term source-address sum (data delay 8.258 ns) |
+| `argmax_unit` | +13.161 ns | +0.148 ns | 146.22 MHz | `best_q[0]` → `best_q[1]`: the 32-bit signed compare and update (data delay 6.763 ns) |
 
 Sources: `timing_setup_worst.rpt`, `timing_hold_worst.rpt`, `probe_<module>.sta.summary` and
 `fmax.rpt` in each report directory.
@@ -529,8 +542,16 @@ them one after another per (row tile, column tile, K chunk).
   generator's next command is issued after each stream, so its tile scan overlaps the drain.
 
 **Alternatives.**
-- Separate modules per FSM: more wiring for little gain at this size. The blocks share the tile
-  state, and the engine-level tests already exercise every path.
+- Separate modules per FSM, each unit-tested: more wiring for little gain at this size, since
+  the blocks share the tile state. Instead, the control blocks are covered through engine-level
+  tests, internal assertions and FSM transition coverage. Every reachable transition of the
+  sequencer (19) and drain (12) FSMs is hit in every test configuration. The branches that cannot
+  be taken are listed with reasons in `test_gemm_engine.py`:
+  - the `CLEAR`, `STAGE`, `CMD` and `NEXT` wait loops;
+  - a drain stall in `ELEM`;
+  - illegal encodings.
+
+  Reset is exercised during A load, stream, drain and the post-processing flush.
 - Re-reading parameters per element: 2 cycles per element instead of 1.
 - Staging explicit zeros for padded rows: N·Kc wasted cycles per padded tile.
 
@@ -545,13 +566,74 @@ them one after another per (row tile, column tile, K chunk).
 array inputs to zero. §5 now says exactly that ("padded rows are forced to zero at the array
 input"), and the zero-forcing stays in the RTL.
 
-**Surviving mutant: pending review, not marked equivalent.** Removing the zero-forcing changed no
-output in the current tests: an output-stationary row's result depends only on that row's
-A-values, and padded rows are never written back. It is *not* treated as equivalent, because it
-would let X (in 4-state simulation, before a bank is first written) or stale data into padded
-rows. That could:
-- trip the planned no-X-on-outputs and no-accumulator-overflow assertions (Phase 3);
-- matter for the weight-stationary array (Phase 7), whose internal mapping may combine rows
-  differently.
+**The zero-forcing mutant is killed by SVA (engine review).** Removing the zero-forcing
+(`testbench/mutants/m15_engine_no_zero_forcing.patch`) changes no layer output:
+- **Output-stationary:** a row's result depends only on that row's A-values, and padded rows are
+  never written back.
+- **Weight-stationary (D-015 mapping):** padded output rows likewise only feed their own
+  accumulator rows.
 
-Its classification is pending review in Phase 3 mutation testing.
+It is still observable, and §5 stays normative, because:
+- the spec requires padded rows to be zero at the array input;
+- X (4-state simulation, before a bank is first written) or stale bytes in padded lanes would
+  break the no-X rule and could falsely trip, or mask, the planned accumulator-overflow
+  assertion;
+- garbage in padded lanes toggles multipliers and accumulators for nothing, which shows up as
+  dynamic power in the Phase 8 power analysis.
+
+The implementation assertion `a_padded_rows_zero` (every array step presents 0 on padded lanes)
+fires on the mutant in Verilator runs, so the mutant is recorded as **killed**, not equivalent.
+
+## D-027 — Performance counter definitions (engine review)
+
+**Decision** (approved in the engine review, before the CSR block is built). Spec §10.2 now
+defines:
+- **`BUF_RD` / `BUF_WR`:** count accesses to the §5 buffers only. Reads are of IMG, ACT0, ACT1,
+  WGT and PARAM; writes are to ACT0 and ACT1. The GEMM engine's internal staging banks, the
+  LOGIT register file, the descriptor table and memory-port accesses are not counted.
+- **`CYC_MAC`:** counts the cycles in which the GEMM engine's `o_mac_active` is high, i.e. the
+  array consumed a reduction step.
+- **`LAYER_CYC[L]`:** counts from the cycle the sequencer starts layer `L` through the cycle that
+  layer's unit reports done.
+
+**Reason.**
+- Each counter has one unambiguous source signal, so the CSR block can be checked against a
+  simple model.
+- `BUF_*` measure traffic on the large shared buffers, which is what the dataflow study (Phase 7)
+  compares. The staging banks are an engine implementation detail.
+
+## D-028 — Buffer ownership, pool unit and argmax unit (Phase 2)
+
+**Decision.**
+- **One owner per buffer.**
+  - Each §5 buffer gets a `buf_port_mux` in front of its single read port and single write port.
+    The layer sequencer drives a one-hot owner vector per buffer: the host memory port while
+    idle, otherwise the unit executing the current layer (GEMM engine or pool unit) for the
+    buffers named by its descriptor.
+  - One owner covers both ports, because a layer never reads and writes the same buffer.
+  - Only the owner's requests pass (AND-OR multiplexer); read data fans out to all requesters.
+  - Assertions (`testbench/sva/buf_port_mux_sva.sv`): the owner vector is one-hot or zero, and no
+    input that does not own the buffer issues a read or write. The mux is combinational, so the
+    assertions are sampled on the clock of whatever contains it: a unit-test harness now,
+    `accel_top` later.
+- **Pool unit.** `agen_pool` addresses are read as soon as they are offered (the read port is
+  free during POOL). Data returns one cycle later and updates a running signed maximum, which is
+  restarted on each window's first read. The window's maximum is written from a register one
+  cycle after its last read. Completion is detected from the empty pipeline, so shapes with no
+  output also finish.
+- **Argmax unit.**
+  - Reads the logits through a 1-cycle-latency port, the same convention as the buffers, so
+    the LOGIT register file can register its read data.
+  - A later value replaces the running maximum only if it is strictly greater (`>`). Ties
+    therefore go to the lowest index, as spec §3 and `np.argmax` require. A count of 0 gives
+    result 0.
+
+**Alternatives.**
+- **Priority-encoded arbitration between requesters:** hides a sequencing bug instead of exposing
+  it; the one-hot owner plus assertions makes an illegal overlap an immediate failure.
+- **Per-port owners:** not needed while a layer never reads and writes one buffer.
+- **Argmax with `>=` scanning from the top index down:** equivalent but less obvious than strict
+  `>` from index 0 (and mutant `m16` shows `>=` from index 0 is wrong).
+
+**Reason.** Simple, fully specified ownership that is easy to check in simulation, and units that
+reuse the address generators and the 1-cycle read convention already verified.
