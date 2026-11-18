@@ -20,8 +20,8 @@
 //
 // Parameters:
 //   N, DATA_W, ACC_W - systolic array size and widths (spec §1)
-//   K_TILE           - staging bank depth (K chunk length); must be >= 2 (the bank address is
-//                      $clog2(K_TILE) bits wide)
+//   K_TILE           - K chunk length (>= 1). The staging banks hold max(K_TILE, 2) bytes so
+//                      their address is at least 1 bit wide; K_TILE = 1 leaves one word unused
 //   ADDR_W           - buffer address width (descriptor base fields)
 //   WGT_DEPTH        - WGT buffer depth (words of N*DATA_W bits)
 //   PARAM_DEPTH      - PARAM buffer depth (64-bit words)
@@ -93,7 +93,8 @@ module gemm_engine #(
 );
 
   localparam int K_W = 16;
-  localparam int KP_W = $clog2(K_TILE);
+  localparam int BANK_DEPTH = (K_TILE > 1) ? K_TILE : 2;  // keeps the bank address >= 1 bit
+  localparam int KP_W = $clog2(BANK_DEPTH);
   localparam int ROW_W = $clog2(N > 1 ? N : 2);
   localparam int WGT_AW = $clog2(WGT_DEPTH);
   localparam int PRM_AW = $clog2(PARAM_DEPTH);
@@ -160,7 +161,7 @@ module gemm_engine #(
     for (gi = 0; gi < N; gi = gi + 1) begin : g_bank
       sram_1r1w #(
           .WIDTH(DATA_W),
-          .DEPTH(K_TILE)
+          .DEPTH(BANK_DEPTH)
       ) u_sram_1r1w (
           .clk    (clk),
           .i_we   (bank_we[gi]),
