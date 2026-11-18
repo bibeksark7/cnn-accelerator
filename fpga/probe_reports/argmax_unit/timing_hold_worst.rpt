@@ -1,7 +1,7 @@
 ----------------
 ; Command Info ;
 ----------------
-Report Timing: Found 1 hold paths (0 violated).  Worst case slack is 0.341 
+Report Timing: Found 1 hold paths (0 violated).  Worst case slack is 0.344 
 
 Tcl Command:
     report_timing -hold -file timing_hold_worst.rpt -npaths 1 -detail full_path
@@ -20,10 +20,10 @@ Delay Model:
 +-------+----------------+----------------+--------------+-------------+--------------+------------+------------+
 ; Slack ; From Node      ; To Node        ; Launch Clock ; Latch Clock ; Relationship ; Clock Skew ; Data Delay ;
 +-------+----------------+----------------+--------------+-------------+--------------+------------+------------+
-; 0.341 ; state_q.A_IDLE ; state_q.A_IDLE ; clk          ; clk         ; 0.000        ; 0.072      ; 0.587      ;
+; 0.344 ; state_q.A_IDLE ; state_q.A_IDLE ; clk          ; clk         ; 0.000        ; 0.069      ; 0.587      ;
 +-------+----------------+----------------+--------------+-------------+--------------+------------+------------+
 
-Path #1: Hold slack is 0.341 
+Path #1: Hold slack is 0.344 
 ===============================================================================
 +-------------------------------------+
 ; Path Summary                        ;
@@ -34,9 +34,9 @@ Path #1: Hold slack is 0.341
 ; To Node            ; state_q.A_IDLE ;
 ; Launch Clock       ; clk            ;
 ; Latch Clock        ; clk            ;
-; Data Arrival Time  ; 4.064          ;
-; Data Required Time ; 3.723          ;
-; Slack              ; 0.341          ;
+; Data Arrival Time  ; 4.105          ;
+; Data Required Time ; 3.761          ;
+; Slack              ; 0.344          ;
 +--------------------+----------------+
 
 +-----------------------------------------------------------------------------------+
@@ -45,13 +45,13 @@ Path #1: Hold slack is 0.341
 ; Property               ; Value ; Count ; Total Delay ; % of Total ; Min   ; Max   ;
 +------------------------+-------+-------+-------------+------------+-------+-------+
 ; Hold Relationship      ; 0.000 ;       ;             ;            ;       ;       ;
-; Clock Skew             ; 0.072 ;       ;             ;            ;       ;       ;
+; Clock Skew             ; 0.069 ;       ;             ;            ;       ;       ;
 ; Data Delay             ; 0.587 ;       ;             ;            ;       ;       ;
 ; Number of Logic Levels ;       ; 1     ;             ;            ;       ;       ;
 ; Physical Delays        ;       ;       ;             ;            ;       ;       ;
 ;  Arrival Path          ;       ;       ;             ;            ;       ;       ;
 ;   Clock                ;       ;       ;             ;            ;       ;       ;
-;    IC                  ;       ; 3     ; 2.294       ; 66         ; 0.000 ; 1.436 ;
+;    IC                  ;       ; 3     ; 2.335       ; 66         ; 0.000 ; 1.477 ;
 ;    Cell                ;       ; 3     ; 1.183       ; 34         ; 0.000 ; 0.708 ;
 ;   Data                 ;       ;       ;             ;            ;       ;       ;
 ;    IC                  ;       ; 2     ; 0.000       ; 0          ; 0.000 ; 0.000 ;
@@ -59,34 +59,34 @@ Path #1: Hold slack is 0.341
 ;    uTco                ;       ; 1     ; 0.207       ; 35         ; 0.207 ; 0.207 ;
 ;  Required Path         ;       ;       ;             ;            ;       ;       ;
 ;   Clock                ;       ;       ;             ;            ;       ;       ;
-;    IC                  ;       ; 3     ; 2.390       ; 66         ; 0.000 ; 1.496 ;
-;    Cell                ;       ; 3     ; 1.218       ; 34         ; 0.000 ; 0.708 ;
+;    IC                  ;       ; 3     ; 2.432       ; 67         ; 0.000 ; 1.538 ;
+;    Cell                ;       ; 3     ; 1.218       ; 33         ; 0.000 ; 0.708 ;
 +------------------------+-------+-------+-------------+------------+-------+-------+
 Note: Negative delays are omitted from totals when calculating percentages
 
-+-----------------------------------------------------------------------------------------+
-; Data Arrival Path                                                                       ;
-+---------+---------+----+------+--------+--------------------+---------------------------+
-; Total   ; Incr    ; RF ; Type ; Fanout ; Location           ; Element                   ;
-+---------+---------+----+------+--------+--------------------+---------------------------+
-; 0.000   ; 0.000   ;    ;      ;        ;                    ; launch edge time          ;
-; 3.477   ; 3.477   ;    ;      ;        ;                    ; clock path                ;
-;   0.000 ;   0.000 ;    ;      ;        ;                    ; source latency            ;
-;   0.000 ;   0.000 ;    ;      ; 1      ; PIN_M8             ; clk                       ;
-;   0.000 ;   0.000 ; RR ; IC   ; 1      ; IOIBUF_X0_Y18_N15  ; clk~input|i               ;
-;   0.708 ;   0.708 ; RR ; CELL ; 1      ; IOIBUF_X0_Y18_N15  ; clk~input|o               ;
-;   1.566 ;   0.858 ; RR ; IC   ; 1      ; CLKCTRL_G3         ; clk~inputclkctrl|inclk[0] ;
-;   1.566 ;   0.000 ; RR ; CELL ; 77     ; CLKCTRL_G3         ; clk~inputclkctrl|outclk   ;
-;   3.002 ;   1.436 ; RR ; IC   ; 1      ; FF_X39_Y30_N13     ; state_q.A_IDLE|clk        ;
-;   3.477 ;   0.475 ; RR ; CELL ; 1      ; FF_X39_Y30_N13     ; state_q.A_IDLE            ;
-; 4.064   ; 0.587   ;    ;      ;        ;                    ; data path                 ;
-;   3.684 ;   0.207 ;    ; uTco ; 1      ; FF_X39_Y30_N13     ; state_q.A_IDLE            ;
-;   3.684 ;   0.000 ; FF ; CELL ; 46     ; FF_X39_Y30_N13     ; state_q.A_IDLE|q          ;
-;   3.684 ;   0.000 ; FF ; IC   ; 1      ; LCCOMB_X39_Y30_N12 ; state_q~10|datac          ;
-;   3.995 ;   0.311 ; FF ; CELL ; 1      ; LCCOMB_X39_Y30_N12 ; state_q~10|combout        ;
-;   3.995 ;   0.000 ; FF ; IC   ; 1      ; FF_X39_Y30_N13     ; state_q.A_IDLE|d          ;
-;   4.064 ;   0.069 ; FF ; CELL ; 1      ; FF_X39_Y30_N13     ; state_q.A_IDLE            ;
-+---------+---------+----+------+--------+--------------------+---------------------------+
++----------------------------------------------------------------------------------------+
+; Data Arrival Path                                                                      ;
++---------+---------+----+------+--------+-------------------+---------------------------+
+; Total   ; Incr    ; RF ; Type ; Fanout ; Location          ; Element                   ;
++---------+---------+----+------+--------+-------------------+---------------------------+
+; 0.000   ; 0.000   ;    ;      ;        ;                   ; launch edge time          ;
+; 3.518   ; 3.518   ;    ;      ;        ;                   ; clock path                ;
+;   0.000 ;   0.000 ;    ;      ;        ;                   ; source latency            ;
+;   0.000 ;   0.000 ;    ;      ; 1      ; PIN_M8            ; clk                       ;
+;   0.000 ;   0.000 ; RR ; IC   ; 1      ; IOIBUF_X0_Y18_N15 ; clk~input|i               ;
+;   0.708 ;   0.708 ; RR ; CELL ; 1      ; IOIBUF_X0_Y18_N15 ; clk~input|o               ;
+;   1.566 ;   0.858 ; RR ; IC   ; 1      ; CLKCTRL_G3        ; clk~inputclkctrl|inclk[0] ;
+;   1.566 ;   0.000 ; RR ; CELL ; 77     ; CLKCTRL_G3        ; clk~inputclkctrl|outclk   ;
+;   3.043 ;   1.477 ; RR ; IC   ; 1      ; FF_X45_Y16_N1     ; state_q.A_IDLE|clk        ;
+;   3.518 ;   0.475 ; RR ; CELL ; 1      ; FF_X45_Y16_N1     ; state_q.A_IDLE            ;
+; 4.105   ; 0.587   ;    ;      ;        ;                   ; data path                 ;
+;   3.725 ;   0.207 ;    ; uTco ; 1      ; FF_X45_Y16_N1     ; state_q.A_IDLE            ;
+;   3.725 ;   0.000 ; FF ; CELL ; 45     ; FF_X45_Y16_N1     ; state_q.A_IDLE|q          ;
+;   3.725 ;   0.000 ; FF ; IC   ; 1      ; LCCOMB_X45_Y16_N0 ; state_q~12|datac          ;
+;   4.036 ;   0.311 ; FF ; CELL ; 1      ; LCCOMB_X45_Y16_N0 ; state_q~12|combout        ;
+;   4.036 ;   0.000 ; FF ; IC   ; 1      ; FF_X45_Y16_N1     ; state_q.A_IDLE|d          ;
+;   4.105 ;   0.069 ; FF ; CELL ; 1      ; FF_X45_Y16_N1     ; state_q.A_IDLE            ;
++---------+---------+----+------+--------+-------------------+---------------------------+
 
 +-----------------------------------------------------------------------------------------+
 ; Data Required Path                                                                      ;
@@ -94,18 +94,18 @@ Note: Negative delays are omitted from totals when calculating percentages
 ; Total   ; Incr     ; RF ; Type ; Fanout ; Location          ; Element                   ;
 +---------+----------+----+------+--------+-------------------+---------------------------+
 ; 0.000   ; 0.000    ;    ;      ;        ;                   ; latch edge time           ;
-; 3.549   ; 3.549    ;    ;      ;        ;                   ; clock path                ;
+; 3.587   ; 3.587    ;    ;      ;        ;                   ; clock path                ;
 ;   0.000 ;   0.000  ;    ;      ;        ;                   ; source latency            ;
 ;   0.000 ;   0.000  ;    ;      ; 1      ; PIN_M8            ; clk                       ;
 ;   0.000 ;   0.000  ; RR ; IC   ; 1      ; IOIBUF_X0_Y18_N15 ; clk~input|i               ;
 ;   0.708 ;   0.708  ; RR ; CELL ; 1      ; IOIBUF_X0_Y18_N15 ; clk~input|o               ;
 ;   1.602 ;   0.894  ; RR ; IC   ; 1      ; CLKCTRL_G3        ; clk~inputclkctrl|inclk[0] ;
 ;   1.602 ;   0.000  ; RR ; CELL ; 77     ; CLKCTRL_G3        ; clk~inputclkctrl|outclk   ;
-;   3.098 ;   1.496  ; RR ; IC   ; 1      ; FF_X39_Y30_N13    ; state_q.A_IDLE|clk        ;
-;   3.608 ;   0.510  ; RR ; CELL ; 1      ; FF_X39_Y30_N13    ; state_q.A_IDLE            ;
-;   3.549 ;   -0.059 ;    ;      ;        ;                   ; clock pessimism removed   ;
-; 3.549   ; 0.000    ;    ;      ;        ;                   ; clock uncertainty         ;
-; 3.723   ; 0.174    ;    ; uTh  ; 1      ; FF_X39_Y30_N13    ; state_q.A_IDLE            ;
+;   3.140 ;   1.538  ; RR ; IC   ; 1      ; FF_X45_Y16_N1     ; state_q.A_IDLE|clk        ;
+;   3.650 ;   0.510  ; RR ; CELL ; 1      ; FF_X45_Y16_N1     ; state_q.A_IDLE            ;
+;   3.587 ;   -0.063 ;    ;      ;        ;                   ; clock pessimism removed   ;
+; 3.587   ; 0.000    ;    ;      ;        ;                   ; clock uncertainty         ;
+; 3.761   ; 0.174    ;    ; uTh  ; 1      ; FF_X45_Y16_N1     ; state_q.A_IDLE            ;
 +---------+----------+----+------+--------+-------------------+---------------------------+
 
 
