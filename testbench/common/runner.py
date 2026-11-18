@@ -115,3 +115,40 @@ def run_cocotb(
     assert num_tests > 0, f"no cocotb tests ran ({results_xml})"
     assert num_failed == 0, f"{num_failed}/{num_tests} cocotb tests failed ({results_xml})"
     return results_xml
+
+
+def run_sva_violation(
+    *,
+    toplevel: str,
+    sources: Sequence[Path],
+    test_module: str,
+    violation: str,
+    assertion: str,
+    parameters: Mapping[str, object] | None = None,
+    extra_build_args: Sequence[str] = ("--assert",),
+    extra_env: Mapping[str, str] | None = None,
+) -> None:
+    """Run cocotb test ``sva_violation_<violation>`` on Verilator with assertions enabled.
+
+    The run must fail, and the first ``Assertion failed`` line of the simulator log must name
+    ``assertion``. This proves the assertion is live (it can fire), not just that it compiles.
+    """
+    import pytest  # only needed by the pytest entry points that call this helper
+
+    log = SIM_BUILD_DIR / f"{toplevel}_sva_violation_{violation}.log"
+    with pytest.raises((SystemExit, RuntimeError, AssertionError)):
+        run_cocotb(
+            sim="verilator",
+            toplevel=toplevel,
+            sources=sources,
+            test_module=test_module,
+            parameters=parameters,
+            extra_build_args=extra_build_args,
+            testcase=f"sva_violation_{violation}",
+            extra_env={**(extra_env or {}), "SVA_VIOLATION": violation},
+            log_file=log,
+            build_tag="sva_violation",
+        )
+    failed = [line for line in log.read_text().splitlines() if "Assertion failed" in line]
+    assert failed, f"no assertion fired; see {log}"
+    assert assertion in failed[0], f"first failing assertion was not {assertion}: {failed[0]}"

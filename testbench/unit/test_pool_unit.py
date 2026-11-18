@@ -2,11 +2,14 @@
 
 The buffer model answers source reads with the 1-cycle latency of spec §5 and records writes.
 A run passes when every output address is written exactly once with the golden value and
-nothing else is written. Shapes with no output must finish without writes.
+nothing else is written. Shapes with no output must finish without writes. Verilator runs bind
+the shared unit contract (testbench/sva/unit_if_sva.sv); test_pool_sva_fires shows the
+sequencer-side assertions are live.
 """
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import cocotb
@@ -15,11 +18,13 @@ import pytest
 from cocotb.triggers import FallingEdge, ReadOnly, RisingEdge
 
 from common.bits import to_signed, to_unsigned
-from common.runner import RTL_DIR, SIMULATORS, run_cocotb
+from common.runner import RTL_DIR, SIMULATORS, SVA_DIR, run_cocotb, run_sva_violation
 from common.sim import seeded_rng, start_clock_and_reset, wait_until
 from model import golden, net
 
 SOURCES = [RTL_DIR / "addr" / "agen_pool.sv", RTL_DIR / "post" / "pool_unit.sv"]
+SVA_SOURCES = [SVA_DIR / "unit_if_sva.sv", SVA_DIR / "pool_unit_bind.sv"]
+SVA_VIOLATION = os.environ.get("SVA_VIOLATION", "")
 
 
 async def serve(dut, src: dict[int, int], writes: dict[int, int], dup: list[int]) -> None:
@@ -74,7 +79,7 @@ async def setup(dut) -> None:
     await start_clock_and_reset(dut)
 
 
-@cocotb.test()
+@cocotb.test(skip=SVA_VIOLATION != "")
 async def test_network_pools(dut):
     """pool1 and pool2 on golden conv outputs equal the golden pool outputs."""
     await setup(dut)
@@ -90,7 +95,7 @@ async def test_network_pools(dut):
             )
 
 
-@cocotb.test()
+@cocotb.test(skip=SVA_VIOLATION != "")
 async def test_random_signed_shapes(dut):
     """Random shapes (odd sizes floor), bases and the full int8 range (negative maxima)."""
     rng = seeded_rng(dut, "pool")
@@ -106,7 +111,7 @@ async def test_random_signed_shapes(dut):
         await run_pool(dut, act, rng.randrange(0, 60000), rng.randrange(0, 60000))
 
 
-@cocotb.test()
+@cocotb.test(skip=SVA_VIOLATION != "")
 async def test_shapes_without_output(dut):
     """H or W below 2, or C = 0: done without any write."""
     await setup(dut)
@@ -114,6 +119,71 @@ async def test_shapes_without_output(dut):
         await run_pool(dut, np.zeros((h, w, c), dtype=np.int8), 10, 20)
 
 
+async def start_busy_pool(dut) -> None:
+    """Start a 6x6x2 pool and wait a few cycles (it is still busy)."""
+    await setup(dut)
+    cocotb.start_soon(serve(dut, {}, {}, []))
+    await FallingEdge(dut.clk)
+    dut.i_src_base.value, dut.i_dst_base.value = 0, 100
+    dut.i_h.value, dut.i_w.value, dut.i_c.value = 6, 6, 2
+    dut.i_start.value = 1
+    await FallingEdge(dut.clk)
+    dut.i_start.value = 0
+    for _ in range(5):
+        await FallingEdge(dut.clk)
+
+
+@cocotb.test(skip=SVA_VIOLATION != "start_while_busy")
+async def sva_violation_start_while_busy(dut):
+    """A second i_start while pooling; only run by test_pool_sva_fires."""
+    await start_busy_pool(dut)
+    dut.i_start.value = 1
+    for _ in range(3):
+        await FallingEdge(dut.clk)
+    dut.i_start.value = 0
+
+
+@cocotb.test(skip=SVA_VIOLATION != "cfg_change_while_busy")
+async def sva_violation_cfg_change_while_busy(dut):
+    """The shape changes while pooling; only run by test_pool_sva_fires."""
+    await start_busy_pool(dut)
+    dut.i_c.value = 3
+    for _ in range(3):
+        await FallingEdge(dut.clk)
+
+
+def build(sim: str) -> tuple[list[Path], list[str]]:
+    if sim == "verilator":
+        return SOURCES + SVA_SOURCES, ["--assert"]
+    return SOURCES, []
+
+
 @pytest.mark.parametrize("sim", SIMULATORS)
 def test_pool_unit(sim: str) -> None:
-    run_cocotb(sim=sim, toplevel="pool_unit", sources=SOURCES, test_module=Path(__file__).stem)
+    sources, args = build(sim)
+    run_cocotb(
+        sim=sim,
+        toplevel="pool_unit",
+        sources=sources,
+        test_module=Path(__file__).stem,
+        extra_build_args=args,
+    )
+
+
+@pytest.mark.parametrize(
+    ("violation", "assertion"),
+    [
+        ("start_while_busy", "a_start_only_when_idle"),
+        ("cfg_change_while_busy", "a_cfg_stable_while_busy"),
+    ],
+)
+def test_pool_sva_fires(violation: str, assertion: str) -> None:
+    sources, args = build("verilator")
+    run_sva_violation(
+        toplevel="pool_unit",
+        sources=sources,
+        test_module=Path(__file__).stem,
+        violation=violation,
+        assertion=assertion,
+        extra_build_args=args,
+    )

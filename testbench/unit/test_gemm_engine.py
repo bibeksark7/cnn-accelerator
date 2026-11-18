@@ -10,12 +10,15 @@ Tests:
   random conv/fc   random shapes (ragged C_out, M not a multiple of N), bases, ReLU on/off,
                    full int8 activations; small K_TILE builds force K chunking
   no-work layers   C_out = 0, no output pixels, K = 0: done with no writes
-  reset mid-layer  reset during A load, stream, drain and the post-processing flush, then a
-                   clean layer that must be exactly right
+  reset mid-layer  reset during A load, stream, the drain's parameter prefetch, row wait and
+                   element feed, and the post-processing flush; then about 20 resets at random
+                   cycles of a layer; each followed by a clean layer that must be exactly right
   FSM coverage     every reachable transition of the sequencer (qstate_q) and drain (dstate_q)
-                   FSMs is hit; known-unreachable branches are listed with the reason
-Verilator runs bind the engine interface and implementation assertions and the array
-assertions; test_engine_sva_fires proves selected engine assertions are live.
+                   FSMs is hit; known-unreachable branches are listed with the reason. Checked
+                   by test_fsm_transition_coverage inside full runs and again by the pytest
+                   wrapper from fsm_coverage.json (skipped when a test filter is set)
+Verilator runs bind the shared unit contract (unit_if_sva), the engine implementation
+assertions and the array assertions; test_engine_sva_fires proves selected ones are live.
 
 Push CI (CI=true) skips the network layers on Icarus; they run on Verilator (TB_NETWORK).
 """
@@ -24,6 +27,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -32,7 +36,7 @@ import numpy as np
 import pytest
 from cocotb.triggers import FallingEdge, ReadOnly, RisingEdge
 
-from common.runner import RTL_DIR, SIM_BUILD_DIR, SVA_DIR, run_cocotb
+from common.runner import RTL_DIR, SVA_DIR, run_cocotb, run_sva_violation
 from common.sim import seeded_rng, start_clock_and_reset, wait_until
 from model import golden, hwmap
 
@@ -48,7 +52,7 @@ SVA_SOURCES = [
     SVA_DIR / "systolic_array_if_sva.sv",
     SVA_DIR / "systolic_array_os_sva.sv",
     SVA_DIR / "systolic_array_bind.sv",
-    SVA_DIR / "gemm_engine_if_sva.sv",
+    SVA_DIR / "unit_if_sva.sv",
     SVA_DIR / "gemm_engine_impl_sva.sv",
     SVA_DIR / "gemm_engine_bind.sv",
 ]
@@ -57,7 +61,8 @@ TB_NETWORK = os.environ.get("TB_NETWORK", "1") == "1"
 SVA_VIOLATION = os.environ.get("SVA_VIOLATION", "")
 WGT_DEPTH, PARAM_DEPTH = 1024, 64
 
-# FSM state encodings, in the order of gemm_engine's qstate_t and dstate_t enums.
+# FSM state encodings, in the order of gemm_engine's qstate_t and dstate_t enums
+# (scripts/check_fsm_names.py checks they match the RTL).
 Q_NAMES = [
     "IDLE",
     "SETUP",
@@ -152,17 +157,7 @@ async def serve(dut, buf: Buffers) -> None:
 async def run_layer(dut, layer: Layer, timeout: int = 400_000) -> Buffers:
     buf = Buffers(layer)
     server = cocotb.start_soon(serve(dut, buf))
-    await FallingEdge(dut.clk)
-    dut.i_fc.value = int(layer.fc)
-    dut.i_relu_en.value = int(layer.relu and not layer.fc)
-    dut.i_requant_en.value = int(not layer.fc)
-    dut.i_src_base.value, dut.i_dst_base.value = layer.src_base, layer.dst_base
-    dut.i_h.value, dut.i_w.value = layer.h, layer.w
-    dut.i_c_in.value, dut.i_c_out.value = layer.c_in, layer.c_out
-    dut.i_wgt_base.value, dut.i_param_base.value = layer.wgt_base, layer.param_base
-    dut.i_start.value = 1
-    await FallingEdge(dut.clk)
-    dut.i_start.value = 0
+    await start_layer(dut, layer)
     await wait_until(dut, lambda: int(dut.o_done.value) == 1, timeout, "o_done")
     await FallingEdge(dut.clk)
     await FallingEdge(dut.clk)
@@ -431,12 +426,38 @@ async def test_layers_without_work(dut):
         await run_layer(dut, empty_layer(fc, h, w, c_in, c_out), timeout=2000)
 
 
+def in_q(name: str):
+    return lambda dut: int(dut.qstate_q.value) == Q_NAMES.index(name)
+
+
+def in_d(name: str):
+    return lambda dut: int(dut.dstate_q.value) == D_NAMES.index(name)
+
+
 RESET_POINTS = (
-    ("A load", lambda dut: int(dut.qstate_q.value) == Q_NAMES.index("LOAD")),
-    ("stream", lambda dut: int(dut.qstate_q.value) == Q_NAMES.index("STREAM")),
-    ("drain", lambda dut: int(dut.dstate_q.value) in (D_NAMES.index("ROW"), D_NAMES.index("ELEM"))),
-    ("post-processing flush", lambda dut: int(dut.dstate_q.value) == D_NAMES.index("FLUSH")),
+    ("A load", in_q("LOAD")),
+    ("stream", in_q("STREAM")),
+    ("drain: parameter prefetch", in_d("PRM")),
+    ("drain: waiting for a row", in_d("ROW")),
+    ("drain: feeding elements", in_d("ELEM")),
+    ("post-processing flush", in_d("FLUSH")),
 )
+RANDOM_RESETS = 20
+
+
+async def start_layer(dut, layer: Layer) -> None:
+    """Drive a layer's configuration and pulse i_start (no checking)."""
+    await FallingEdge(dut.clk)
+    dut.i_fc.value = int(layer.fc)
+    dut.i_relu_en.value = int(layer.relu and not layer.fc)
+    dut.i_requant_en.value = int(not layer.fc)
+    dut.i_src_base.value, dut.i_dst_base.value = layer.src_base, layer.dst_base
+    dut.i_h.value, dut.i_w.value = layer.h, layer.w
+    dut.i_c_in.value, dut.i_c_out.value = layer.c_in, layer.c_out
+    dut.i_wgt_base.value, dut.i_param_base.value = layer.wgt_base, layer.param_base
+    dut.i_start.value = 1
+    await FallingEdge(dut.clk)
+    dut.i_start.value = 0
 
 
 @cocotb.test(skip=SVA_VIOLATION != "")
@@ -447,17 +468,8 @@ async def test_reset_mid_layer_then_clean_layer(dut):
     await setup(dut)
     for where, reached in RESET_POINTS:
         layer = rand_conv(rng, n)
-        buf = Buffers(layer)
-        server = cocotb.start_soon(serve(dut, buf))
-        await FallingEdge(dut.clk)
-        dut.i_fc.value, dut.i_relu_en.value, dut.i_requant_en.value = 0, int(layer.relu), 1
-        dut.i_src_base.value, dut.i_dst_base.value = layer.src_base, layer.dst_base
-        dut.i_h.value, dut.i_w.value = layer.h, layer.w
-        dut.i_c_in.value, dut.i_c_out.value = layer.c_in, layer.c_out
-        dut.i_wgt_base.value, dut.i_param_base.value = layer.wgt_base, layer.param_base
-        dut.i_start.value = 1
-        await FallingEdge(dut.clk)
-        dut.i_start.value = 0
+        server = cocotb.start_soon(serve(dut, Buffers(layer)))
+        await start_layer(dut, layer)
         await wait_until(dut, lambda r=reached: r(dut), 100_000, f"engine in {where}")
         await pulse_reset(dut)
         server.cancel()
@@ -465,6 +477,35 @@ async def test_reset_mid_layer_then_clean_layer(dut):
         assert int(dut.o_busy.value) == 0, f"busy after reset in {where}"
         await run_layer(dut, rand_conv(rng, n) if rng.random() < 0.7 else rand_fc(rng, n))
         dut._log.info("reset during %s, then a clean layer: ok", where)
+
+
+@cocotb.test(skip=SVA_VIOLATION != "")
+async def test_random_cycle_resets(dut):
+    """Reset at a random cycle inside a layer, about 20 times. Each layer first runs to completion
+    (checked) to measure its length L; it is then restarted and reset after 1 .. L-1 cycles. The
+    next layer's full run checks recovery."""
+    rng = seeded_rng(dut, "random_resets")
+    n = n_of(dut)
+    await setup(dut)
+    states = []
+    for _ in range(RANDOM_RESETS):
+        layer = rand_conv(rng, n) if rng.random() < 0.75 else rand_fc(rng, n)
+        length = (await run_layer(dut, layer)).busy_cycles
+        at = rng.randint(1, max(1, length - 1))
+        server = cocotb.start_soon(serve(dut, Buffers(layer)))
+        await start_layer(dut, layer)
+        for _ in range(at):
+            await FallingEdge(dut.clk)
+        await ReadOnly()
+        states.append(
+            (at, length, Q_NAMES[int(dut.qstate_q.value)], D_NAMES[int(dut.dstate_q.value)])
+        )
+        await pulse_reset(dut)
+        server.cancel()
+        await ReadOnly()
+        assert int(dut.o_busy.value) == 0, f"busy after reset at cycle {at}"
+    await run_layer(dut, rand_conv(rng, n))
+    dut._log.info("resets at (cycle, layer length, qstate, dstate): %s", states)
 
 
 # Every transition the RTL can take (outside reset) must be hit by each simulation of this module;
@@ -495,32 +536,58 @@ D_UNREACHABLE = {
 }
 # Reset must have been applied in each phase of a layer (test_reset_mid_layer_then_clean_layer).
 Q_RESET_FROM = {"LOAD", "STREAM", "DRAIN"}
-D_RESET_FROM = {"ROW", "FLUSH"}
+D_RESET_FROM = {"PRM", "ROW", "ELEM", "FLUSH"}
+# A test filter (COCOTB_TEST_FILTER, set by the runner's testcase=) runs a subset, so coverage
+# cannot be complete. The coverage test is then not registered at all: cocotb runs a test that a
+# filter selects even when it is marked skip.
+TEST_FILTERED = bool(os.environ.get("COCOTB_TEST_FILTER") or os.environ.get("COCOTB_TESTCASE"))
+COVERAGE_FILE = "fsm_coverage.json"
 
 
-@cocotb.test(skip=SVA_VIOLATION != "")
-async def test_fsm_transition_coverage(dut):
+def coverage_gaps(cov: dict[str, set]) -> list[str]:
+    """Everything wrong with observed coverage (empty when complete). Shared by the cocotb test
+    and the pytest wrapper."""
+    gaps = []
+    for name, seen, reachable in (
+        ("qstate", cov["q"], Q_REACHABLE),
+        ("dstate", cov["d"], D_REACHABLE),
+    ):
+        if seen - reachable:
+            gaps.append(f"{name}: unexpected transitions {sorted(seen - reachable)}")
+        if reachable - seen:
+            gaps.append(f"{name}: transitions never hit {sorted(reachable - seen)}")
+    if not cov["q_rst"] >= Q_RESET_FROM:
+        gaps.append(f"qstate reset only from {sorted(cov['q_rst'])}, need {sorted(Q_RESET_FROM)}")
+    if not cov["d_rst"] >= D_RESET_FROM:
+        gaps.append(f"dstate reset only from {sorted(cov['d_rst'])}, need {sorted(D_RESET_FROM)}")
+    return gaps
+
+
+def load_coverage(path: Path) -> dict[str, set]:
+    raw = json.loads(path.read_text())
+    return {k: {tuple(x) for x in v} if k in ("q", "d") else set(v) for k, v in raw.items()}
+
+
+async def fsm_transition_coverage(dut):
     """Runs last: every reachable FSM transition was hit, and nothing unexpected happened."""
     for fsm in ("q", "d", "q_rst", "d_rst"):
         dut._log.info("observed %s transitions: %s", fsm, sorted(COVERAGE[fsm]))
-    Path("fsm_coverage.json").write_text(
+    Path(COVERAGE_FILE).write_text(
         json.dumps(
             {k: sorted(map(list, v)) if k in ("q", "d") else sorted(v) for k, v in COVERAGE.items()}
         )
     )
-    for name, seen, reachable in (
-        ("qstate", COVERAGE["q"], Q_REACHABLE),
-        ("dstate", COVERAGE["d"], D_REACHABLE),
-    ):
-        assert not seen - reachable, f"{name}: unexpected transitions {sorted(seen - reachable)}"
-        assert not reachable - seen, f"{name}: transitions never hit {sorted(reachable - seen)}"
-    assert COVERAGE["q_rst"] >= Q_RESET_FROM, f"qstate reset from {sorted(COVERAGE['q_rst'])}"
-    assert COVERAGE["d_rst"] >= D_RESET_FROM, f"dstate reset from {sorted(COVERAGE['d_rst'])}"
+    gaps = coverage_gaps(COVERAGE)
+    assert not gaps, "; ".join(gaps)
     dut._log.info(
         "FSM coverage complete: %d/%d qstate, %d/%d dstate transitions; unreachable: %s; %s",
         len(Q_REACHABLE), len(Q_REACHABLE), len(D_REACHABLE), len(D_REACHABLE),
         sorted(Q_UNREACHABLE), sorted(D_UNREACHABLE),
     )  # fmt: skip
+
+
+if not TEST_FILTERED:
+    test_fsm_transition_coverage = cocotb.test(fsm_transition_coverage)
 
 
 @cocotb.test(skip=SVA_VIOLATION != "start_while_busy")
@@ -562,12 +629,13 @@ async def sva_violation_cfg_change_while_busy(dut):
         await FallingEdge(dut.clk)
 
 
-# (simulator, N, K_TILE). K_TILE must be >= 2 (the staging bank address is $clog2(K_TILE) bits).
+# (simulator, N, K_TILE). K_TILE = 1 (one reduction step per chunk) checks the minimum bank depth.
 CONFIGS = [
     ("icarus", 8, 128),
     ("verilator", 8, 128),
     ("verilator", 8, 16),
     ("icarus", 3, 16),
+    ("verilator", 3, 1),
 ]
 
 
@@ -584,8 +652,10 @@ def run_network_layers(sim: str) -> bool:
 
 @pytest.mark.parametrize(("sim", "n", "k_tile"), CONFIGS)
 def test_gemm_engine(sim: str, n: int, k_tile: int) -> None:
+    """Full run of every cocotb test, then the FSM coverage file it wrote is checked again."""
     sources, args = build(sim)
-    run_cocotb(
+    started = time.time()
+    results = run_cocotb(
         sim=sim,
         toplevel="gemm_engine",
         sources=sources,
@@ -594,6 +664,11 @@ def test_gemm_engine(sim: str, n: int, k_tile: int) -> None:
         extra_build_args=args,
         extra_env={"TB_N": str(n), "TB_NETWORK": "1" if run_network_layers(sim) else "0"},
     )
+    cov_file = results.parent / COVERAGE_FILE
+    assert cov_file.exists(), f"{cov_file} missing: test_fsm_transition_coverage did not run"
+    assert cov_file.stat().st_mtime >= started, f"{cov_file} is stale (not written by this run)"
+    gaps = coverage_gaps(load_coverage(cov_file))
+    assert not gaps, "; ".join(gaps)
 
 
 @pytest.mark.parametrize(
@@ -606,20 +681,13 @@ def test_gemm_engine(sim: str, n: int, k_tile: int) -> None:
 def test_engine_sva_fires(violation: str, assertion: str) -> None:
     """Each violation must fail the run, with its own assertion firing first."""
     sources, args = build("verilator")
-    log = SIM_BUILD_DIR / f"gemm_engine_sva_violation_{violation}.log"
-    with pytest.raises((SystemExit, RuntimeError)):
-        run_cocotb(
-            sim="verilator",
-            toplevel="gemm_engine",
-            sources=sources,
-            test_module=Path(__file__).stem,
-            parameters={"N": 8, "K_TILE": 128, "WGT_DEPTH": WGT_DEPTH, "PARAM_DEPTH": PARAM_DEPTH},
-            extra_build_args=args,
-            testcase=f"sva_violation_{violation}",
-            extra_env={"TB_N": "8", "SVA_VIOLATION": violation},
-            log_file=log,
-            build_tag="sva_violation",
-        )
-    failed = [line for line in log.read_text().splitlines() if "Assertion failed" in line]
-    assert failed, f"no assertion fired; see {log}"
-    assert assertion in failed[0], f"first failing assertion was not {assertion}: {failed[0]}"
+    run_sva_violation(
+        toplevel="gemm_engine",
+        sources=sources,
+        test_module=Path(__file__).stem,
+        violation=violation,
+        assertion=assertion,
+        parameters={"N": 8, "K_TILE": 128, "WGT_DEPTH": WGT_DEPTH, "PARAM_DEPTH": PARAM_DEPTH},
+        extra_build_args=args,
+        extra_env={"TB_N": "8"},
+    )

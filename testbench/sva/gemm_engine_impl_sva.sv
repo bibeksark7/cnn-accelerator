@@ -1,8 +1,10 @@
 // gemm_engine_impl_sva: implementation assertions for rtl/core/gemm_engine.sv.
 //
 // Refers to engine-internal signals, so it is specific to this implementation. Bound by
-// gemm_engine_bind.sv. Simulation-only (Verilator --assert).
+// gemm_engine_bind.sv, which also binds the shared unit contract (unit_if_sva). Simulation-only
+// (Verilator --assert).
 //
+//   a_write_port_matches      CONV writes only activations, FC writes only logits
 //   a_padded_rows_zero        every array step presents 0 on the A lanes of padded rows
 //                             (rows outside the tile's row mask; spec §5)
 //   a_load_starts_idle        the A-load block starts only when it is idle
@@ -17,6 +19,9 @@ module gemm_engine_impl_sva #(
 ) (
     input logic                clk,
     input logic                rst,
+    input logic                i_fc,
+    input logic                o_dst_we,
+    input logic                o_logit_we,
     input logic                arr_valid,
     input logic [N*DATA_W-1:0] arr_a,
     input logic [       N-1:0] mask_q,
@@ -28,11 +33,9 @@ module gemm_engine_impl_sva #(
     input logic                stream_busy_q,
     input logic                step_v_q,
     input logic                drain_start,
-    input logic [         2:0] dstate_q,
+    input logic                drain_active,  // drain FSM not in D_IDLE (bound in engine scope)
     input logic                last_chunk
 );
-
-  localparam logic [2:0] D_IDLE = 3'd0;  // must match gemm_engine's dstate_t encoding
 
   // Lanes of padded rows: all DATA_W bits of lane i set when mask_q[i] is low.
   logic [N*DATA_W-1:0] padded_lanes;
@@ -43,10 +46,12 @@ module gemm_engine_impl_sva #(
     end
   endgenerate
 
-  logic load_active, stream_active, drain_active;
+  logic load_active, stream_active;
   assign load_active   = load_busy_q || wr_v_q;
   assign stream_active = stream_busy_q || step_v_q;
-  assign drain_active  = (dstate_q != D_IDLE);
+
+  a_write_port_matches :
+  assert property (@(posedge clk) disable iff (rst) !(o_dst_we && i_fc) && !(o_logit_we && !i_fc));
 
   a_padded_rows_zero :
   assert property (@(posedge clk) disable iff (rst) arr_valid |-> ((arr_a & padded_lanes) == '0));

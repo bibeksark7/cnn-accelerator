@@ -1,11 +1,13 @@
 """argmax_unit: first index of the largest signed int32 logit (ties to the lowest index).
 
 Compared against np.argmax, whose tie rule is the spec's. A register-file model answers reads
-with a 1-cycle latency.
+with a 1-cycle latency. Verilator runs bind the shared unit contract
+(testbench/sva/unit_if_sva.sv); test_argmax_sva_fires shows the sequencer-side assertions are live.
 """
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import cocotb
@@ -14,11 +16,13 @@ import pytest
 from cocotb.triggers import FallingEdge, ReadOnly, RisingEdge
 
 from common.bits import to_signed, to_unsigned
-from common.runner import RTL_DIR, SIMULATORS, run_cocotb
+from common.runner import RTL_DIR, SIMULATORS, SVA_DIR, run_cocotb, run_sva_violation
 from common.sim import seeded_rng, start_clock_and_reset
 
 I32_MIN, I32_MAX = -(2**31), 2**31 - 1
-SOURCE = RTL_DIR / "post" / "argmax_unit.sv"
+SOURCES = [RTL_DIR / "post" / "argmax_unit.sv"]
+SVA_SOURCES = [SVA_DIR / "unit_if_sva.sv", SVA_DIR / "argmax_unit_bind.sv"]
+SVA_VIOLATION = os.environ.get("SVA_VIOLATION", "")
 
 
 async def serve(dut, regs: list[int]) -> None:
@@ -68,7 +72,7 @@ async def setup(dut) -> list[int]:
     return [0] * 256
 
 
-@cocotb.test()
+@cocotb.test(skip=SVA_VIOLATION != "")
 async def test_directed(dut):
     regs = await setup(dut)
     cases = {
@@ -87,7 +91,7 @@ async def test_directed(dut):
     await check(dut, regs, 0, 0, "count 0")
 
 
-@cocotb.test()
+@cocotb.test(skip=SVA_VIOLATION != "")
 async def test_random_with_planted_ties(dut):
     rng = seeded_rng(dut, "argmax")
     regs = await setup(dut)
@@ -105,6 +109,70 @@ async def test_random_with_planted_ties(dut):
         await check(dut, regs, base, count, f"case {t}")
 
 
+async def start_busy_argmax(dut) -> None:
+    """Start a 10-logit scan and wait a few cycles (it is still busy)."""
+    regs = await setup(dut)
+    cocotb.start_soon(serve(dut, regs))
+    await FallingEdge(dut.clk)
+    dut.i_base.value, dut.i_count.value = 0, 10
+    dut.i_start.value = 1
+    await FallingEdge(dut.clk)
+    dut.i_start.value = 0
+    for _ in range(3):
+        await FallingEdge(dut.clk)
+
+
+@cocotb.test(skip=SVA_VIOLATION != "start_while_busy")
+async def sva_violation_start_while_busy(dut):
+    """A second i_start during the scan; only run by test_argmax_sva_fires."""
+    await start_busy_argmax(dut)
+    dut.i_start.value = 1
+    for _ in range(3):
+        await FallingEdge(dut.clk)
+    dut.i_start.value = 0
+
+
+@cocotb.test(skip=SVA_VIOLATION != "cfg_change_while_busy")
+async def sva_violation_cfg_change_while_busy(dut):
+    """The logit count changes during the scan; only run by test_argmax_sva_fires."""
+    await start_busy_argmax(dut)
+    dut.i_count.value = 4
+    for _ in range(3):
+        await FallingEdge(dut.clk)
+
+
+def build(sim: str) -> tuple[list[Path], list[str]]:
+    if sim == "verilator":
+        return SOURCES + SVA_SOURCES, ["--assert"]
+    return SOURCES, []
+
+
 @pytest.mark.parametrize("sim", SIMULATORS)
 def test_argmax_unit(sim: str) -> None:
-    run_cocotb(sim=sim, toplevel="argmax_unit", sources=[SOURCE], test_module=Path(__file__).stem)
+    sources, args = build(sim)
+    run_cocotb(
+        sim=sim,
+        toplevel="argmax_unit",
+        sources=sources,
+        test_module=Path(__file__).stem,
+        extra_build_args=args,
+    )
+
+
+@pytest.mark.parametrize(
+    ("violation", "assertion"),
+    [
+        ("start_while_busy", "a_start_only_when_idle"),
+        ("cfg_change_while_busy", "a_cfg_stable_while_busy"),
+    ],
+)
+def test_argmax_sva_fires(violation: str, assertion: str) -> None:
+    sources, args = build("verilator")
+    run_sva_violation(
+        toplevel="argmax_unit",
+        sources=sources,
+        test_module=Path(__file__).stem,
+        violation=violation,
+        assertion=assertion,
+        extra_build_args=args,
+    )

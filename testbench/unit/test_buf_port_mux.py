@@ -16,7 +16,7 @@ import pytest
 from cocotb.triggers import FallingEdge, ReadOnly
 
 from common.bits import pack
-from common.runner import RTL_DIR, SIM_BUILD_DIR, SVA_DIR, run_cocotb
+from common.runner import RTL_DIR, SVA_DIR, run_cocotb, run_sva_violation
 from common.sim import seeded_rng, start_clock_and_reset
 
 HDL_DIR = Path(__file__).resolve().parents[1] / "hdl"
@@ -137,20 +137,13 @@ def test_buf_port_mux(sim: str, owners: int, width: int, aw: int) -> None:
 )
 def test_mux_sva_fires(violation: str, assertion: str) -> None:
     sources, args, env = build("verilator")
-    log = SIM_BUILD_DIR / f"buf_port_mux_sva_violation_{violation}.log"
-    with pytest.raises((SystemExit, RuntimeError)):
-        run_cocotb(
-            sim="verilator",
-            toplevel="buf_port_mux_tb",
-            sources=sources,
-            test_module=Path(__file__).stem,
-            parameters={"NUM_OWNERS": 3, "WIDTH": 8, "AW": 13},
-            extra_build_args=args,
-            testcase=f"sva_violation_{violation}",
-            extra_env={**env, "SVA_VIOLATION": violation},
-            log_file=log,
-            build_tag="sva_violation",
-        )
-    failed = [line for line in log.read_text().splitlines() if "Assertion failed" in line]
-    assert failed, f"no assertion fired; see {log}"
-    assert assertion in failed[0], f"first failing assertion was not {assertion}: {failed[0]}"
+    run_sva_violation(
+        toplevel="buf_port_mux_tb",
+        sources=sources,
+        test_module=Path(__file__).stem,
+        violation=violation,
+        assertion=assertion,
+        parameters={"NUM_OWNERS": 3, "WIDTH": 8, "AW": 13},
+        extra_build_args=args,
+        extra_env=env,
+    )
