@@ -1,0 +1,16 @@
+Analysis & Synthesis Status : Successful - Tue Nov 17 18:49:17 2026
+Quartus Prime Version : 22.1std.0 Build 915 10/25/2022 SC Lite Edition
+Revision Name : probe_gemm_engine
+Top-level Entity Name : gemm_engine
+Family : MAX 10
+Total logic elements : 7,242
+    Total combinational functions : 5,441
+    Dedicated logic registers : 4,750
+Total registers : 4750
+Total pins : 1
+Total virtual pins : 341
+Total memory bits : 8,352
+Embedded Multiplier 9-bit elements : 68
+Total PLLs : 0
+UFM blocks : 0
+ADC blocks : 0
