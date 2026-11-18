@@ -1,12 +1,12 @@
-Fitter Status : Successful - Wed Nov 18 13:48:10 2026
+Fitter Status : Successful - Wed Nov 18 16:01:11 2026
 Quartus Prime Version : 22.1std.0 Build 915 10/25/2022 SC Lite Edition
 Revision Name : probe_accel_top
 Top-level Entity Name : accel_top
 Family : MAX 10
 Device : 10M50DAF484C7G
 Timing Models : Final
-Total logic elements : 9,335 / 49,760 ( 19 % )
-    Total combinational functions : 7,806 / 49,760 ( 16 % )
+Total logic elements : 9,332 / 49,760 ( 19 % )
+    Total combinational functions : 7,813 / 49,760 ( 16 % )
     Dedicated logic registers : 5,919 / 49,760 ( 12 % )
 Total registers : 5919
 Total pins : 1 / 360 ( < 1 % )
