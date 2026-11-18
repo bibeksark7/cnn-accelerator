@@ -11,7 +11,7 @@
 // Parameters:
 //   NUM_OWNERS - number of requesters
 //   WIDTH      - data width
-//   AW         - address width
+//   AW         - address width (default 14: IMG, the widest byte buffer, spec §5)
 //
 // Ports:
 //   i_owner                      - one-hot owner select (all zero: no owner)
@@ -24,7 +24,7 @@
 module buf_port_mux #(
     parameter int NUM_OWNERS = 3,
     parameter int WIDTH      = 8,
-    parameter int AW         = 13
+    parameter int AW         = 14
 ) (
     input  logic [   NUM_OWNERS-1:0] i_owner,
     input  logic [   NUM_OWNERS-1:0] i_re,

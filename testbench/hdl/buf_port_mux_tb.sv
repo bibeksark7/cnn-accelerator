@@ -3,7 +3,7 @@
 module buf_port_mux_tb #(
     parameter int NUM_OWNERS = 3,
     parameter int WIDTH      = 8,
-    parameter int AW         = 13
+    parameter int AW         = 14
 ) (
     input  logic                        clk,
     input  logic                        rst,
