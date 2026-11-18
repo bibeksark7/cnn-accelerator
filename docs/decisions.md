@@ -456,9 +456,15 @@ Reports are committed under `fpga/probe_reports/<module>/`.
 |---|---|---|---|---|
 | `systolic_array` | +10.970 ns | +0.090 ns | 110.74 MHz | `g_row[4].g_col[0].u_mac_cell\|o_a[0]` → `g_row[4].g_col[1].u_mac_cell\|acc_q[31]`: forwarded A operand, 8 × 8 multiply and 32-bit accumulate in the right-hand neighbour (data delay 9.014 ns) |
 | `postproc` | +5.882 ns | +0.149 ns | 70.83 MHz | `s2_q[0]` → `r3_q[6]`: shift amount through the rounding constant, the 49-bit add and the variable arithmetic shift (data delay 13.925 ns) |
+| `gemm_engine` (N = 8, K_TILE = 128; contains the array, post-processing, `agen_a` and 8 staging banks) | +6.722 ns | +0.095 ns | 75.31 MHz | `u_postproc\|s2_q[1]` → `u_postproc\|r3_q[7]`: the post-processing variable shifter again (data delay 13.207 ns) |
 
 Sources: `timing_setup_worst.rpt`, `timing_hold_worst.rpt`, `probe_<module>.sta.summary` and
 `fmax.rpt` in each report directory.
+
+The engine probe (`fpga/probe_reports/gemm_engine/`) uses 6,832 logic elements, 4,606 registers,
+68 embedded 9-bit multiplier elements (64 for the array, 4 for post-processing) and 12 M9K blocks:
+8 for the staging banks and 4 that Quartus chose for the array's input-skew delay lines
+(RAM-based shift registers, `altshift_taps`).
 
 **Reading.**
 - Both blocks close timing at 50 MHz with margin on every corner. The whole design will be
@@ -499,3 +505,53 @@ padded rows as explicit zeros (N·Kc cycles wasted per padded tile, 7 of 8 rows 
 
 **Reason.** Small and fast hardware with obviously bounded logic depth. The tests compare every
 address with a direct formula and with the golden model's data layout.
+
+## D-026 — GEMM engine implementation (Phase 2)
+
+**Decision.** `rtl/core/gemm_engine.sv` implements D-023 as one module with four clearly separated
+control blocks, linked by start/done signals: A load, stream, drain, and the sequencer that runs
+them one after another per (row tile, column tile, K chunk).
+- **A load.** Issues `STAGE` to `agen_a`, reads the source buffer (1-cycle latency) and writes the
+  byte into the staging bank of its tile row one cycle later.
+- **Stream.** Reads all N banks and one WGT word per cycle; the data arrive one cycle later and
+  are presented to the array as one step. Rows outside the tile (`o_row_mask` low) are forced to
+  zero at the array input.
+- **Drain.**
+  - Prefetches the column tile's N parameter words into registers (one read per cycle).
+  - Pulses `i_drain` and captures each result row into a **row register** (the array/post-processing
+    boundary).
+  - Feeds the valid elements to `postproc` one per cycle.
+  - Counts elements in flight in `postproc`, so it finishes only when every result is written.
+- **Addresses** use only adders: WGT `wgt_base + nt·K + k0 + kpos`, PARAM `param_base + nt·N + j`,
+  output `dst_base + m·C_out + nt·N + j` (`m·C_out` stepped by `C_out` per row and carried to the
+  next row tile).
+- **Order.** The array is cleared before the first chunk of every output tile. The address
+  generator's next command is issued after each stream, so its tile scan overlaps the drain.
+
+**Alternatives.**
+- Separate modules per FSM: more wiring for little gain at this size. The blocks share the tile
+  state, and the engine-level tests already exercise every path.
+- Re-reading parameters per element: 2 cycles per element instead of 1.
+- Staging explicit zeros for padded rows: N·Kc wasted cycles per padded tile.
+
+**Reason.**
+- Simplest structure that keeps each control block small and sequential (correctness first).
+- The row register cuts the drain path from the array's row multiplexer into post-processing.
+  In the Quartus probe, the engine's critical path is inside post-processing, not at that
+  boundary (D-024).
+
+**Padded rows (spec §5 reworded, approved in the engine review).** §5 previously said rows
+`m ≥ M` are written as 0 when staging. The engine does not stage them; instead it forces their
+array inputs to zero. §5 now says exactly that ("padded rows are forced to zero at the array
+input"), and the zero-forcing stays in the RTL.
+
+**Surviving mutant: pending review, not marked equivalent.** Removing the zero-forcing changed no
+output in the current tests: an output-stationary row's result depends only on that row's
+A-values, and padded rows are never written back. It is *not* treated as equivalent, because it
+would let X (in 4-state simulation, before a bank is first written) or stale data into padded
+rows. That could:
+- trip the planned no-X-on-outputs and no-accumulator-overflow assertions (Phase 3);
+- matter for the weight-stationary array (Phase 7), whose internal mapping may combine rows
+  differently.
+
+Its classification is pending review in Phase 3 mutation testing.

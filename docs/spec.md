@@ -172,10 +172,12 @@ the integers.
   **staged** before it is streamed:
   1. **Stage.** The A loader walks the tile's `N` rows and the current K chunk (`≤ K_TILE`)
      through the address generator. It reads **one byte per cycle** and writes it into staging
-     bank `i` (tile row `i`) at address `k − k0`. Rows `m ≥ M` and steps `k ≥ K` are written as 0
-     (zero padding of edge tiles).
+     bank `i` (tile row `i`) at address `k − k0`. Rows `m ≥ M` (padded rows of an edge tile)
+     are not staged, and steps `k ≥ K` never occur (a chunk is at most `K − k0` steps long).
   2. **Stream.** For each `k` in the chunk, all N staging banks are read in parallel (N A-values)
      together with one WGT word (N B-values) and presented to the array as one step.
+     **Padded rows are forced to zero at the array input**: the A-values of rows `m ≥ M`
+     are presented as 0, whatever their staging bank holds.
 
   **Optional reuse.** When `K ≤ K_TILE` (a single chunk), the engine may keep the staged A tile and
   reuse it for every column tile `nt` of the same row tile instead of restaging it. Buffer
