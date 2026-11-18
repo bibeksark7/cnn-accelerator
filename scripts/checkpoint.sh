@@ -45,6 +45,20 @@ check_pytest() { # check_pytest <name> <min_tests> <pytest args...>
 
 check_ruff() { ruff format --check . && ruff check .; }
 
+# No RTL mutant may be applied to the working tree: reversing a patch must fail for every patch.
+check_no_mutant_applied() {
+  local p rc=0 n=0
+  for p in testbench/mutants/*.patch; do
+    n=$((n + 1))
+    if git apply -R --check "$p" >/dev/null 2>&1; then
+      echo "mutant is applied to the working tree: $p"; rc=1
+    fi
+  done
+  [ "$n" -gt 0 ] || { echo "no mutant patches found"; return 1; }
+  [ "$rc" -ne 0 ] || echo "$n patches, none applied"
+  return "$rc"
+}
+
 # Optional local repository checks: every file in <git-dir>/local-checks/ is run, in name order.
 LOCAL_CHECKS_DIR="$(git rev-parse --git-dir)/local-checks"
 
@@ -167,7 +181,9 @@ phase_1() {
 phase_2() {
   echo "Phase 2: core RTL"
   check "unit tests pass (testbench/unit, Icarus and Verilator with SVA)" check_pytest unit 10 testbench/unit
+  check "system tests pass (accel_top: quick subset bit-exact, CSR, memory port, errors, reset)" check_pytest system 3 testbench/system
   check "script tests pass (lint fixtures, Quartus compatibility checker)" check_pytest scripts 10 scripts/tests
+  check "no RTL mutant applied to the working tree (git apply -R --check fails for every patch)" check_no_mutant_applied
   check "RTL lint (Quartus compat, Verilator -Wall, Icarus, Yosys check)" scripts/lint.sh
   check "ruff format + ruff check clean" check_ruff
   run_quartus_probes
