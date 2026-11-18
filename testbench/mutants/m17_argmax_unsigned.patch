@@ -1,11 +1,11 @@
 --- a/rtl/post/argmax_unit.sv
 +++ b/rtl/post/argmax_unit.sv
-@@ -67,7 +67,7 @@
-       rd_v_q   <= (state_q == A_READ);
-       rd_pos_q <= pos_q;
-       // Compare: first element initializes; later ones replace only if strictly greater.
--      if (rd_v_q && ((rd_pos_q == '0) || ($signed(i_rd_data) > best_q))) begin
-+      if (rd_v_q && ((rd_pos_q == '0) || (i_rd_data > VAL_W'(best_q)))) begin
-         best_q     <= $signed(i_rd_data);
-         best_idx_q <= rd_pos_q;
-       end
+@@ -69,7 +69,7 @@
+     if (start) begin
+       best_d     = '0;
+       best_idx_d = '0;
+-    end else if (rd_v_q && ((rd_pos_q == '0) || ($signed(i_rd_data) > best_q))) begin
++    end else if (rd_v_q && ((rd_pos_q == '0) || (i_rd_data > VAL_W'(best_q)))) begin
+       best_d     = $signed(i_rd_data);
+       best_idx_d = rd_pos_q;
+     end

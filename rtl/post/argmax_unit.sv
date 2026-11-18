@@ -51,12 +51,31 @@ module argmax_unit #(
   logic [IDX_W-1:0] count_q, base_q;
   logic rd_v_q;  // read data valid this cycle
   logic [IDX_W-1:0] rd_pos_q;  // position of the data on i_rd_data
-  logic signed [VAL_W-1:0] best_q;
-  logic [IDX_W-1:0] best_idx_q;
+  logic signed [VAL_W-1:0] best_q, best_d;
+  logic [IDX_W-1:0] best_idx_q, best_idx_d;
+  logic start;
 
+  assign start    = (state_q == A_IDLE) && i_start;
   assign o_rd_en  = (state_q == A_READ);
   assign o_rd_idx = base_q + pos_q;
 
+  // Running maximum. A start clears it, so a count of 0 gives result 0. Otherwise the first value
+  // initializes it and a later value replaces it only if strictly greater. The two cases never
+  // coincide (read data is only valid in A_READ and A_LAST, a start is only taken in A_IDLE); the
+  // start is listed first so the priority does not depend on that.
+  always_comb begin
+    best_d     = best_q;
+    best_idx_d = best_idx_q;
+    if (start) begin
+      best_d     = '0;
+      best_idx_d = '0;
+    end else if (rd_v_q && ((rd_pos_q == '0) || ($signed(i_rd_data) > best_q))) begin
+      best_d     = $signed(i_rd_data);
+      best_idx_d = rd_pos_q;
+    end
+  end
+
+  // Control and result registers (reset).
   always_ff @(posedge clk) begin
     if (rst) begin
       state_q    <= A_IDLE;
@@ -64,29 +83,18 @@ module argmax_unit #(
       best_q     <= '0;
       best_idx_q <= '0;
     end else begin
-      rd_v_q   <= (state_q == A_READ);
-      rd_pos_q <= pos_q;
-      // Compare: first element initializes; later ones replace only if strictly greater.
-      if (rd_v_q && ((rd_pos_q == '0) || ($signed(i_rd_data) > best_q))) begin
-        best_q     <= $signed(i_rd_data);
-        best_idx_q <= rd_pos_q;
-      end
+      rd_v_q     <= (state_q == A_READ);
+      best_q     <= best_d;
+      best_idx_q <= best_idx_d;
       case (state_q)
         A_IDLE: begin
           if (i_start) begin
-            base_q     <= i_base;
-            count_q    <= i_count;
-            pos_q      <= '0;
-            best_q     <= '0;
-            best_idx_q <= '0;
-            state_q    <= (i_count == '0) ? A_DONE : A_READ;
+            state_q <= (i_count == '0) ? A_DONE : A_READ;
           end
         end
         A_READ: begin  // one read per cycle
           if (pos_q == count_q - IDX_W'(1)) begin
             state_q <= A_LAST;
-          end else begin
-            pos_q <= pos_q + IDX_W'(1);
           end
         end
         A_LAST: begin  // the last read's data is compared this cycle
@@ -97,6 +105,18 @@ module argmax_unit #(
         end
         default: state_q <= A_IDLE;
       endcase
+    end
+  end
+
+  // Datapath registers (no reset: only used after a start has loaded them).
+  always_ff @(posedge clk) begin
+    rd_pos_q <= pos_q;
+    if (start) begin
+      base_q  <= i_base;
+      count_q <= i_count;
+      pos_q   <= '0;
+    end else if (state_q == A_READ) begin
+      pos_q <= pos_q + IDX_W'(1);
     end
   end
 
