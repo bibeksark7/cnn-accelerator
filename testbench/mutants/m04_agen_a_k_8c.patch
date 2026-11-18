@@ -1,0 +1,11 @@
+--- a/rtl/addr/agen_a.sv
++++ b/rtl/addr/agen_a.sv
+@@ -237,7 +237,7 @@
+             if (fc_q) begin
+               state_q <= S_KLEN;
+             end else begin
+-              k_len_q <= (K_W'(c_q) << 3) + K_W'(c_q);  // K = 9 * C
++              k_len_q <= (K_W'(c_q) << 3);  // K = 9 * C
+               state_q <= S_SCAN;
+               r_idx_q <= '0;
+               r_oy_q  <= '0;

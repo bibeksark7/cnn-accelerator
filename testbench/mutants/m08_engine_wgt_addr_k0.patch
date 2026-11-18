@@ -1,0 +1,11 @@
+--- a/rtl/core/gemm_engine.sv
++++ b/rtl/core/gemm_engine.sv
+@@ -295,7 +295,7 @@
+   assign bank_re = stream_busy_q;
+   assign bank_raddr = KP_W'(kpos_q);
+   assign o_wgt_re = stream_busy_q;
+-  assign o_wgt_addr = WGT_AW'(wgt_tile_q + k0_q + kpos_q);
++  assign o_wgt_addr = WGT_AW'(wgt_tile_q + kpos_q);
+ 
+   always_ff @(posedge clk) begin
+     if (rst) begin

@@ -1,0 +1,11 @@
+--- a/rtl/addr/agen_pool.sv
++++ b/rtl/addr/agen_pool.sv
+@@ -175,7 +175,7 @@
+                 end else begin
+                   ox_q        <= '0;
+                   oy_q        <= oy_q + DIM_W'(1);
+-                  row_start_q <= row_start_q + row_stride_q + row_stride_q;
++                  row_start_q <= row_start_q + row_stride_q;
+                   win_q       <= row_start_q + row_stride_q + row_stride_q;
+                 end
+               end

@@ -1,0 +1,11 @@
+--- a/rtl/addr/agen_pool.sv
++++ b/rtl/addr/agen_pool.sv
+@@ -171,7 +171,7 @@
+                 ci_q <= '0;
+                 if (!last_ox) begin
+                   ox_q  <= ox_q + DIM_W'(1);
+-                  win_q <= win_q + c_ext + c_ext;
++                  win_q <= win_q + c_ext;
+                 end else begin
+                   ox_q        <= '0;
+                   oy_q        <= oy_q + DIM_W'(1);

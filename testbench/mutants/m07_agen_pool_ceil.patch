@@ -1,0 +1,11 @@
+--- a/rtl/addr/agen_pool.sv
++++ b/rtl/addr/agen_pool.sv
+@@ -71,7 +71,7 @@
+ 
+   assign c_ext = ADDR_W'(c_q);
+   assign h_out = h_q >> 1;
+-  assign w_out = w_q >> 1;
++  assign w_out = (w_q + 1) >> 1;
+ 
+   // Scan state.
+   logic [ DIM_W-1:0] oy_q, ox_q, ci_q;

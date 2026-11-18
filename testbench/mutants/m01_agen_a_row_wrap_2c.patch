@@ -1,0 +1,11 @@
+--- a/rtl/addr/agen_a.sv
++++ b/rtl/addr/agen_a.sv
+@@ -129,7 +129,7 @@
+     if (r_ox_q == w_out - DIM_W'(1)) begin
+       step_ox  = '0;
+       step_oy  = r_oy_q + DIM_W'(1);
+-      step_pix = r_pix_q + c_ext + c_ext + c_ext;
++      step_pix = r_pix_q + c_ext + c_ext;
+     end else begin
+       step_ox  = r_ox_q + DIM_W'(1);
+       step_oy  = r_oy_q;

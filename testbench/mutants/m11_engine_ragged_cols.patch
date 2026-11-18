@@ -1,0 +1,11 @@
+--- a/rtl/core/gemm_engine.sv
++++ b/rtl/core/gemm_engine.sv
+@@ -358,7 +358,7 @@
+   assign arr_row_ready = (dstate_q == D_ROW);
+ 
+   assign col_n      = col_base_q + 8'(col_q);
+-  assign elem_valid = mask_q[row_idx_q] && (col_n < i_c_out);
++  assign elem_valid = mask_q[row_idx_q];
+   assign pp_valid   = (dstate_q == D_ELEM) && elem_valid;
+   assign pp_push    = pp_valid && pp_ready;
+   assign pp_pop     = pp_out_valid;  // write-back always accepts

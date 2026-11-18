@@ -1,0 +1,11 @@
+--- a/rtl/core/gemm_engine.sv
++++ b/rtl/core/gemm_engine.sv
+@@ -411,7 +411,7 @@
+         D_ELEM: begin
+           if (!elem_valid || pp_ready) begin
+             if (col_q == LAST_ROW) begin
+-              row_out_q <= row_out_q + ADDR_W'(i_c_out);
++              row_out_q <= row_out_q + ADDR_W'(1);
+               if (row_last_q) begin
+                 dstate_q <= D_FLUSH;
+               end else begin

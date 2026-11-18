@@ -1,0 +1,11 @@
+--- a/rtl/addr/agen_a.sv
++++ b/rtl/addr/agen_a.sv
+@@ -293,7 +293,7 @@
+                 k_kyo_q  <= cs_kyo_q;
+               end
+               CMD_NEXT_CHUNK: begin
+-                cs_ci_q  <= ce_ci_q;
++                cs_ci_q  <= '0;
+                 cs_kx_q  <= ce_kx_q;
+                 cs_ky_q  <= ce_ky_q;
+                 cs_kxo_q <= ce_kxo_q;

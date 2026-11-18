@@ -1,0 +1,11 @@
+--- a/rtl/core/gemm_engine.sv
++++ b/rtl/core/gemm_engine.sv
+@@ -547,7 +547,7 @@
+             kc_len_q <= (k_len > K_TILE_W) ? K_TILE_W : k_len;
+             if (!last_col) begin
+               col_base_q <= col_base_q + 8'(N);
+-              wgt_tile_q <= wgt_tile_q + k_len;
++              wgt_tile_q <= wgt_tile_q;
+               qstate_q   <= Q_CLEAR;
+             end else begin
+               tile_out_q <= row_out_q;  // dst_base + (m0 + N) * C_out

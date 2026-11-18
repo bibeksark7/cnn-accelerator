@@ -1,0 +1,11 @@
+--- a/rtl/addr/agen_a.sv
++++ b/rtl/addr/agen_a.sv
+@@ -165,7 +165,7 @@
+         kn_kx  = 2'd0;
+         kn_kxo = '0;
+         kn_ky  = k_ky_q + 2'd1;
+-        kn_kyo = k_kyo_q + row_stride_q;
++        kn_kyo = k_kyo_q + c_ext;
+       end else begin
+         kn_kx  = k_kx_q + 2'd1;
+         kn_kxo = k_kxo_q + c_ext;

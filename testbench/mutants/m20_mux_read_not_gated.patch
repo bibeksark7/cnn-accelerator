@@ -1,0 +1,11 @@
+--- a/rtl/mem/buf_port_mux.sv
++++ b/rtl/mem/buf_port_mux.sv
+@@ -47,7 +47,7 @@
+     o_waddr = '0;
+     o_wdata = '0;
+     for (int k = 0; k < NUM_OWNERS; k++) begin
+-      o_re    = o_re | (i_owner[k] & i_re[k]);
++      o_re    = o_re | i_re[k];
+       o_raddr = o_raddr | (i_raddr[k*AW+:AW] & {AW{i_owner[k]}});
+       o_we    = o_we | (i_owner[k] & i_we[k]);
+       o_waddr = o_waddr | (i_waddr[k*AW+:AW] & {AW{i_owner[k]}});

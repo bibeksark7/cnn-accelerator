@@ -1,0 +1,11 @@
+--- a/rtl/post/pool_unit.sv
++++ b/rtl/post/pool_unit.sv
+@@ -101,7 +101,7 @@
+   // Running signed maximum of the current window.
+   logic signed [DATA_W-1:0] max_q, max_d, data;
+   assign data  = $signed(i_src_rdata);
+-  assign max_d = (rd_first_q || (data > max_q)) ? data : max_q;
++  assign max_d = (rd_first_q || ($unsigned(data) > $unsigned(max_q))) ? data : max_q;
+ 
+   always_ff @(posedge clk) begin
+     if (rd_v_q) begin

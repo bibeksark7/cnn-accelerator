@@ -1,0 +1,11 @@
+--- a/rtl/core/gemm_engine.sv
++++ b/rtl/core/gemm_engine.sv
+@@ -470,7 +470,7 @@
+   assign agen_cmd       = (qstate_q == Q_STAGE) ? CMD_STAGE : next_cmd_q;
+   assign agen_kc_len    = kc_len_q;
+ 
+-  assign arr_clear    = (qstate_q == Q_CLEAR) && arr_idle;
++  assign arr_clear    = 1'b0;
+   assign load_start   = (qstate_q == Q_STAGE) && agen_cmd_ready;
+   assign stream_start = (qstate_q == Q_LOAD) && load_done;
+   assign drain_start  = (qstate_q == Q_CMD) && agen_cmd_ready && last_chunk;
