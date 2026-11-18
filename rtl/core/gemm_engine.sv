@@ -20,7 +20,8 @@
 //
 // Parameters:
 //   N, DATA_W, ACC_W - systolic array size and widths (spec §1)
-//   K_TILE           - staging bank depth (K chunk length)
+//   K_TILE           - staging bank depth (K chunk length); must be >= 2 (the bank address is
+//                      $clog2(K_TILE) bits wide)
 //   ADDR_W           - buffer address width (descriptor base fields)
 //   WGT_DEPTH        - WGT buffer depth (words of N*DATA_W bits)
 //   PARAM_DEPTH      - PARAM buffer depth (64-bit words)

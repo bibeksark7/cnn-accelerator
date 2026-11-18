@@ -5,15 +5,24 @@ record every write. A layer passes when every expected output address is written
 with the golden value and nothing else is written.
 
 Tests:
-  network layers  conv1, conv2, fc with the exported weight/param images (N = 8)
-  random conv/fc  random shapes (ragged C_out, M not a multiple of N), bases, ReLU on/off,
-                  full int8 activations; small K_TILE builds force K chunking
-Verilator runs bind the engine and array interface assertions; test_engine_sva_fires proves the
-engine assertions are live.
+  network layers   conv1, conv2, fc with the exported weight/param images (N = 8); logs busy
+                   cycles, MAC-active cycles and effective MAC utilization per layer
+  random conv/fc   random shapes (ragged C_out, M not a multiple of N), bases, ReLU on/off,
+                   full int8 activations; small K_TILE builds force K chunking
+  no-work layers   C_out = 0, no output pixels, K = 0: done with no writes
+  reset mid-layer  reset during A load, stream, drain and the post-processing flush, then a
+                   clean layer that must be exactly right
+  FSM coverage     every reachable transition of the sequencer (qstate_q) and drain (dstate_q)
+                   FSMs is hit; known-unreachable branches are listed with the reason
+Verilator runs bind the engine interface and implementation assertions and the array
+assertions; test_engine_sva_fires proves selected engine assertions are live.
+
+Push CI (CI=true) skips the network layers on Icarus; they run on Verilator (TB_NETWORK).
 """
 
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -40,11 +49,31 @@ SVA_SOURCES = [
     SVA_DIR / "systolic_array_os_sva.sv",
     SVA_DIR / "systolic_array_bind.sv",
     SVA_DIR / "gemm_engine_if_sva.sv",
+    SVA_DIR / "gemm_engine_impl_sva.sv",
     SVA_DIR / "gemm_engine_bind.sv",
 ]
 TB_N = int(os.environ.get("TB_N", "8"))
+TB_NETWORK = os.environ.get("TB_NETWORK", "1") == "1"
 SVA_VIOLATION = os.environ.get("SVA_VIOLATION", "")
 WGT_DEPTH, PARAM_DEPTH = 1024, 64
+
+# FSM state encodings, in the order of gemm_engine's qstate_t and dstate_t enums.
+Q_NAMES = [
+    "IDLE",
+    "SETUP",
+    "TILE",
+    "CLEAR",
+    "STAGE",
+    "LOAD",
+    "STREAM",
+    "CMD",
+    "DRAIN",
+    "NEXT",
+    "DONE",
+]
+D_NAMES = ["IDLE", "PRM", "PULSE", "ROW", "ELEM", "FLUSH"]
+# Observed transitions across all tests of one simulation: (from, to) and reset-driven (from).
+COVERAGE: dict[str, set] = {"q": set(), "d": set(), "q_rst": set(), "d_rst": set()}
 
 
 @dataclass
@@ -81,6 +110,8 @@ class Buffers:
             self.prm[layer.param_base + i] = int(p)
         self.writes: dict[int, int] = {}
         self.duplicates: list[int] = []
+        self.busy_cycles = 0
+        self.mac_cycles = 0
 
 
 async def serve(dut, buf: Buffers) -> None:
@@ -88,6 +119,8 @@ async def serve(dut, buf: Buffers) -> None:
     while True:
         await FallingEdge(dut.clk)
         await ReadOnly()
+        buf.busy_cycles += int(dut.o_busy.value)
+        buf.mac_cycles += int(dut.o_mac_active.value)
         reads = []
         for re, addr, port in (
             (dut.o_src_re, dut.o_src_addr, "src"),
@@ -188,13 +221,45 @@ def n_of(dut) -> int:
     return len(dut.i_wgt_rdata) // 8
 
 
+async def fsm_monitor(dut) -> None:
+    """Record every sequencer/drain FSM transition; reset-driven ones are kept separately."""
+    prev = None
+    while True:
+        await RisingEdge(dut.clk)
+        await ReadOnly()
+        try:
+            cur = (int(dut.qstate_q.value), int(dut.dstate_q.value), int(dut.rst.value))
+        except ValueError:  # X/Z before the first reset
+            prev = None
+            continue
+        if prev is not None:
+            pq, pd, _ = prev
+            # rst is driven at falling edges, so its value now is the value the last edge saw.
+            if cur[2]:
+                COVERAGE["q_rst"].add(Q_NAMES[pq])
+                COVERAGE["d_rst"].add(D_NAMES[pd])
+            else:
+                COVERAGE["q"].add((Q_NAMES[pq], Q_NAMES[cur[0]]))
+                COVERAGE["d"].add((D_NAMES[pd], D_NAMES[cur[1]]))
+        prev = cur
+
+
 async def setup(dut) -> None:
     for sig in (dut.i_start, dut.i_src_rdata, dut.i_wgt_rdata, dut.i_prm_rdata):
         sig.value = 0
+    cocotb.start_soon(fsm_monitor(dut))
     await start_clock_and_reset(dut)
 
 
-@cocotb.test(skip=TB_N != hwmap.N or SVA_VIOLATION != "")
+async def pulse_reset(dut, cycles: int = 2) -> None:
+    await FallingEdge(dut.clk)
+    dut.rst.value = 1
+    for _ in range(cycles):
+        await FallingEdge(dut.clk)
+    dut.rst.value = 0
+
+
+@cocotb.test(skip=TB_N != hwmap.N or not TB_NETWORK or SVA_VIOLATION != "")
 async def test_network_layers(dut):
     """conv1, conv2 and fc with the exported memory images, inputs from the golden model."""
     await setup(dut)
@@ -230,8 +295,18 @@ async def test_network_layers(dut):
             prm_words=prm,
             expected=want,
         )
-        await run_layer(dut, layer)
-        dut._log.info("%s: %d outputs match the golden model", name, len(want))
+        buf = await run_layer(dut, layer)
+        m_rows = 1 if layer.fc else (d.h_in - 2) * (d.w_in - 2)
+        k_len = d.h_in * d.w_in * d.c_in if layer.fc else 9 * d.c_in
+        useful = m_rows * k_len * d.c_out
+        n = n_of(dut)
+        dut._log.info(
+            "%s: %d outputs match the golden model; busy %d cycles, MAC-active %d (%.1f%%), "
+            "effective MAC utilization %.2f%% (%d useful MACs / (%d cycles x %d MACs))",
+            name, len(want), buf.busy_cycles, buf.mac_cycles,
+            100.0 * buf.mac_cycles / buf.busy_cycles,
+            100.0 * useful / (buf.busy_cycles * n * n), useful, buf.busy_cycles, n * n,
+        )  # fmt: skip
 
 
 def rand_conv(rng, n) -> Layer:
@@ -283,15 +358,169 @@ def rand_fc(rng, n) -> Layer:
     )
 
 
+def deep_fc(rng, n) -> Layer:
+    """FC with K = 5 * 5 * 8 = 200 (more than one K chunk for K_TILE <= 128)."""
+    h, w, c_in, c_out = 5, 5, 8, n + 2
+    act = np.array([rng.randint(-128, 127) for _ in range(h * w * c_in)], dtype=np.int8)
+    wt = np.array([rng.randint(-127, 127) for _ in range(c_out * h * w * c_in)], dtype=np.int8)
+    b = np.array([rng.randint(-200000, 200000) for _ in range(c_out)], dtype=np.int32)
+    return fc_layer(n, 17, 33, 5, 3, act.reshape(h, w, c_in), wt.reshape(c_out, -1), b)
+
+
+def deep_conv(rng, n) -> Layer:
+    """CONV with K = 9 * 16 = 144 (more than one K chunk for K_TILE <= 128)."""
+    h, w, c_in, c_out = 6, 5, 16, n + 1
+    act = np.array([rng.randint(-128, 127) for _ in range(h * w * c_in)], dtype=np.int8)
+    wt = np.array([rng.randint(-127, 127) for _ in range(c_out * 9 * c_in)], dtype=np.int8)
+    b = np.array([rng.randint(-20000, 20000) for _ in range(c_out)], dtype=np.int32)
+    m = np.array([rng.randint(golden.M_MIN, golden.M_MAX) for _ in range(c_out)], dtype=np.uint16)
+    s = np.array([rng.randint(14, 24) for _ in range(c_out)], dtype=np.uint8)
+    return conv_layer(
+        n, 40, 900, 7, 2, act.reshape(h, w, c_in), wt.reshape(c_out, 3, 3, c_in), b, m, s, True
+    )
+
+
 @cocotb.test(skip=SVA_VIOLATION != "")
 async def test_random_layers(dut):
-    """Back-to-back random CONV and FC layers, ragged tiles, random bases, ReLU on/off."""
+    """Back-to-back random CONV and FC layers, ragged tiles, random bases, ReLU on/off, plus a
+    CONV and an FC that always need several K chunks."""
     rng = seeded_rng(dut, "layers")
     n = n_of(dut)
     await setup(dut)
     for i in range(16):
         layer = rand_conv(rng, n) if i % 3 != 2 else rand_fc(rng, n)
         await run_layer(dut, layer)
+    # K > K_TILE for every configuration (K_TILE <= 128): an FC with K = 200 and a CONV with
+    # K = 144, so K chunking is covered even when the network layers are skipped.
+    for layer in (deep_fc(rng, n), deep_conv(rng, n)):
+        await run_layer(dut, layer)
+
+
+def empty_layer(fc: bool, h: int, w: int, c_in: int, c_out: int) -> Layer:
+    """A layer with no work: the engine must finish without writing anything."""
+    return Layer(
+        fc=fc,
+        relu=False,
+        src_base=100,
+        dst_base=200,
+        h=h,
+        w=w,
+        c_in=c_in,
+        c_out=c_out,
+        wgt_base=0,
+        param_base=0,
+        src_bytes=np.zeros(0, dtype=np.int8),
+        wgt_words=np.zeros(0, dtype=np.uint64),
+        prm_words=np.zeros(0, dtype=np.uint64),
+        expected={},
+    )
+
+
+@cocotb.test(skip=SVA_VIOLATION != "")
+async def test_layers_without_work(dut):
+    """C_out = 0, no output pixels (H or W < 3), K = 0 (C_in = 0): done, no writes."""
+    await setup(dut)
+    for fc, h, w, c_in, c_out in (
+        (False, 6, 6, 2, 0),
+        (True, 3, 3, 2, 0),
+        (False, 2, 6, 2, 3),
+        (False, 6, 2, 2, 3),
+        (False, 6, 6, 0, 3),
+        (True, 3, 3, 0, 4),
+    ):
+        await run_layer(dut, empty_layer(fc, h, w, c_in, c_out), timeout=2000)
+
+
+RESET_POINTS = (
+    ("A load", lambda dut: int(dut.qstate_q.value) == Q_NAMES.index("LOAD")),
+    ("stream", lambda dut: int(dut.qstate_q.value) == Q_NAMES.index("STREAM")),
+    ("drain", lambda dut: int(dut.dstate_q.value) in (D_NAMES.index("ROW"), D_NAMES.index("ELEM"))),
+    ("post-processing flush", lambda dut: int(dut.dstate_q.value) == D_NAMES.index("FLUSH")),
+)
+
+
+@cocotb.test(skip=SVA_VIOLATION != "")
+async def test_reset_mid_layer_then_clean_layer(dut):
+    """Reset while the engine is in each phase of a layer; the next layer must be exactly right."""
+    rng = seeded_rng(dut, "reset")
+    n = n_of(dut)
+    await setup(dut)
+    for where, reached in RESET_POINTS:
+        layer = rand_conv(rng, n)
+        buf = Buffers(layer)
+        server = cocotb.start_soon(serve(dut, buf))
+        await FallingEdge(dut.clk)
+        dut.i_fc.value, dut.i_relu_en.value, dut.i_requant_en.value = 0, int(layer.relu), 1
+        dut.i_src_base.value, dut.i_dst_base.value = layer.src_base, layer.dst_base
+        dut.i_h.value, dut.i_w.value = layer.h, layer.w
+        dut.i_c_in.value, dut.i_c_out.value = layer.c_in, layer.c_out
+        dut.i_wgt_base.value, dut.i_param_base.value = layer.wgt_base, layer.param_base
+        dut.i_start.value = 1
+        await FallingEdge(dut.clk)
+        dut.i_start.value = 0
+        await wait_until(dut, lambda r=reached: r(dut), 100_000, f"engine in {where}")
+        await pulse_reset(dut)
+        server.cancel()
+        await ReadOnly()
+        assert int(dut.o_busy.value) == 0, f"busy after reset in {where}"
+        await run_layer(dut, rand_conv(rng, n) if rng.random() < 0.7 else rand_fc(rng, n))
+        dut._log.info("reset during %s, then a clean layer: ok", where)
+
+
+# Every transition the RTL can take (outside reset) must be hit by each simulation of this module;
+# the branches below are the ones the RTL contains but cannot take, with the reason.
+Q_REACHABLE = {
+    ("IDLE", "IDLE"), ("IDLE", "SETUP"), ("SETUP", "SETUP"), ("SETUP", "TILE"),
+    ("TILE", "CLEAR"), ("TILE", "DONE"), ("CLEAR", "STAGE"), ("STAGE", "LOAD"),
+    ("LOAD", "LOAD"), ("LOAD", "STREAM"), ("STREAM", "STREAM"), ("STREAM", "CMD"),
+    ("CMD", "STAGE"), ("CMD", "DRAIN"), ("DRAIN", "DRAIN"), ("DRAIN", "CLEAR"),
+    ("DRAIN", "NEXT"), ("NEXT", "TILE"), ("DONE", "IDLE"),
+}  # fmt: skip
+Q_UNREACHABLE = {
+    ("CLEAR", "CLEAR"): "the array is already idle when CLEAR is entered (after a completed drain)",
+    ("STAGE", "STAGE"): "agen_a is always ready when STAGE is entered (single-cycle commands)",
+    ("CMD", "CMD"): "agen_a is always ready after a stream (it has been idle since the stage)",
+    ("NEXT", "NEXT"): "the N-cycle tile scan finishes before the drain does (>= 2N cycles)",
+    ("default", "IDLE"): "illegal state encodings 11-15 are never entered",
+}
+D_REACHABLE = {
+    ("IDLE", "IDLE"), ("IDLE", "PRM"), ("PRM", "PRM"), ("PRM", "PULSE"), ("PULSE", "ROW"),
+    ("ROW", "ROW"), ("ROW", "ELEM"), ("ELEM", "ELEM"), ("ELEM", "ROW"), ("ELEM", "FLUSH"),
+    ("FLUSH", "FLUSH"), ("FLUSH", "IDLE"),
+}  # fmt: skip
+D_UNREACHABLE = {
+    ("ELEM", "hold"): "ELEM never waits on a valid element: postproc is never back-pressured "
+    "(its output is always accepted), so pp_ready is always high; not visible as a transition",
+    ("default", "IDLE"): "illegal state encodings 6-7 are never entered",
+}
+# Reset must have been applied in each phase of a layer (test_reset_mid_layer_then_clean_layer).
+Q_RESET_FROM = {"LOAD", "STREAM", "DRAIN"}
+D_RESET_FROM = {"ROW", "FLUSH"}
+
+
+@cocotb.test(skip=SVA_VIOLATION != "")
+async def test_fsm_transition_coverage(dut):
+    """Runs last: every reachable FSM transition was hit, and nothing unexpected happened."""
+    for fsm in ("q", "d", "q_rst", "d_rst"):
+        dut._log.info("observed %s transitions: %s", fsm, sorted(COVERAGE[fsm]))
+    Path("fsm_coverage.json").write_text(
+        json.dumps(
+            {k: sorted(map(list, v)) if k in ("q", "d") else sorted(v) for k, v in COVERAGE.items()}
+        )
+    )
+    for name, seen, reachable in (
+        ("qstate", COVERAGE["q"], Q_REACHABLE),
+        ("dstate", COVERAGE["d"], D_REACHABLE),
+    ):
+        assert not seen - reachable, f"{name}: unexpected transitions {sorted(seen - reachable)}"
+        assert not reachable - seen, f"{name}: transitions never hit {sorted(reachable - seen)}"
+    assert COVERAGE["q_rst"] >= Q_RESET_FROM, f"qstate reset from {sorted(COVERAGE['q_rst'])}"
+    assert COVERAGE["d_rst"] >= D_RESET_FROM, f"dstate reset from {sorted(COVERAGE['d_rst'])}"
+    dut._log.info(
+        "FSM coverage complete: %d/%d qstate, %d/%d dstate transitions; unreachable: %s; %s",
+        len(Q_REACHABLE), len(Q_REACHABLE), len(D_REACHABLE), len(D_REACHABLE),
+        sorted(Q_UNREACHABLE), sorted(D_UNREACHABLE),
+    )  # fmt: skip
 
 
 @cocotb.test(skip=SVA_VIOLATION != "start_while_busy")
@@ -314,6 +543,26 @@ async def sva_violation_start_while_busy(dut):
     dut.i_start.value = 0
 
 
+@cocotb.test(skip=SVA_VIOLATION != "cfg_change_while_busy")
+async def sva_violation_cfg_change_while_busy(dut):
+    """The configuration changes while a layer is running; only run by test_engine_sva_fires."""
+    rng = seeded_rng(dut, "violation")
+    await setup(dut)
+    layer = rand_conv(rng, n_of(dut))
+    cocotb.start_soon(serve(dut, Buffers(layer)))
+    await FallingEdge(dut.clk)
+    dut.i_h.value, dut.i_w.value, dut.i_c_in.value, dut.i_c_out.value = 5, 5, 2, 3
+    dut.i_start.value = 1
+    await FallingEdge(dut.clk)
+    dut.i_start.value = 0
+    for _ in range(5):
+        await FallingEdge(dut.clk)
+    dut.i_h.value = 6
+    for _ in range(3):
+        await FallingEdge(dut.clk)
+
+
+# (simulator, N, K_TILE). K_TILE must be >= 2 (the staging bank address is $clog2(K_TILE) bits).
 CONFIGS = [
     ("icarus", 8, 128),
     ("verilator", 8, 128),
@@ -328,6 +577,11 @@ def build(sim: str) -> tuple[list[Path], list[str]]:
     return SOURCES, []
 
 
+def run_network_layers(sim: str) -> bool:
+    """Push CI runs the slow network-layer test on Verilator only."""
+    return not (os.environ.get("CI") == "true" and sim == "icarus")
+
+
 @pytest.mark.parametrize(("sim", "n", "k_tile"), CONFIGS)
 def test_gemm_engine(sim: str, n: int, k_tile: int) -> None:
     sources, args = build(sim)
@@ -338,13 +592,21 @@ def test_gemm_engine(sim: str, n: int, k_tile: int) -> None:
         test_module=Path(__file__).stem,
         parameters={"N": n, "K_TILE": k_tile, "WGT_DEPTH": WGT_DEPTH, "PARAM_DEPTH": PARAM_DEPTH},
         extra_build_args=args,
-        extra_env={"TB_N": str(n)},
+        extra_env={"TB_N": str(n), "TB_NETWORK": "1" if run_network_layers(sim) else "0"},
     )
 
 
-def test_engine_sva_fires() -> None:
+@pytest.mark.parametrize(
+    ("violation", "assertion"),
+    [
+        ("start_while_busy", "a_start_only_when_idle"),
+        ("cfg_change_while_busy", "a_cfg_stable_while_busy"),
+    ],
+)
+def test_engine_sva_fires(violation: str, assertion: str) -> None:
+    """Each violation must fail the run, with its own assertion firing first."""
     sources, args = build("verilator")
-    log = SIM_BUILD_DIR / "gemm_engine_sva_violation.log"
+    log = SIM_BUILD_DIR / f"gemm_engine_sva_violation_{violation}.log"
     with pytest.raises((SystemExit, RuntimeError)):
         run_cocotb(
             sim="verilator",
@@ -353,10 +615,11 @@ def test_engine_sva_fires() -> None:
             test_module=Path(__file__).stem,
             parameters={"N": 8, "K_TILE": 128, "WGT_DEPTH": WGT_DEPTH, "PARAM_DEPTH": PARAM_DEPTH},
             extra_build_args=args,
-            testcase="sva_violation_start_while_busy",
-            extra_env={"TB_N": "8", "SVA_VIOLATION": "start_while_busy"},
+            testcase=f"sva_violation_{violation}",
+            extra_env={"TB_N": "8", "SVA_VIOLATION": violation},
             log_file=log,
             build_tag="sva_violation",
         )
     failed = [line for line in log.read_text().splitlines() if "Assertion failed" in line]
-    assert failed and "a_start_only_when_idle" in failed[0], failed[:1]
+    assert failed, f"no assertion fired; see {log}"
+    assert assertion in failed[0], f"first failing assertion was not {assertion}: {failed[0]}"
