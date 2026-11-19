@@ -26,8 +26,10 @@ fi
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR" "$here/reports"
 
-# Provenance of this build (checked by scripts/checkpoint.sh 4 against the current tree).
-python3 - "$repo" "$QSH" > "$here/reports/build_info.json" <<'PY'
+# Provenance of this build (checked by scripts/checkpoint.sh 4 against the current tree). Written
+# to a temporary file first: creating it in the tree would make the clean-tree check see it.
+info_tmp="$(mktemp)"
+python3 - "$repo" "$QSH" > "$info_tmp" <<'PY'
 import hashlib, json, subprocess, sys
 repo, qsh = sys.argv[1], sys.argv[2]
 git = lambda *a: subprocess.run(["git", "-C", repo, *a], capture_output=True, text=True).stdout.strip()
@@ -43,6 +45,7 @@ print(json.dumps({
     "quartus": next((l.strip() for l in version.splitlines() if "Version" in l), "?"),
 }, indent=2))
 PY
+mv "$info_tmp" "$here/reports/build_info.json"
 find "$repo/rtl" -name '*.sv' -exec cp {} "$BUILD_DIR/" \;
 cp "$here/build.tcl" "$here/sta_reports.tcl" "$here/pins.tcl" "$here/de10lite.sdc" "$BUILD_DIR/"
 for f in img wgt param desc label; do
