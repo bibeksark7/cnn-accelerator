@@ -104,6 +104,28 @@ class Descriptor:
         )
 
 
+def descriptor_error(d: Descriptor) -> str | None:
+    """The spec §9 error a descriptor triggers before its layer starts, or None if it is legal.
+
+    LOGIT is written only by FC and read only by ARGMAX; CONV and POOL write a byte buffer.
+    """
+    if d.op > OP_ARGMAX:
+        return "reserved op"
+    if d.op == OP_ARGMAX:
+        return None if d.src == BUF_LOGIT else "ARGMAX with src != LOGIT"
+    if d.src == BUF_LOGIT:
+        return "src = LOGIT"
+    if d.op == OP_FC:
+        return None if d.dst == BUF_LOGIT else "FC with dst != LOGIT"
+    if d.dst == BUF_IMG:
+        return "dst = IMG"
+    if d.dst == BUF_LOGIT:
+        return "dst = LOGIT"
+    if d.src == d.dst:
+        return "src = dst"
+    return None
+
+
 # ------------------------------------------------------------------ packing
 
 
@@ -248,6 +270,7 @@ def build_memory_image(params: QuantParams) -> MemoryImage:
             src = dst
 
     assert wgt_ptr <= WGT_DEPTH and param_ptr <= PARAM_DEPTH and len(descriptors) <= DESC_DEPTH
+    assert all(descriptor_error(d) is None for d in descriptors), descriptors
     for layer in net.LAYERS:
         if layer.kind in ("conv", "pool"):
             assert layer.out_elems <= ACT_DEPTH, layer

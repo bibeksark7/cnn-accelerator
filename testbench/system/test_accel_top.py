@@ -16,8 +16,8 @@ Tests:
   CSR              ID, CONFIG, the descriptor window, IMG_SEL / DESC writes and START ignored
                    while busy, START ignored while a memory-port read is pending, a read
                    accepted in the START cycle returns exactly once while busy
-  errors           every spec §9 error through descriptors written over the CSR bus, then a
-                   clean run
+  errors           every spec §9 error through descriptors written over the CSR bus (including
+                   ARGMAX with src != LOGIT and FC with dst != LOGIT), then a clean run
   reset            reset during each layer, then a clean run without reloading anything
   saturation       (PERF_W = 12 build) every counter saturates at 2^12 - 1
 Verilator runs bind every assertion (units, engine, array, buffer ownership, accel_top).
@@ -344,15 +344,22 @@ async def test_errors(dut):
         ("reserved op", 2, replace(table0[2], op=5)),
         ("CONV dst = IMG", 2, replace(table0[2], dst=hwmap.BUF_IMG)),
         ("POOL dst = IMG", 1, replace(table0[1], dst=hwmap.BUF_IMG)),
-        ("FC src = dst", 4, replace(table0[4], src=hwmap.BUF_LOGIT)),
+        ("FC src = dst = LOGIT", 4, replace(table0[4], src=hwmap.BUF_LOGIT)),
         ("POOL src = dst", 3, replace(table0[3], dst=hwmap.BUF_ACT0)),
         ("CONV src = LOGIT", 2, replace(table0[2], src=hwmap.BUF_LOGIT)),
         ("CONV dst = LOGIT", 0, replace(table0[0], dst=hwmap.BUF_LOGIT)),
         ("POOL src = LOGIT", 3, replace(table0[3], src=hwmap.BUF_LOGIT)),
         ("POOL dst = LOGIT", 1, replace(table0[1], dst=hwmap.BUF_LOGIT)),
         ("FC src = LOGIT", 4, replace(table0[4], src=hwmap.BUF_LOGIT, dst=hwmap.BUF_ACT1)),
+        ("FC dst = ACT0", 4, replace(table0[4], dst=hwmap.BUF_ACT0)),
+        ("FC dst = ACT1", 4, replace(table0[4], src=hwmap.BUF_ACT0, dst=hwmap.BUF_ACT1)),
+        ("FC dst = IMG", 4, replace(table0[4], dst=hwmap.BUF_IMG)),
+        ("ARGMAX src = IMG", 5, replace(table0[5], src=hwmap.BUF_IMG)),
+        ("ARGMAX src = ACT0", 5, replace(table0[5], src=hwmap.BUF_ACT0)),
+        ("ARGMAX src = ACT1", 5, replace(table0[5], src=hwmap.BUF_ACT1)),
     ]
     for what, layer, bad in cases:
+        assert hwmap.descriptor_error(bad), f"test bug: {what} is legal"
         table = [*table0[:layer], bad, *table0[layer + 1 :]]
         await acc.write_desc_table(table)
         status = await acc.run(img_sel=0)

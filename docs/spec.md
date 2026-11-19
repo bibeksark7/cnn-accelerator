@@ -244,8 +244,8 @@ words `4L .. 4L+3`. The table is written through the CSR window (§10.2) or prel
 | 0 | [3] | `relu_en` | ReLU after requantization (CONV) |
 | 0 | [4] | `requant_en` | requantize to int8 (CONV); 0 for FC |
 | 0 | [5] | `last` | last layer: the run ends after this descriptor |
-| 0 | [9:8] | `src` | source buffer: 0 IMG, 1 ACT0, 2 ACT1, 3 LOGIT |
-| 0 | [13:12] | `dst` | destination buffer (same encoding; ignored by ARGMAX) |
+| 0 | [9:8] | `src` | source buffer: 0 IMG, 1 ACT0, 2 ACT1, 3 LOGIT (LOGIT only for ARGMAX, which must use it; §9) |
+| 0 | [13:12] | `dst` | destination buffer (same encoding; LOGIT for FC, ACT0/ACT1 for CONV and POOL; ignored by ARGMAX; §9) |
 | 1 | [15:0] | `src_base` | source base address (bytes; LOGIT entries for ARGMAX) |
 | 1 | [31:16] | `dst_base` | destination base address (bytes; LOGIT entries for FC) |
 | 2 | [7:0] | `h_in` | input height |
@@ -286,9 +286,9 @@ read is pending (§10.3):
 At the end of the run, `BUSY` is cleared and `DONE` is set. A `START` written at any other time
 (busy, or a memory-port read pending) is ignored.
 
-**Image selection.** When `src = IMG`, the effective source base is
-`src_base + IMG_SEL · IMG_SIZE`. The descriptor table is static; only `IMG_SEL` changes between
-images.
+**Image selection.** For a CONV, POOL or FC with `src = IMG`, the effective source base is
+`src_base + IMG_SEL · IMG_SIZE`. ARGMAX reads LOGIT, so the offset never applies to it.
+The descriptor table is static; only `IMG_SEL` changes between images.
 
 **CONV / FC.**
 1. The engine computes `C = A · B` in `N × N` output tiles (§4 gives A, B, M, K, Ncols).
@@ -314,15 +314,16 @@ images can run back to back without reloading.
 
 **Errors.** The run stops with `ERROR = 1`, `DONE = 1`, `BUSY = 0` if:
 - a descriptor has a reserved `op`;
-- a CONV, POOL or FC descriptor has `dst = IMG`;
-- a CONV, POOL or FC descriptor has `src = dst`;
+- a CONV or POOL descriptor has `dst = IMG` or `dst = LOGIT`;
+- a CONV or POOL descriptor has `src = dst`;
 - a CONV, POOL or FC descriptor has `src = LOGIT` (only ARGMAX reads LOGIT);
-- a CONV or POOL descriptor has `dst = LOGIT`;
+- an FC descriptor has `dst ≠ LOGIT` (FC writes the LOGIT registers);
+- an ARGMAX descriptor has `src ≠ LOGIT`;
 - `DESC_DEPTH` descriptors execute without one having `last = 1`.
 
-The first five are checked before the layer starts: the layer is not executed, `STATUS` reports
+The first six are checked before the layer starts: the layer is not executed, `STATUS` reports
 its index, and its `LAYER_CYC` stays 0. For the last one, `STATUS` reports index
-`DESC_DEPTH − 1`. ARGMAX ignores `dst`, so neither `dst = IMG` nor `src = dst` is an error for it.
+`DESC_DEPTH − 1`. ARGMAX ignores `dst`: any value is accepted, including `dst = src = LOGIT`.
 
 Other inconsistent descriptors are not detected and give undefined buffer contents, but never an
 out-of-range access:

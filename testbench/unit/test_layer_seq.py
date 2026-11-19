@@ -6,15 +6,15 @@ expected-behaviour model written from spec §9 and D-028 gives, for a table and 
 units that must start (in order), the configuration each must see, the buffer owners while it
 runs, and the final status. Checked on every run:
   - each unit start: the unit, every configuration field (o_src_base includes
-    IMG_SEL * IMG_SIZE for src = IMG), and the owner vectors;
+    IMG_SEL * IMG_SIZE for a CONV, POOL or FC with src = IMG), and the owner vectors;
   - configuration and owners do not change while a unit is busy, and the owners change only
     when every unit is idle in that cycle and the one before;
   - o_layer_start / o_layer_done pair up with the unit's start and done;
   - final BUSY / DONE / ERROR and the layer index; o_clear only on an accepted START.
-Tests: the network's table for every IMG_SEL; random valid tables; every §9 error (reserved op,
-dst = IMG, src = dst, src = LOGIT for CONV/POOL/FC, dst = LOGIT for CONV/POOL, missing last)
-followed by a clean run; START ignored while busy or while a memory-port read is pending; reset
-mid-run.
+Tests: the network's table for every IMG_SEL; random valid tables; every §9 error (reserved op;
+dst = IMG, dst = LOGIT or src = dst for CONV/POOL; src = LOGIT for CONV/POOL/FC; dst != LOGIT for
+FC; src != LOGIT for ARGMAX; missing last) followed by a clean run; START ignored while busy or
+while a memory-port read is pending; reset mid-run.
 """
 
 from __future__ import annotations
@@ -50,19 +50,28 @@ class Expected:
     layer: int  # STATUS layer index at the end
 
 
+def descriptor_error(d: D) -> bool:
+    """Spec §9 descriptor errors (all but a missing `last`)."""
+    if d.op > OP_ARGMAX:
+        return True
+    if d.op == OP_ARGMAX:  # reads LOGIT; dst is ignored
+        return d.src != BUF_LOGIT
+    if d.src == BUF_LOGIT:  # only ARGMAX reads LOGIT
+        return True
+    if d.op == OP_FC:  # writes the LOGIT registers
+        return d.dst != BUF_LOGIT
+    return d.dst in (BUF_IMG, BUF_LOGIT) or d.src == d.dst  # CONV, POOL write a byte buffer
+
+
 def expected_run(table: list[D], img_sel: int, depth: int) -> Expected:
     """What the sequencer must do for `table` (spec §9, D-028)."""
     starts = []
     for i, d in enumerate(table[:depth]):
-        unit_op = d.op in (OP_CONV, OP_POOL, OP_FC)
-        logit = (unit_op and d.src == BUF_LOGIT) or (
-            d.op in (OP_CONV, OP_POOL) and d.dst == BUF_LOGIT
-        )
-        if d.op > OP_ARGMAX or (unit_op and (d.dst == BUF_IMG or d.src == d.dst)) or logit:
+        if descriptor_error(d):
             return Expected(starts, True, i)
         unit = {OP_CONV: "gemm", OP_FC: "gemm", OP_POOL: "pool", OP_ARGMAX: "argmax"}[d.op]
         src_base = d.src_base
-        if d.src == BUF_IMG:
+        if d.op != OP_ARGMAX and d.src == BUF_IMG:  # the image offset: buffer-reading ops only
             src_base = (src_base + img_sel * IMG_SIZE) & 0xFFFF
         cfg = dict(
             op=d.op, relu_en=d.relu_en, requant_en=d.requant_en, src=d.src, dst=d.dst,
@@ -223,8 +232,7 @@ def rand_desc(rng, last: int) -> D:
     if op == OP_ARGMAX:
         src, dst = BUF_LOGIT, rng.randrange(4)  # dst is ignored by ARGMAX
     elif op == OP_FC:  # FC writes the LOGIT registers; only ARGMAX may read them
-        src = rng.choice([BUF_IMG, BUF_ACT0, BUF_ACT1])
-        dst = rng.choice([b for b in (BUF_ACT0, BUF_ACT1, BUF_LOGIT) if b != src])
+        src, dst = rng.choice([BUF_IMG, BUF_ACT0, BUF_ACT1]), BUF_LOGIT
     else:  # CONV and POOL: neither src nor dst may be LOGIT
         src = rng.choice([BUF_IMG, BUF_ACT0, BUF_ACT1])
         dst = rng.choice([b for b in (BUF_ACT0, BUF_ACT1) if b != src])
@@ -259,45 +267,52 @@ async def test_every_error(dut):
     cases = []
     for op in (4, 5, 6, 7):
         cases.append((f"reserved op {op}", replace(good[2], op=op)))
-    for op in (OP_CONV, OP_POOL, OP_FC):
-        cases.append(
-            (f"op {op} with dst = IMG", replace(good[2], op=op, src=BUF_ACT0, dst=BUF_IMG))
-        )
-        for b in (BUF_IMG, BUF_ACT0, BUF_ACT1, BUF_LOGIT):
-            if b != BUF_IMG:
-                cases.append(
-                    (f"op {op} with src = dst = {b}", replace(good[2], op=op, src=b, dst=b))
-                )
     for op in (OP_CONV, OP_POOL):
-        for b in (BUF_IMG, BUF_ACT0, BUF_ACT1):
+        for src, dst in [(s, d) for s in range(4) for d in range(4)]:
+            if src != BUF_LOGIT and dst in (BUF_ACT0, BUF_ACT1) and src != dst:
+                continue  # the legal combinations
             cases.append(
                 (
-                    f"op {op} with src = LOGIT, dst = {b}",
-                    replace(good[2], op=op, src=BUF_LOGIT, dst=b),
+                    f"op {op} with src = {src}, dst = {dst}",
+                    replace(good[2], op=op, src=src, dst=dst),
                 )
             )
-            cases.append(
-                (
-                    f"op {op} with src = {b}, dst = LOGIT",
-                    replace(good[2], op=op, src=b, dst=BUF_LOGIT),
-                )
-            )
-    for b in (BUF_IMG, BUF_ACT0, BUF_ACT1):
+    for src, dst in [(s, d) for s in range(4) for d in range(4)]:
+        if src != BUF_LOGIT and dst == BUF_LOGIT:
+            continue  # the legal combinations
         cases.append(
-            (f"FC with src = LOGIT, dst = {b}", replace(good[2], op=OP_FC, src=BUF_LOGIT, dst=b))
+            (f"FC with src = {src}, dst = {dst}", replace(good[2], op=OP_FC, src=src, dst=dst))
         )
+    for src in (BUF_IMG, BUF_ACT0, BUF_ACT1):  # ARGMAX with src != LOGIT, for any dst
+        for dst in range(4):
+            cases.append(
+                (
+                    f"ARGMAX with src = {src}, dst = {dst}",
+                    replace(good[2], op=OP_ARGMAX, src=src, dst=dst),
+                )
+            )
+    named = {"ARGMAX with src = 0, dst = 3", "ARGMAX with src = 1, dst = 3"}
+    named |= {"FC with src = 0, dst = 1", "FC with src = 1, dst = 2", "FC with src = 2, dst = 1"}
+    assert named <= {what for what, _ in cases}, "the new §9 rules' named cases are missing"
     for what, bad in cases:
+        assert descriptor_error(bad), f"test bug: {what} is not an error in the model"
         table = [*good[:2], bad, *good[3:]]
         want = await run_table(dut, h, table, rng.randrange(16), what)
         assert want.error and want.layer == 2 and len(want.starts) == 2, what
         clean = [*good[:2], replace(good[2], last=1), *good[3:]]
         want = await run_table(dut, h, clean, rng.randrange(16), f"clean run after {what}")
         assert not want.error
-    # ARGMAX may name any dst (ignored) and src = dst: not an error.
-    ok = replace(good[0], op=OP_ARGMAX, src=BUF_LOGIT, dst=BUF_LOGIT, last=1)
-    assert not (await run_table(dut, h, [ok], 0, "argmax src = dst")).error
-    ok = replace(good[0], op=OP_ARGMAX, src=BUF_LOGIT, dst=BUF_IMG, last=1)
-    assert not (await run_table(dut, h, [ok], 0, "argmax dst = IMG")).error
+    # ARGMAX with src = LOGIT may name any dst (ignored), including src = dst: not an error.
+    for dst in range(4):
+        ok = replace(good[0], op=OP_ARGMAX, src=BUF_LOGIT, dst=dst, last=1)
+        assert not (await run_table(dut, h, [ok], 0, f"argmax dst = {dst}")).error
+    # FC from every byte buffer into LOGIT: legal; from IMG it gets the image offset.
+    for src in (BUF_IMG, BUF_ACT0, BUF_ACT1):
+        ok = replace(good[0], op=OP_FC, src=src, dst=BUF_LOGIT, last=1)
+        want = await run_table(dut, h, [ok], 7, f"FC src = {src}")
+        assert not want.error
+        offset = 7 * IMG_SIZE if src == BUF_IMG else 0
+        assert want.starts[0][1]["src_base"] == (ok.src_base + offset) & 0xFFFF
     # Missing last: DESC_DEPTH layers run, then ERROR at the last index.
     want = await run_table(dut, h, good, 5, "no descriptor with last = 1")
     assert want.error and len(want.starts) == h.depth and want.layer == h.depth - 1

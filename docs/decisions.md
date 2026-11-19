@@ -675,13 +675,25 @@ reuse the address generators and the 1-cycle read convention already verified.
   cycle before a unit is started and cleared the cycle after its done pulse, so they change only
   while every unit is idle; `a_owner_change_when_idle` (`testbench/sva/accel_top_sva.sv`) checks
   it, outside reset.
-- **`src = dst` is a §9 error** for CONV, POOL and FC (a layer never reads and writes one buffer,
-  which the single-owner, single-port scheme relies on). ARGMAX ignores `dst`, so neither
-  `src = dst` nor `dst = IMG` is an error for it.
-- **LOGIT as a buffer.** Only ARGMAX reads LOGIT: `src = LOGIT` is a §9 error for CONV, POOL and
-  FC. `dst = LOGIT` is a §9 error for CONV and POOL; FC writes the LOGIT registers by definition.
-  LOGIT is not a byte buffer, so without these checks a unit would read 0 or its writes would be
-  dropped, silently.
+- **`src = dst` is a §9 error** for CONV and POOL (a layer never reads and writes one buffer,
+  which the single-owner, single-port scheme relies on). ARGMAX ignores `dst`.
+- **LOGIT as a buffer.** LOGIT is written only by FC and read only by ARGMAX, and the descriptor
+  must say so:
+  - `src = LOGIT` is a §9 error for CONV, POOL and FC; `dst = LOGIT` is one for CONV and POOL.
+    LOGIT is not a byte buffer, so without these checks a unit would read 0 or its writes would be
+    dropped, silently.
+  - *(Phase 3 pre-work, approved.)* **FC with `dst ≠ LOGIT`** and **ARGMAX with `src ≠ LOGIT`**
+    are §9 errors too. Before, FC ignored `dst` (it always writes LOGIT) and ARGMAX ignored `src`
+    (it always reads LOGIT), so a descriptor could name a buffer the unit never touched. Now the
+    `src`/`dst` fields always describe what the layer really reads and writes. This also covers
+    the old FC `dst = IMG` and `src = dst` checks.
+- **Image offset only for buffer-reading layers** *(Phase 3 pre-work, approved)*. The sequencer
+  adds `IMG_SEL · IMG_SIZE` to `src_base` only for a CONV, POOL or FC with `src = IMG`. Before, it
+  added the offset for any `src = IMG`, including ARGMAX, whose base indexes the LOGIT registers
+  (BUG-011). FC is included on purpose: an FC reading the image directly must follow `IMG_SEL`
+  like the other layers. The committed `desc.hex` passes every rule
+  (`model/tests/test_golden.py::test_committed_descriptor_table_is_legal`, using
+  `hwmap.descriptor_error`).
 - **A failing layer never starts.** The descriptor errors (all but a missing `last`) are checked
   before the layer's unit is started: `STATUS` shows the layer's index and its `LAYER_CYC` stays 0.
 - **`DESC` reads during a run** wait (`o_csr_ready` low) until the sequencer is not fetching,

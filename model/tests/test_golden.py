@@ -142,6 +142,35 @@ def test_descriptor_table_ping_pong(params):
     assert not np.any(mem.desc[len(ds) * 4 :]), "unused descriptor slots must be zero"
 
 
+def test_committed_descriptor_table_is_legal():
+    """desc.hex: every used descriptor passes the spec §9 checks; only the last has last = 1."""
+    path = ARTIFACTS / "mem" / "desc.hex"
+    words = [int(x, 16) for x in path.read_text().split()]
+    ds = [hwmap.Descriptor.decode(words[i * 4 : i * 4 + 4]) for i in range(hwmap.DESC_DEPTH)]
+    used = ds[: len(net.LAYERS)]
+    assert [hwmap.descriptor_error(d) for d in used] == [None] * len(used)
+    assert [d.last for d in used] == [0] * (len(used) - 1) + [1]
+    fc, argmax = used[-2], used[-1]
+    assert (fc.op, fc.dst) == (hwmap.OP_FC, hwmap.BUF_LOGIT)
+    assert (argmax.op, argmax.src) == (hwmap.OP_ARGMAX, hwmap.BUF_LOGIT)
+
+
+def test_descriptor_error_rules():
+    """Spec §9: the legal (src, dst) pairs for each op; everything else is an error."""
+    legal = {
+        hwmap.OP_CONV: {(s, d) for s in (0, 1, 2) for d in (1, 2) if s != d},
+        hwmap.OP_POOL: {(s, d) for s in (0, 1, 2) for d in (1, 2) if s != d},
+        hwmap.OP_FC: {(s, hwmap.BUF_LOGIT) for s in (0, 1, 2)},
+        hwmap.OP_ARGMAX: {(hwmap.BUF_LOGIT, d) for d in range(4)},
+    }
+    for op in range(8):
+        for src in range(4):
+            for dst in range(4):
+                d = hwmap.Descriptor(op, 0, 0, 1, src, dst, 0, 0, 1, 1, 1, 1)
+                ok = (src, dst) in legal.get(op, set())
+                assert (hwmap.descriptor_error(d) is None) == ok, (op, src, dst)
+
+
 # ----------------------------------------------------------------------------- primitives
 
 

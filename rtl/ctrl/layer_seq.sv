@@ -5,13 +5,14 @@
 //   1. reads the descriptor's four words from the table (1-cycle-latency RAM) into registers;
 //      every unit configuration output comes from these registers, so it is stable while the
 //      unit runs;
-//   2. checks it (spec §9 errors): a reserved op; a CONV, POOL or FC with dst = IMG or with
-//      src = dst or src = LOGIT (only ARGMAX reads LOGIT); a CONV or POOL with dst = LOGIT.
-//      An error ends the run with ERROR = 1, DONE = 1, BUSY = 0, without starting the layer;
-//      STATUS keeps its index;
-//   3. computes the effective source base: src_base + IMG_SEL * IMG_SIZE when src = IMG. The
-//      image offset is computed once at START by shift-and-add over the set bits of the
-//      constant IMG_SIZE (784 = 512 + 256 + 16), not with a multiplier;
+//   2. checks it (spec §9 errors): a reserved op; a CONV or POOL with dst = IMG, dst = LOGIT
+//      or src = dst; a CONV, POOL or FC with src = LOGIT (only ARGMAX reads LOGIT); an FC with
+//      dst != LOGIT; an ARGMAX with src != LOGIT. An error ends the run with ERROR = 1,
+//      DONE = 1, BUSY = 0, without starting the layer; STATUS keeps its index;
+//   3. computes the effective source base: src_base + IMG_SEL * IMG_SIZE for a CONV, POOL or
+//      FC with src = IMG (ARGMAX reads LOGIT, never an image). The image offset is computed
+//      once at START by shift-and-add over the set bits of the constant IMG_SIZE
+//      (784 = 512 + 256 + 16), not with a multiplier;
 //   4. gives the buffer ports to the unit (registered one-hot owner vectors, below), then
 //      starts the unit with a one-cycle pulse and waits for its done pulse;
 //   5. takes the ports back, and either ends the run (last = 1), reports an error (the
@@ -178,12 +179,18 @@ module layer_seq #(
   assign own_act0_d = ((src == B_ACT0) || (writes_dst && (dst == B_ACT0))) ? unit_own : 3'b000;
   assign own_act1_d = ((src == B_ACT1) || (writes_dst && (dst == B_ACT1))) ? unit_own : 3'b000;
 
-  // §9 errors, checked before the layer starts. Only ARGMAX reads LOGIT; CONV and POOL are the
-  // ops that write dst (FC writes the LOGIT registers).
+  // §9 errors, checked before the layer starts. LOGIT is written only by FC and read only by
+  // ARGMAX; CONV and POOL are the ops that write a byte buffer (dst).
   logic err_desc;
   assign err_desc = (op > OP_ARGMAX)
-                 || (unit_op && ((dst == B_IMG) || (src == dst) || (src == B_LOGIT)))
-                 || (writes_dst && (dst == B_LOGIT));
+                 || ((op == OP_ARGMAX) && (src != B_LOGIT))
+                 || ((op == OP_FC) && (dst != B_LOGIT))
+                 || (unit_op && (src == B_LOGIT))
+                 || (writes_dst && ((dst == B_IMG) || (dst == B_LOGIT) || (src == dst)));
+
+  // Effective source base: the image offset applies only to the ops that read a byte buffer.
+  logic [15:0] src_base_d;
+  assign src_base_d = d1_q[15:0] + ((unit_op && (src == B_IMG)) ? img_off_q : 16'd0);
 
   logic unit_done;
   assign unit_done = uses_gemm ? i_gemm_done : (uses_pool ? i_pool_done : i_argmax_done);
@@ -264,7 +271,7 @@ module layer_seq #(
             err_q   <= 1'b1;
             state_q <= S_END;
           end else begin
-            src_base_q <= d1_q[15:0] + ((src == B_IMG) ? img_off_q : 16'd0);
+            src_base_q <= src_base_d;
             own_img_q  <= own_img_d;
             own_act0_q <= own_act0_d;
             own_act1_q <= own_act1_d;

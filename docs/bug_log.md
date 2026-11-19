@@ -187,3 +187,24 @@ requantization, nested-loop convolution, pack/unpack round-trips) in `model/test
   headers say why. No RTL change.
 - **Regression test.** `test_accel_top.py::test_reset_mid_run` (one-cycle reset in each of the six
   layers, then a clean bit-exact run) passes on Verilator with every assertion bound.
+
+## BUG-011 — ARGMAX with `src = IMG` added the image offset to its LOGIT base (Phase 3 pre-work)
+
+- **Symptom.** None observed. With `src = IMG` and `IMG_SEL = s`, an ARGMAX layer read its logits
+  from `src_base + s · 784` instead of `src_base`. The error was hidden only because 784 is a
+  multiple of 16: the argmax unit takes the low 8 bits of the base (784 mod 256 = 16), and the
+  16-entry LOGIT file keeps only the low 4 bits of the index, so the offset vanished. A different
+  `IMG_SIZE` or a 32-entry LOGIT file would have read the wrong logits for every image but 0.
+- **How found.** Review of `layer_seq.sv` (Phase 2 checkpoint review).
+- **Root cause (RTL and spec).** The sequencer applied the offset for any `src = IMG`, as spec §9
+  then said, and ARGMAX ignored `src` (it always reads LOGIT), so §9 accepted ARGMAX
+  `src = IMG`. The unit test's expected model followed the same rule and its random tables always
+  gave ARGMAX `src = LOGIT`, so nothing exercised the case.
+- **Fix.** `layer_seq` adds the offset only for CONV, POOL and FC (`unit_op && src == IMG`).
+  Spec §9 now makes ARGMAX with `src ≠ LOGIT` an error (and FC with `dst ≠ LOGIT`), so the case
+  is rejected before the layer starts (D-028).
+- **Regression test.** `test_layer_seq.py::test_every_error` runs ARGMAX with `src` = IMG, ACT0
+  and ACT1 for every `dst` (each must stop with `ERROR`), and every illegal FC `(src, dst)` pair;
+  it fails on the old sequencer. Its expected model applies the offset only to buffer-reading ops
+  and checks it for FC with `src = IMG`. `test_accel_top.py::test_errors` covers ARGMAX
+  `src = IMG/ACT0/ACT1` and FC `dst = IMG/ACT0/ACT1` through the CSR bus.
