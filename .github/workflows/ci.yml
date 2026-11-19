@@ -67,6 +67,7 @@ jobs:
         run: scripts/lint.sh
 
       - name: Unit tests (Icarus + Verilator)
+        if: always()
         run: |
           source scripts/env.sh
           pytest testbench/unit --junitxml=sim_build/unit.xml
