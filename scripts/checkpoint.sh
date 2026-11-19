@@ -293,13 +293,81 @@ phase_3() {
   check "latest CI run on main is green for HEAD" check_ci_green_on_head
 }
 
+# Phase 4: the DE10-Lite build closes timing at 50 MHz with every path constrained, and its
+# reports are evidence for this tree (fpga/de10lite/reports/build_info.json).
+check_fpga_build() {
+  RTL_TREE="$(git rev-parse HEAD:rtl)" python - <<'PY'
+import hashlib, json, os, re, sys
+d = "fpga/de10lite/reports"
+info = json.load(open(f"{d}/build_info.json"))
+sta = open(f"{d}/de10lite.sta.summary").read()
+slacks = {m.group(1): float(m.group(2)) for m in
+          re.finditer(r"Type\s*:\s*(.+?)\nSlack\s*:\s*(-?[\d.]+)", sta)}
+setup = {k: v for k, v in slacks.items() if "Setup 'clk50'" in k}
+hold = {k: v for k, v in slacks.items() if "Hold 'clk50'" in k}
+ucp = open(f"{d}/unconstrained_paths.rpt").read()
+counts = [int(x) for x in re.findall(r";\s*Unconstrained[^;]*;\s*(\d+)\s*;\s*(\d+)", ucp) for x in x]
+problems = []
+if not setup or min(setup.values()) <= 0: problems.append(f"setup slack {setup}")
+if not hold or min(hold.values()) <= 0: problems.append(f"hold slack {hold}")
+if not counts or any(counts): problems.append(f"unconstrained paths: {counts}")
+if "Illegal Clocks" not in ucp: problems.append("unconstrained-paths report incomplete")
+if info.get("rtl_tree") != os.environ["RTL_TREE"]: problems.append("build is not of HEAD:rtl")
+if not info.get("tree_clean"): problems.append("build did not start from a clean tree")
+for f, h in info.get("init_files_sha256", {}).items():
+    if hashlib.sha256(open(f"model/artifacts/mem/{f}", "rb").read()).hexdigest() != h:
+        problems.append(f"{f} changed since the build")
+print(f"worst setup {min(setup.values(), default=0):+.3f} ns, worst hold {min(hold.values(), default=0):+.3f} ns, "
+      f"unconstrained paths {sum(counts)}, build of commit {info.get('commit', '?')[:12]}")
+for p in problems: print("  ", p)
+sys.exit(1 if problems else 0)
+PY
+}
+
+# The README's results table links every number to a committed report.
+check_readme_results() {
+  python - <<'PY'
+import re, subprocess, sys
+text = open("README.md").read()
+m = re.search(r"\n## Results\n(.*?)(\n## |\Z)", text, re.S)
+if not m:
+    print("README.md has no '## Results' section"); sys.exit(1)
+rows = [l for l in m.group(1).splitlines() if l.startswith("|") and not set(l) <= set("|-: ")][1:]
+tracked = set(subprocess.run(["git", "ls-files"], capture_output=True, text=True).stdout.split())
+bad = []
+for row in rows:
+    links = re.findall(r"\]\(([^)#]+)", row)
+    if not links or not all(l in tracked for l in links):
+        bad.append(row)
+print(f"{len(rows)} result rows; rows without a committed report link: {len(bad)}")
+for b in bad: print("  ", b)
+sys.exit(1 if bad or not rows else 0)
+PY
+}
+
+phase_4() {
+  echo "Phase 4: FPGA demo"
+  check "unit tests pass (testbench/unit, incl. the board I/O blocks)" check_pytest unit 10 testbench/unit
+  check "system tests pass (accel_top, fpga_core bring-up and demo runs, de10lite_top)" check_pytest system 7 testbench/system
+  check "formal proofs pass, and fail on their mutants (testbench/formal)" check_pytest formal 17 testbench/formal
+  check "script and golden model tests" check_pytest scripts_model 30 scripts/tests model/tests
+  check "RTL lint (Quartus compat, Verilator -Wall, Icarus, Yosys check)" scripts/lint.sh
+  check "ruff format + ruff check clean" check_ruff
+  check "DE10-Lite build: positive setup and hold slack at 50 MHz, no unconstrained paths, reports of HEAD:rtl" check_fpga_build
+  check "README results table: every row links a committed report" check_readme_results
+  run_local_checks "optional local repository checks"
+  check "latest CI run on main is green for HEAD" check_ci_green_on_head
+  echo "  [HUMAN] the demo works on the board (confirmed by the human before tagging v1.0)"
+}
+
 phase="${1:-}"
 case "$phase" in
   0) phase_0 ;;
   1) phase_1 ;;
   2) phase_2 ;;
   3) phase_3 ;;
-  *) echo "usage: $0 <phase>   (implemented: 0, 1, 2, 3)" >&2; exit 2 ;;
+  4) phase_4 ;;
+  *) echo "usage: $0 <phase>   (implemented: 0, 1, 2, 3, 4)" >&2; exit 2 ;;
 esac
 
 echo
