@@ -11,6 +11,8 @@ Tests:
                    first images also every performance counter, every cycle, vs an independent
                    count of the units' port activity, and the final ACT0 / ACT1 contents (conv2
                    and pool2 outputs) read back through the memory port
+  layer by layer   the first k layers only, k = 1 .. 5: each layer's output buffer (or the
+                   LOGITs) equals the golden activation
   memory port      every buffer written and read back (byte buffers, 64-bit WGT and PARAM),
                    address bits above a buffer's width ignored, reserved selects, not ready while
                    busy, exactly one rvalid per read
@@ -25,9 +27,10 @@ Tests:
   full run         (TB_MODE = full, driven by scripts/full_run.py, never in pytest) any number
                    of MNIST test images: logits, RESULT and every counter per image, written to
                    TB_RESULTS; fails unless every logit matches the golden model
-Verilator runs bind every assertion (units, engine, array, buffer ownership, accel_top, and the
-host-interface handshakes); test_accel_top_sva_fires shows the master-side handshake assertions
-are live.
+Icarus runs check that no output is X after reset (data outputs only while valid).
+Verilator runs bind every assertion (units, engine, array, buffer ownership, accel_top, the
+host-interface handshakes and legal FSM states); test_accel_top_sva_fires shows the master-side
+handshake assertions are live.
 TB_IMAGES limits the network test to the first images (the Icarus run uses 2).
 """
 
@@ -46,7 +49,7 @@ from common import accel_bus as ab
 from common.bits import to_signed
 from common.coverage import cover
 from common.runner import RTL_DIR, SVA_DIR, run_cocotb, run_sva_violation, sv_string
-from common.sim import start_clock_and_reset
+from common.sim import resolved, start_clock_and_reset
 from model import golden, hwmap, net
 from model.hwmap import Descriptor as D
 
@@ -68,6 +71,8 @@ SVA_SOURCES = [
         "accel_top_sva.sv",
         "accel_top_if_sva.sv",
         "accel_top_bind.sv",
+        "fsm_legal_sva.sv",
+        "fsm_legal_bind.sv",
     )
 ]
 TB_IMAGES = int(os.environ.get("TB_IMAGES", "50"))
@@ -161,8 +166,30 @@ async def saturation_monitor(dut, sig, name: str) -> None:
             cover("network data: post-processing saturation", name)
 
 
+async def x_monitor(dut) -> None:
+    """Icarus (4-state) only: after reset, no control or status output is ever X or Z, and the
+    read data is not X in a cycle where it is valid (o_csr_rdata with an accepted CSR request,
+    o_mem_rdata with o_mem_rvalid). Fails the test with the signal's name."""
+    status = (dut.o_csr_ready, dut.o_mem_ready, dut.o_mem_rvalid, dut.o_busy, dut.o_done)
+    status += (dut.o_error, dut.o_result, dut.o_cyc_total)
+    await FallingEdge(dut.rst)
+    while True:
+        await FallingEdge(dut.clk)
+        await ReadOnly()
+        if int(dut.rst.value):
+            continue
+        for sig in status:
+            resolved(sig, "accel_top output after reset")
+        if int(dut.i_csr_valid.value) and int(dut.o_csr_ready.value):
+            resolved(dut.o_csr_rdata, f"CSR read data at {int(dut.i_csr_addr.value):#x}")
+        if int(dut.o_mem_rvalid.value):
+            resolved(dut.o_mem_rdata, "memory-port read data")
+
+
 async def setup(dut) -> Accel:
     acc = Accel(dut)
+    if cocotb.SIM_NAME.lower().startswith("icarus"):
+        cocotb.start_soon(x_monitor(dut))
     cocotb.start_soon(layer_monitor(dut))
     pp = dut.u_gemm_engine.u_postproc
     cocotb.start_soon(saturation_monitor(dut, pp.sat_hi, "high"))
@@ -328,6 +355,33 @@ async def check_final_activations(acc: Accel, gold: dict, i: int) -> None:
         got = [to_signed(await acc.mem.read(sel, a), 8) for a in range(len(want))]
         bad = [a for a in range(len(want)) if got[a] != want[a]]
         assert not bad, f"image {i}: {name} in buffer {sel} differs at {bad[:8]}"
+
+
+@cocotb.test(skip=TB_MODE != "main")
+async def test_layer_by_layer(dut):
+    """Runs of the first k layers (last = 1 on layer k - 1): each layer's output buffer, read
+    back through the memory port, equals the golden model's activation (FC: the LOGITs)."""
+    acc = await setup(dut)
+    qs = quick_subset()
+    img = 3
+    gold = golden.infer(golden.QuantParams.load(), qs["q"][img : img + 1], keep=True)
+    await acc.load_images(qs["q"][img : img + 1])
+    table = network_table()
+    for k, name in enumerate(("conv1", "pool1", "conv2", "pool2", "fc")):
+        await acc.write_desc_table([*table[:k], replace(table[k], last=1)])
+        assert await acc.run(img_sel=0) == ab.DONE | k << 8, f"{name}: STATUS"
+        if name == "fc":
+            got = await acc.logits()
+            assert got == [int(v) for v in gold["logits"][0]], f"fc: LOGIT {got}"
+        else:
+            want = gold[name][0].reshape(-1).astype(np.int64)
+            sel = ab.SEL_ACT0 if table[k].dst == hwmap.BUF_ACT0 else ab.SEL_ACT1
+            got = [to_signed(await acc.mem.read(sel, a), 8) for a in range(len(want))]
+            bad = [a for a in range(len(want)) if got[a] != want[a]]
+            assert not bad, f"{name}: buffer {sel} differs at {len(bad)} addresses, e.g. {bad[:8]}"
+        cover("layer-by-layer check", name)
+        dut._log.info("layer %d (%s) output matches the golden model", k, name)
+    await acc.restore_desc_table()
 
 
 @cocotb.test(skip=TB_MODE != "main")
