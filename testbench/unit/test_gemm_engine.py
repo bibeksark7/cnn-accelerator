@@ -36,6 +36,7 @@ import numpy as np
 import pytest
 from cocotb.triggers import FallingEdge, ReadOnly, RisingEdge
 
+from common.coverage import cover, start_handshake_monitor
 from common.runner import RTL_DIR, SVA_DIR, run_cocotb, run_sva_violation
 from common.sim import seeded_rng, start_clock_and_reset, wait_until
 from model import golden, hwmap
@@ -59,6 +60,7 @@ SVA_SOURCES = [
 TB_N = int(os.environ.get("TB_N", "8"))
 TB_NETWORK = os.environ.get("TB_NETWORK", "1") == "1"
 SVA_VIOLATION = os.environ.get("SVA_VIOLATION", "")
+TB_K_TILE = int(os.environ.get("TB_K_TILE", "128"))  # the build's K_TILE (functional coverage)
 WGT_DEPTH, PARAM_DEPTH = 1024, 64
 
 # FSM state encodings, in the order of gemm_engine's qstate_t and dstate_t enums
@@ -154,7 +156,33 @@ async def serve(dut, buf: Buffers) -> None:
                 dut.i_prm_rdata.value = buf.prm[addr]
 
 
+def cover_layer(layer: Layer, n: int) -> None:
+    """Functional coverage of a layer's shape (D-034)."""
+    if layer.fc:
+        m_rows, k = 1, layer.h * layer.w * layer.c_in
+    else:
+        m_rows = max(layer.h - 2, 0) * max(layer.w - 2, 0)
+        k = 9 * layer.c_in
+        cover("ReLU", "on" if layer.relu else "off")
+    cover("layer type", "FC" if layer.fc else "CONV")
+    work = m_rows > 0 and k > 0 and layer.c_out > 0
+    if not work:
+        cover("layers without work", "C_out = 0" if layer.c_out == 0 else "M = 0 or K = 0")
+        return
+    cover("row tiles (M)", "last tile full" if m_rows % n == 0 else "last tile partial")
+    cover("column tiles (Ncols)", "last tile full" if layer.c_out % n == 0 else "last tile partial")
+    cover("column tile count", "1" if layer.c_out <= n else "more than 1")
+    if k == 1:
+        cover("K", "K = 1")
+    elif k <= TB_K_TILE:
+        cover("K", "1 < K <= K_TILE")
+    else:
+        cover("K", "K > K_TILE")
+    cover("K chunks", "1" if k <= TB_K_TILE else "more than 1")
+
+
 async def run_layer(dut, layer: Layer, timeout: int = 400_000) -> Buffers:
+    cover_layer(layer, n_of(dut))
     buf = Buffers(layer)
     server = cocotb.start_soon(serve(dut, buf))
     await start_layer(dut, layer)
@@ -243,6 +271,12 @@ async def setup(dut) -> None:
     for sig in (dut.i_start, dut.i_src_rdata, dut.i_wgt_rdata, dut.i_prm_rdata):
         sig.value = 0
     cocotb.start_soon(fsm_monitor(dut))
+    if cocotb.SIM_NAME.lower().startswith("verilator"):  # per-cycle monitors: fast simulator only
+        a = dut.u_systolic_array
+        start_handshake_monitor(dut.clk, a.o_row_valid, a.i_row_ready, "array rows -> row register")
+        pp = dut.u_postproc
+        start_handshake_monitor(dut.clk, pp.i_valid, pp.o_ready, "row register -> postproc")
+        start_handshake_monitor(dut.clk, pp.o_valid, pp.i_ready, "postproc -> write port")
     await start_clock_and_reset(dut)
 
 
@@ -362,6 +396,15 @@ def deep_fc(rng, n) -> Layer:
     return fc_layer(n, 17, 33, 5, 3, act.reshape(h, w, c_in), wt.reshape(c_out, -1), b)
 
 
+def tiny_fc(rng, n) -> Layer:
+    """FC with K = 1 (a 1 x 1 x 1 input): one reduction step per output tile."""
+    c_out = n + 1
+    act = np.array([[[rng.randint(-128, 127)]]], dtype=np.int8)
+    wt = np.array([[rng.randint(-127, 127)] for _ in range(c_out)], dtype=np.int8)
+    b = np.array([rng.randint(-200000, 200000) for _ in range(c_out)], dtype=np.int32)
+    return fc_layer(n, 5, 9, 11, 4, act, wt, b)
+
+
 def deep_conv(rng, n) -> Layer:
     """CONV with K = 9 * 16 = 144 (more than one K chunk for K_TILE <= 128)."""
     h, w, c_in, c_out = 6, 5, 16, n + 1
@@ -378,7 +421,7 @@ def deep_conv(rng, n) -> Layer:
 @cocotb.test(skip=SVA_VIOLATION != "")
 async def test_random_layers(dut):
     """Back-to-back random CONV and FC layers, ragged tiles, random bases, ReLU on/off, plus a
-    CONV and an FC that always need several K chunks."""
+    CONV and an FC that always need several K chunks, and an FC with K = 1."""
     rng = seeded_rng(dut, "layers")
     n = n_of(dut)
     await setup(dut)
@@ -387,7 +430,7 @@ async def test_random_layers(dut):
         await run_layer(dut, layer)
     # K > K_TILE for every configuration (K_TILE <= 128): an FC with K = 200 and a CONV with
     # K = 144, so K chunking is covered even when the network layers are skipped.
-    for layer in (deep_fc(rng, n), deep_conv(rng, n)):
+    for layer in (deep_fc(rng, n), deep_conv(rng, n), tiny_fc(rng, n)):
         await run_layer(dut, layer)
 
 
@@ -662,7 +705,11 @@ def test_gemm_engine(sim: str, n: int, k_tile: int) -> None:
         test_module=Path(__file__).stem,
         parameters={"N": n, "K_TILE": k_tile, "WGT_DEPTH": WGT_DEPTH, "PARAM_DEPTH": PARAM_DEPTH},
         extra_build_args=args,
-        extra_env={"TB_N": str(n), "TB_NETWORK": "1" if run_network_layers(sim) else "0"},
+        extra_env={
+            "TB_N": str(n),
+            "TB_K_TILE": str(k_tile),
+            "TB_NETWORK": "1" if run_network_layers(sim) else "0",
+        },
     )
     cov_file = results.parent / COVERAGE_FILE
     assert cov_file.exists(), f"{cov_file} missing: test_fsm_transition_coverage did not run"

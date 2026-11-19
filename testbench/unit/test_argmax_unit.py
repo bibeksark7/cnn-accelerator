@@ -16,6 +16,7 @@ import pytest
 from cocotb.triggers import FallingEdge, ReadOnly, RisingEdge
 
 from common.bits import to_signed, to_unsigned
+from common.coverage import cover
 from common.runner import RTL_DIR, SIMULATORS, SVA_DIR, run_cocotb, run_sva_violation
 from common.sim import resolved, seeded_rng, start_clock_and_reset
 
@@ -65,6 +66,15 @@ async def run_argmax(dut, regs: list[int], base: int, count: int) -> tuple[int, 
 async def check(dut, regs: list[int], base: int, count: int, what: str) -> None:
     window = np.array(regs[base : base + count], dtype=np.int64)
     want = (int(np.argmax(window)), int(window.max())) if count else (0, 0)
+    cover("count", "0" if count == 0 else ("1" if count == 1 else "more than 1"))
+    if count:
+        if (window == window.max()).sum() > 1:
+            cover("maximum", "tie (lowest index wins)")
+        if window.max() < 0:
+            cover("maximum", "negative")
+        if window.max() == I32_MAX or window.min() == I32_MIN:
+            cover("values", "int32 extreme")
+        cover("position of the maximum", "last" if want[0] == count - 1 else "not last")
     got = await run_argmax(dut, regs, base, count)
     assert got == want, f"{what}: got (index, max) {got}, want {want}, logits {window.tolist()}"
 

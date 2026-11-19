@@ -867,3 +867,26 @@ state (adds verification code to synthesizable files).
 **Reason.** Unbounded proofs with the free toolchain, on the three blocks the verification plan names, with
 evidence that each property set is not vacuous.
 
+## D-034 — Functional coverage: in-house collector, goals and documented gaps (Phase 3)
+
+**Decision.**
+- `testbench/common/coverage.py`: `cover(point, bin)` counts hits in the simulation's Python
+  process. The counts are written to `coverage.json` in the build directory when the
+  interpreter exits (an `atexit` handler; checked to run on Icarus and Verilator).
+  `start_handshake_monitor` counts transfers and stalls of a valid/ready link every cycle.
+- The tests record what they drive or observe: layer shapes and K chunking (engine), arithmetic
+  outcomes (postproc), K ranges and step gaps (array), shapes and value classes (pool, argmax),
+  error kinds, START corner cases and resets (sequencer, `accel_top`), bus wait states (the
+  shared bus masters), and real-data saturation in the network (edge-triggered monitors, so
+  the 50-image run does not pay a per-cycle cost). Per-cycle monitors inside the engine run on
+  Verilator only.
+- `scripts/coverage_report.py --run` clears old files, runs the unit and system tests, merges
+  the files per toplevel, and checks every bin against `GOALS` (one hit each). A bin below goal
+  needs a written reason in `GAPS` or the report fails, and a documented gap that is hit fails
+  too, so the list cannot go stale. Output: `testbench/reports/coverage.{md,json}`.
+
+**Alternatives.** `cocotb-coverage` (does not support cocotb 2.x, and is a new dependency);
+SystemVerilog covergroups (not supported by Icarus or Verilator).
+
+**Reason.** No new dependency, goals and gaps in one reviewed file, and a report that is
+regenerated from the tests rather than written by hand.

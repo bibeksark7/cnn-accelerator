@@ -18,6 +18,7 @@ import pytest
 from cocotb.triggers import FallingEdge, ReadOnly, RisingEdge
 
 from common.bits import to_signed, to_unsigned
+from common.coverage import cover
 from common.runner import RTL_DIR, SIMULATORS, SVA_DIR, run_cocotb, run_sva_violation
 from common.sim import resolved, seeded_rng, start_clock_and_reset, wait_until
 from model import golden, net
@@ -54,8 +55,15 @@ async def run_pool(dut, act: np.ndarray, src_base: int, dst_base: int) -> None:
     src = {(src_base + i) & 0xFFFF: int(v) for i, v in enumerate(act.reshape(-1))}
     if h >= 2 and w >= 2 and c >= 1:
         want_flat = golden.maxpool2(act[None])[0].reshape(-1)
+        cover("shape", "odd H or W (floor)" if (h % 2 or w % 2) else "even H and W")
+        cover("channels", "C = 1" if c == 1 else "C > 1")
+        if (want_flat < 0).any():
+            cover("values", "negative window maximum")
+        if (want_flat == 127).any() or (want_flat == -128).any():
+            cover("values", "int8 extreme maximum")
     else:
         want_flat = np.zeros(0)
+        cover("shape", "no output (H < 2, W < 2 or C = 0)")
     want = {(dst_base + i) & 0xFFFF: int(v) for i, v in enumerate(want_flat)}
     writes: dict[int, int] = {}
     dup: list[int] = []

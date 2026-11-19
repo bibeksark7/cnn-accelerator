@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from cocotb.triggers import FallingEdge, ReadOnly, RisingEdge
 
+from common.coverage import cover
+
 # CSR byte offsets (spec §10.2).
 ID, CONFIG, CTRL, STATUS, IMG_SEL, RESULT = 0x000, 0x004, 0x010, 0x014, 0x018, 0x01C
 CYC_TOTAL, CYC_MAC, BUF_RD, BUF_WR = 0x020, 0x024, 0x028, 0x02C
@@ -38,6 +40,7 @@ class CsrMaster:
         for n in range(self.guard):
             await ReadOnly()
             if int(dut.o_csr_ready.value):
+                cover("CSR bus", "accepted at once" if n == 0 else "waited (descriptor read)")
                 rdata = int(dut.o_csr_rdata.value)
                 await RisingEdge(dut.clk)
                 await FallingEdge(dut.clk)
@@ -73,9 +76,10 @@ class MemMaster:
         dut.i_mem_sel.value = sel
         dut.i_mem_addr.value = addr
         dut.i_mem_wdata.value = data
-        for _ in range(self.guard):
+        for n in range(self.guard):
             await ReadOnly()
             if int(dut.o_mem_ready.value):
+                cover("memory port", "accepted at once" if n == 0 else "waited")
                 await RisingEdge(dut.clk)
                 await FallingEdge(dut.clk)
                 dut.i_mem_valid.value = 0

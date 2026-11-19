@@ -44,6 +44,7 @@ from cocotb.triggers import FallingEdge, ReadOnly, RisingEdge, with_timeout
 
 from common import accel_bus as ab
 from common.bits import to_signed
+from common.coverage import cover
 from common.runner import RTL_DIR, SVA_DIR, run_cocotb, run_sva_violation, sv_string
 from common.sim import start_clock_and_reset
 from model import golden, hwmap, net
@@ -133,8 +134,39 @@ class Accel:
             await self.csr.write(ab.DESC + 4 * i, w)
 
 
+OP_NAMES = {
+    hwmap.OP_CONV: "CONV",
+    hwmap.OP_POOL: "POOL",
+    hwmap.OP_FC: "FC",
+    hwmap.OP_ARGMAX: "ARGMAX",
+}
+
+
+async def layer_monitor(dut) -> None:
+    """Coverage: each layer the sequencer starts, by op (edge-triggered, no per-cycle cost)."""
+    seq = dut.u_layer_seq
+    while True:
+        await RisingEdge(seq.o_layer_start)
+        await ReadOnly()
+        cover("layers started", OP_NAMES.get(int(seq.o_op.value), "reserved"))
+
+
+async def saturation_monitor(dut, sig, name: str) -> None:
+    """Coverage: the engine's post-processing saturates on real data (edge-triggered)."""
+    pp = dut.u_gemm_engine.u_postproc
+    while True:
+        await RisingEdge(sig)
+        await ReadOnly()
+        if int(pp.v3_q.value) and int(pp.rq3_q.value):
+            cover("network data: post-processing saturation", name)
+
+
 async def setup(dut) -> Accel:
     acc = Accel(dut)
+    cocotb.start_soon(layer_monitor(dut))
+    pp = dut.u_gemm_engine.u_postproc
+    cocotb.start_soon(saturation_monitor(dut, pp.sat_hi, "high"))
+    cocotb.start_soon(saturation_monitor(dut, pp.sat_lo, "low"))
     await start_clock_and_reset(dut)
     return acc
 
@@ -211,6 +243,7 @@ async def test_network_quick_subset(dut):
         for i in batch:
             counter = PortCounter(dut) if i < detailed else None
             task = cocotb.start_soon(counter.run()) if counter else None
+            cover("inferences", "back to back, no reload" if i > first else "after loading images")
             status = await acc.run(img_sel=i - first)
             if task:
                 task.cancel()
@@ -319,6 +352,27 @@ async def test_memory_port(dut):
         await acc.mem.write(sel, 1, 0xFFFF_FFFF_FFFF_FFFF)
         assert await acc.mem.read(sel, 1) == 0
     assert [await acc.mem.read(ab.SEL_WGT, a) for a in range(4)] == before
+    # A request offered while a read is pending is held (not ready) and accepted once the read
+    # has returned: a write right behind a read, both on ACT0.
+    await FallingEdge(dut.clk)
+    dut.i_mem_valid.value, dut.i_mem_we.value, dut.i_mem_sel.value = 1, 0, ab.SEL_ACT0
+    dut.i_mem_addr.value = 3
+    await ReadOnly()
+    assert int(dut.o_mem_ready.value), "the read should be accepted at once"
+    await FallingEdge(dut.clk)
+    dut.i_mem_we.value, dut.i_mem_wdata.value = 1, 0x5C  # the next request: a write to addr 3
+    held = 0
+    while True:
+        await ReadOnly()
+        if int(dut.o_mem_ready.value):
+            break
+        held += 1
+        await FallingEdge(dut.clk)
+    await FallingEdge(dut.clk)
+    dut.i_mem_valid.value = 0
+    assert held >= 1, "a request behind a pending read was accepted at once"
+    assert await acc.mem.read(ab.SEL_ACT0, 3) == 0x5C, "the held write was lost"
+    cover("memory port", "request held while a read is pending")
     # Restore the weights and parameters the test overwrote, then run one image while hammering
     # the memory port: it must not accept anything while BUSY.
     for a, w in enumerate(WGT_WORDS):
@@ -340,6 +394,7 @@ async def test_memory_port(dut):
     await FallingEdge(dut.clk)
     dut.i_mem_valid.value = 0
     assert accepted_while_busy == 0, f"{accepted_while_busy} requests accepted while busy"
+    cover("memory port", "request held while busy")
     assert await acc.logits() == [int(v) for v in qs["logits"][0]]
 
 
@@ -361,6 +416,7 @@ async def test_csr_rules(dut):
     await csr.write(ab.DESC + 4 * 9, 0xDEAD_BEEF)
     for _ in range(5):
         await csr.write(ab.CTRL, 1)
+    cover("START", "ignored: busy")
     desc_during_run = await csr.read(ab.DESC + 4 * 8)  # readable while busy
     await with_timeout(FallingEdge(dut.o_busy), RUN_TIMEOUT_US, "us")
     assert desc_during_run == DESC_WORDS[8]
@@ -383,6 +439,7 @@ async def test_csr_rules(dut):
     dut.i_csr_valid.value = 0
     await ReadOnly()
     assert int(dut.o_busy.value) == 0, "START accepted while a memory-port read was pending"
+    cover("START", "ignored: memory-port read pending")
     # The next START works and IMG_SEL = 1 selects the second image.
     assert await acc.run(img_sel=1) == ab.DONE | 5 << 8
     assert await acc.logits() == [int(v) for v in qs["logits"][1]]
@@ -410,6 +467,7 @@ async def test_csr_rules(dut):
             rvalids.append(int(dut.o_mem_rdata.value))
         await FallingEdge(dut.clk)
     assert rvalids == [want], f"read in the START cycle returned {rvalids}, want [{want}]"
+    cover("START", "with a memory-port read in the same cycle")
     await with_timeout(FallingEdge(dut.o_busy), RUN_TIMEOUT_US, "us")
     assert await csr.read(ab.STATUS) == ab.DONE | 5 << 8
     assert await acc.logits() == [int(v) for v in qs["logits"][0]]
@@ -435,6 +493,7 @@ async def test_csr_rules(dut):
     assert await acc.logits() == [int(v) for v in qs["logits"][0]]
     got = await acc.mem.read(ab.SEL_IMG, addr)
     assert got == new_word, f"write in the START cycle: read back {got:#x}, want {new_word:#x}"
+    cover("START", "with a memory-port write in the same cycle")
 
 
 def network_table() -> list[D]:
@@ -483,6 +542,7 @@ async def test_errors(dut):
         want = ab.DONE | ab.ERROR | layer << 8
         assert status == want, f"{what}: STATUS {status:#x}, want {want:#x}"
         assert await acc.csr.read(ab.RESULT) == 0, f"{what}: RESULT not cleared at START"
+        cover("descriptor errors", hwmap.descriptor_error(bad) or "?")
         layers = [await acc.csr.read(ab.LAYER_CYC + 4 * k) for k in range(hwmap.DESC_DEPTH)]
         assert all(layers[:layer]) and not any(layers[layer:]), f"{what}: LAYER_CYC {layers}"
         total = await acc.csr.read(ab.CYC_TOTAL)
@@ -494,6 +554,7 @@ async def test_errors(dut):
     status = await acc.run(img_sel=0)
     want = ab.DONE | ab.ERROR | (hwmap.DESC_DEPTH - 1) << 8
     assert status == want, f"missing last: STATUS {status:#x}, want {want:#x}"
+    cover("descriptor errors", "missing last")
     layers = [await acc.csr.read(ab.LAYER_CYC + 4 * k) for k in range(hwmap.DESC_DEPTH)]
     total = await acc.csr.read(ab.CYC_TOTAL)
     want_total = sum(layers) + seq_overhead(hwmap.DESC_DEPTH)
@@ -529,6 +590,7 @@ async def test_reset_mid_run(dut):
         assert await acc.csr.read(ab.CYC_TOTAL) == 0
         assert await acc.run(img_sel=0) == ab.DONE | 5 << 8, f"run after reset in layer {layer}"
         assert await acc.logits() == [int(v) for v in qs["logits"][0]]
+        cover("reset during a layer", f"layer {layer}")
         dut._log.info("reset during layer %d, then a clean run: ok", layer)
 
 
@@ -546,6 +608,7 @@ async def test_counter_saturation(dut):
     assert layers[0] == top and layers[2] == top, f"conv LAYER_CYC did not saturate: {layers}"
     assert int(dut.o_cyc_total.value) == top
     assert await acc.logits() == [int(v) for v in qs["logits"][0]], "saturation changed results"
+    cover("performance counters", "saturated at 2^PERF_W - 1")
 
 
 @cocotb.test(skip=SVA_VIOLATION != "csr_withdrawn")

@@ -14,6 +14,7 @@ import pytest
 from cocotb.triggers import FallingEdge, ReadOnly, RisingEdge
 
 from common.bits import pack, to_signed, unpack
+from common.coverage import cover, start_handshake_monitor
 from common.runner import RTL_DIR, SIM_BUILD_DIR, SIMULATORS, SVA_DIR, run_cocotb
 from common.sim import seeded_rng, start_clock_and_reset, wait_until
 
@@ -95,11 +96,26 @@ async def drain_rows(dut, rng, ready_prob: float, guard: int) -> np.ndarray:
     return np.array(rows, dtype=np.int64)
 
 
+def cover_tile(k: int, n: int, gap_prob: float) -> None:
+    """Functional coverage of one tile (D-034)."""
+    if k in (0, 1, n, 128):
+        cover("K", {0: "0 (drain only)", 1: "1", n: "N", 128: "128 (K_TILE)"}[k])
+    else:
+        cover("K", "2 .. N-1" if k < n else "N+1 .. 127")
+    if k:
+        cover("steps", "with gaps" if gap_prob > 0 else "back to back")
+
+
 async def run_tile(dut, a: np.ndarray, b: np.ndarray, rng, gap_prob: float, ready_prob: float):
     """Clear, stream K steps, drain, and return the N x N result read through the handshake."""
+    cover_tile(a.shape[1], n_of(dut), gap_prob)
+    rows = start_handshake_monitor(dut.clk, dut.o_row_valid, dut.i_row_ready, "result rows")
     await clear_when_idle(dut)
     await stream_steps(dut, a, b, rng, gap_prob)
-    return await drain_rows(dut, rng, ready_prob, 100 * n_of(dut) + 4 * a.shape[1] + 100)
+    try:
+        return await drain_rows(dut, rng, ready_prob, 100 * n_of(dut) + 4 * a.shape[1] + 100)
+    finally:
+        rows.cancel()
 
 
 def expected(a: np.ndarray, b: np.ndarray) -> np.ndarray:

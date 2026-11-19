@@ -13,6 +13,7 @@ import pytest
 from cocotb.triggers import ClockCycles
 
 from common.bits import to_signed, to_unsigned
+from common.coverage import cover, start_handshake_monitor
 from common.handshake import collect_stream, drive_stream
 from common.runner import RTL_DIR, SIMULATORS, run_cocotb
 from common.sim import seeded_rng, start_clock_and_reset
@@ -91,7 +92,29 @@ def get_payload(dut) -> dict:
     }
 
 
+def cover_item(item: dict) -> None:
+    """Functional coverage of one element's arithmetic (D-034)."""
+    if not item["rq"]:
+        cover("mode", "FC bypass")
+        return
+    cover("mode", "requantize")
+    y, m, s = item["acc"] + item["bias"], item["m"], item["s"]
+    r = (y * m + (1 << (s - 1))) >> s  # before saturation (Python >> is arithmetic)
+    if r > 127:
+        cover("saturation", "high")
+    elif r < -128:
+        cover("saturation", "low")
+    else:
+        cover("saturation", "in range")
+    if (y * m) & ((1 << s) - 1) == 1 << (s - 1):
+        cover("rounding", "exact tie, positive" if y > 0 else "exact tie, negative")
+    if item["relu"]:
+        cover("ReLU", "clamped" if r < 0 else "passed")
+
+
 async def run_stream(dut, items, rng, idle_prob, ready_prob) -> None:
+    for item in items:
+        cover_item(item)
     sink = cocotb.start_soon(
         collect_stream(
             dut.clk, dut.o_valid, dut.i_ready, len(items), lambda: get_payload(dut), rng, ready_prob
@@ -114,6 +137,8 @@ async def run_stream(dut, items, rng, idle_prob, ready_prob) -> None:
 async def setup(dut) -> None:
     dut.i_valid.value = 0
     dut.i_ready.value = 0
+    start_handshake_monitor(dut.clk, dut.i_valid, dut.o_ready, "input handshake")
+    start_handshake_monitor(dut.clk, dut.o_valid, dut.i_ready, "output handshake")
     await start_clock_and_reset(dut)
     await ClockCycles(dut.clk, 1)
 
