@@ -6,6 +6,10 @@ Inputs:  model/artifacts/params.npz, MNIST (data/ cache)
 Outputs (committed, under model/artifacts/):
   quick_subset.npz   50 test images (first 5 of each class in test-set order): raw pixels, hardware
                      input bytes, labels, expected int32 logits and predicted class
+  saturation_subset.npz
+                     every test image on which a requantized layer saturates (model/saturation.py:
+                     4 images, conv2 below -128), same fields: the system test runs them so that a
+                     design without saturation fails in CI
   mem/wgt.hex        weight buffer image, one 64-bit word per line ($readmemh)
   mem/param.hex      parameter buffer image (bias, M, S), one 64-bit word per line
   mem/desc.hex       layer descriptor table, one 32-bit word per line
@@ -49,6 +53,15 @@ def demo_positions(labels: np.ndarray) -> list[int]:
     return first + second
 
 
+def saturating_images(params: golden.QuantParams, data: dict) -> list[int]:
+    """Test-set indices of every image on which a requantized layer saturates."""
+    from model import saturation
+
+    q = golden.preprocess(data["test_x"])
+    layers = saturation.saturation(params, q)
+    return sorted({i for c in layers.values() for i in c["images_with_saturation"]})
+
+
 def write_hex(path: Path, words: np.ndarray, digits: int) -> None:
     path.write_text("".join(f"{int(w):0{digits}x}\n" for w in words))
 
@@ -81,6 +94,20 @@ def main() -> None:
     )
     correct = int(np.sum(out["pred"] == data["test_y"][idx]))
     print(f"quick subset: {len(idx)} images, golden correct {correct}/{len(idx)}")
+
+    sat_idx = np.array(saturating_images(params, data), dtype=np.int64)
+    sat_q = golden.preprocess(data["test_x"][sat_idx])
+    sat_out = golden.infer(params, sat_q)
+    np.savez(
+        out_artifacts / "saturation_subset.npz",
+        test_index=sat_idx.astype(np.int32),
+        pixels=data["test_x"][sat_idx],
+        q=sat_q,
+        label=data["test_y"][sat_idx].astype(np.int8),
+        logits=sat_out["logits"],
+        pred=sat_out["pred"].astype(np.int8),
+    )
+    print(f"saturation subset: test images {sat_idx.tolist()}")
 
     mem = hwmap.build_memory_image(params)
     mem_dir.mkdir(parents=True, exist_ok=True)

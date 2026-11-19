@@ -117,7 +117,8 @@ check_artifacts_reproducible() {
      || ! python -m model.export --params "$tmp/artifacts/params.npz" --out "$tmp" >/dev/null; then
     rm -rf "$tmp"; return 1
   fi
-  for f in artifacts/params.npz artifacts/quick_subset.npz artifacts/mem/wgt.hex \
+  for f in artifacts/params.npz artifacts/quick_subset.npz artifacts/saturation_subset.npz \
+           artifacts/mem/wgt.hex \
            artifacts/mem/param.hex artifacts/mem/desc.hex artifacts/mem/layout.json \
            artifacts/mem/img.hex artifacts/mem/label.hex artifacts/mem/demo.json \
            reports/quantize.json; do

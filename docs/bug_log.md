@@ -238,3 +238,19 @@ requantization, nested-loop convolution, pack/unpack round-trips) in `model/test
 - **Regression test.** `test_mutant_patches.py` passes for all 32 mutants, and
   `scripts/run_mutants.py` kills m26 and m29 with their system tests.
 
+## BUG-014 — No system test could see a design without saturation (Phase 4)
+
+- **Symptom.** With mutant m22 (int8 saturation removed from postproc) applied, every CI system
+  test passed; only the postproc unit test failed.
+- **How found.** The CI failure proof on a throwaway branch (run 44622993548): the system-test
+  step stayed green with m22 applied.
+- **Root cause (test gap).** No image in the 50-image quick subset saturates any layer, so the
+  network never exercised the saturating path in CI. Over the whole MNIST test set, conv2
+  saturates low 4 times (images 3081, 5555, 8619, 9427; model/reports/saturation.json).
+- **Fix.** `model/export.py` also writes `saturation_subset.npz` (those 4 images and their golden
+  logits), and `test_accel_top.py::test_saturating_images` runs them in the main Verilator system
+  test: every logit bit-exact, and the postproc must be seen saturating low during each run.
+- **Regression test.** With m22 applied, `test_saturating_images` fails at image 3081 with wrong
+  logits while the quick subset still passes; the coverage bin for real-data low saturation is
+  now met instead of a documented gap.
+

@@ -11,6 +11,8 @@ Tests:
                    first images also every performance counter, every cycle, vs an independent
                    count of the units' port activity, and the final ACT0 / ACT1 contents (conv2
                    and pool2 outputs) read back through the memory port
+  saturating       the 4 test images on which conv2 saturates low: bit-exact, and the
+                   post-processing is seen saturating during each run
   layer by layer   the first k layers only, k = 1 .. 5: each layer's output buffer (or the
                    LOGITs) equals the golden activation
   memory port      every buffer written and read back (byte buffers, 64-bit WGT and PARAM),
@@ -401,6 +403,40 @@ async def test_full_run(dut):
             out.flush()
             dut._log.info("images %d-%d done, %d logit mismatches so far", first, i, mismatches)
     assert mismatches == 0, f"{mismatches} of {len(q)} images differ from the golden logits"
+
+
+@cocotb.test(skip=TB_MODE != "main")
+async def test_saturating_images(dut):
+    """The 4 MNIST test images on which the network saturates (conv2 below -128;
+    model/reports/saturation.json): every logit bit-exact, and the engine's post-processing is
+    seen saturating low during each run, so a design without saturation fails here too."""
+    acc = await setup(dut)
+    with np.load(ARTIFACTS / "saturation_subset.npz") as f:
+        sat = {k: f[k] for k in f.files}
+    pp = dut.u_gemm_engine.u_postproc
+    seen = {"low": 0}
+
+    async def count_low():
+        while True:
+            await RisingEdge(pp.sat_lo)
+            await ReadOnly()
+            if int(pp.v3_q.value) and int(pp.rq3_q.value):
+                seen["low"] += 1
+
+    monitor = cocotb.start_soon(count_low())
+    await acc.load_images(sat["q"])
+    for i, test_index in enumerate(sat["test_index"]):
+        before = seen["low"]
+        assert await acc.run(img_sel=i) == ab.DONE | 5 << 8
+        got = await acc.logits()
+        want = [int(v) for v in sat["logits"][i]]
+        assert got == want, f"test image {test_index}: logits {got}, want {want}"
+        assert await acc.csr.read(ab.RESULT) == int(sat["pred"][i])
+        assert seen["low"] > before, f"test image {test_index}: no low saturation observed"
+    monitor.cancel()
+    dut._log.info(
+        "saturating images %s: bit-exact, saturation observed", sat["test_index"].tolist()
+    )
 
 
 async def check_final_activations(acc: Accel, gold: dict, i: int) -> None:

@@ -137,12 +137,6 @@ GAPS: dict[tuple[str, str, str], str] = {
         "(model/reports/saturation.json, all 10,000 images). Covered by the postproc unit test "
         "(directed and random values) and its saturation mutant (m22)."
     ),
-    ("accel_top", "network data: post-processing saturation", "low"): (
-        "not in the quick subset: over all 10,000 test images conv2 saturates low only 4 times "
-        "(images 3081, 5555, 8619, 9427; model/reports/saturation.json), and those images are "
-        "bit-exact in the full run (testbench/reports/full_run.md). Covered in the postproc unit "
-        "test."
-    ),
 }
 
 

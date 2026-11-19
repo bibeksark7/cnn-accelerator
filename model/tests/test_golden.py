@@ -244,6 +244,24 @@ def test_fpga_demo_init_files(quick):
     assert demo["test_index"] == [int(quick["test_index"][i]) for i in pos]
 
 
+def test_saturation_subset(params):
+    """saturation_subset.npz: the golden model reproduces its logits, and every image in it really
+    saturates (conv2 below -128), matching model/reports/saturation.json."""
+    from model import saturation
+
+    with np.load(ARTIFACTS / "saturation_subset.npz") as f:
+        sat = {k: f[k] for k in f.files}
+    out = golden.infer(params, sat["q"])
+    np.testing.assert_array_equal(out["logits"], sat["logits"])
+    np.testing.assert_array_equal(out["pred"], sat["pred"])
+    report = json.loads((REPORTS / "saturation.json").read_text())
+    want = sorted(i for c in report["layers"].values() for i in c["images_with_saturation"])
+    assert sat["test_index"].tolist() == want
+    layers = saturation.saturation(params, sat["q"])
+    assert layers["conv2"]["images_with_saturation"] == list(range(len(want)))
+    assert layers["conv2"]["below_minus_128"] == report["layers"]["conv2"]["below_minus_128"]
+
+
 # ----------------------------------------------------------------------------- primitives
 
 

@@ -63,7 +63,7 @@ Status values: **done** (test exists and passes in CI), **planned** (phase in br
 | Intermediate buffers match golden layer by layer | `test_accel_top.py::test_layer_by_layer`: runs of the first k layers (k = 1 .. 5) | conv1, pool1, conv2, pool2 outputs read back through the memory port; FC LOGITs | done |
 | Reset mid-run, then a clean run | `test_accel_top.py::test_reset_mid_run` | one-cycle reset during each of the six layers; CSRs reset; weights, images and descriptors kept | done |
 | No X on outputs after reset | `test_accel_top.py` `x_monitor` (Icarus, 4-state; every cycle of the quick run) | every control and status output never X/Z after reset; `o_csr_rdata` not X with an accepted request, `o_mem_rdata` not X with `o_mem_rvalid` | done |
-| Saturation in real data | `model/saturation.py` → `model/reports/saturation.json` (all 10,000 test images): conv1 never saturates; conv2 saturates low 4 times (images 3081, 5555, 8619, 9427), never high; those images are bit-exact in the full run. Coverage point `network data: post-processing saturation` (quick subset: not reached, documented gap) | done (measured); quick-subset bin a documented gap |
+| Saturation in real data | `model/saturation.py` → `model/reports/saturation.json` (all 10,000 test images): conv1 never saturates; conv2 saturates low 4 times (images 3081, 5555, 8619, 9427), never high; those images are bit-exact in the full run, and `test_accel_top.py::test_saturating_images` runs all four in CI (logits bit-exact, saturation observed; BUG-014). Coverage: low saturation met; high never occurs on MNIST (documented gap) | done |
 
 ## 4. Assertions, formal, mutation (Phase 3)
 
