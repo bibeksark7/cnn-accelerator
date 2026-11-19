@@ -5,7 +5,7 @@ applied in a temporary git worktree and its killing test from
 `testbench/mutants/README.md` is run; every killing test also passes on the unmutated
 design (baseline).
 
-**32 / 32 mutants killed.**
+**34 / 34 mutants killed.**
 
 | Mutant | Verdict | Killing test | First failure |
 |---|---|---|---|
@@ -23,7 +23,7 @@ design (baseline).
 | `m12_engine_row_out_stride` | KILLED | `testbench/unit/test_gemm_engine.py::test_gemm_engine[icarus-3-16]` | test_random_layers: addresses written twice: [642, 643, 643, 644, 644, 645, 645, 646] |
 | `m13_engine_prm_col_offset` | KILLED | `testbench/unit/test_gemm_engine.py::test_gemm_engine[icarus-3-16]` | test_random_layers: 27 wrong outputs, e.g. (addr, got, want) [(646, -128, 26), (647, -128, -122), (648, -128, 127), (649, -128, 127), (653, -128, -19)] |
 | `m14_engine_no_clear` | KILLED | `testbench/unit/test_gemm_engine.py::test_gemm_engine[icarus-3-16]` | test_random_layers: 49 wrong outputs, e.g. (addr, got, want) [(646, -9, 26), (647, -128, -122), (648, -128, 127), (653, -15, -19), (655, -128, -16)] |
-| `m15_engine_no_zero_forcing` | KILLED | `testbench/unit/test_gemm_engine.py::test_gemm_engine[verilator-8-16]` | [384470000] %Error: gemm_engine_impl_sva.sv:57: Assertion failed in gemm_engine.u_impl_sva.a_padded_rows_zero: 'assert' failed. \| first failing test: test_network_layers: cocotb expected it would shut down the simulation, but the simulation ended prematurely. This could be due to an assertion failure or a call to an exit routine in the HDL, or due to the simulator running out of events to process (is your clock running?). |
+| `m15_engine_no_zero_forcing` | KILLED | `testbench/unit/test_gemm_engine.py::test_gemm_engine[verilator-8-16]` | [384470000] %Error: gemm_engine_impl_sva.sv:64: Assertion failed in gemm_engine.u_impl_sva.a_padded_rows_zero: 'assert' failed. \| first failing test: test_network_layers: cocotb expected it would shut down the simulation, but the simulation ended prematurely. This could be due to an assertion failure or a call to an exit routine in the HDL, or due to the simulator running out of events to process (is your clock running?). |
 | `m16_argmax_tie_last` | KILLED | `testbench/unit/test_argmax_unit.py::test_argmax_unit[icarus]` | test_directed: tie at the max: got (index, max) (2, 9), want (1, 9), logits [5, 9, 9, 1, 0, 0, 0, 0, 0, 0] |
 | `m17_argmax_unsigned` | KILLED | `testbench/unit/test_argmax_unit.py::test_argmax_unit[icarus]` | test_random_with_planted_ties: case 0: got (index, max) (1, -54), want (4, 923), logits [-518, -54, 48, -460, 923] |
 | `m18_pool_unsigned_max` | KILLED | `testbench/unit/test_pool_unit.py::test_pool_unit[icarus]` | test_random_signed_shapes: 4 wrong outputs, e.g. (addr, got, want) [(5298, -28, 127), (5299, -61, 127), (5300, -56, 127), (5301, -79, 127)] |
@@ -41,3 +41,5 @@ design (baseline).
 | `m30_perf_clear_keeps_inputs` | KILLED | `testbench/unit/test_perf_counters.py::test_perf_counters[icarus-32]` | test_random_events: cycle 1312: (total, mac, rd, wr) (1, 0, 1, 1) != (0, 0, 0, 0) |
 | `m31_mac_clear_ignored` | KILLED | `testbench/unit/test_mac_cell.py::test_mac_cell[icarus]` | test_random_accumulate_with_gaps_and_clears: step 21: got 51328, want 0 |
 | `m32_mem_ready_while_busy` | KILLED | `testbench/unit/test_mem_port.py::test_mem_port[icarus-64]` | test_random_traffic: cycle 5: ready 1, want 0 |
+| `m33_argmax_last_hangs` | KILLED | `testbench/unit/test_argmax_unit.py::test_argmax_unit[icarus]` | test_directed: o_done never pulsed |
+| `m34_postproc_deadlock` | KILLED | `testbench/unit/test_postproc.py::test_postproc[icarus]` | test_directed: source sent 4/36 items before the guard expired |

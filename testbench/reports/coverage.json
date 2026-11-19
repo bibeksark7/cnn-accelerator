@@ -1,7 +1,7 @@
 {
  "script": "scripts/coverage_report.py",
- "bins": 114,
- "met": 110,
+ "bins": 110,
+ "met": 106,
  "documented_gaps": 4,
  "missed": 0,
  "rows": [
@@ -9,7 +9,7 @@
    "scope": "gemm_engine",
    "point": "layer type",
    "bin": "CONV",
-   "hits": 179,
+   "hits": 169,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -18,7 +18,7 @@
    "scope": "gemm_engine",
    "point": "layer type",
    "bin": "FC",
-   "hits": 90,
+   "hits": 71,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -27,7 +27,7 @@
    "scope": "gemm_engine",
    "point": "ReLU",
    "bin": "on",
-   "hits": 99,
+   "hits": 105,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -36,7 +36,7 @@
    "scope": "gemm_engine",
    "point": "ReLU",
    "bin": "off",
-   "hits": 80,
+   "hits": 64,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -45,7 +45,7 @@
    "scope": "gemm_engine",
    "point": "row tiles (M)",
    "bin": "last tile full",
-   "hits": 47,
+   "hits": 27,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -54,7 +54,7 @@
    "scope": "gemm_engine",
    "point": "row tiles (M)",
    "bin": "last tile partial",
-   "hits": 192,
+   "hits": 117,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -63,7 +63,7 @@
    "scope": "gemm_engine",
    "point": "column tiles (Ncols)",
    "bin": "last tile full",
-   "hits": 50,
+   "hits": 30,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -72,7 +72,7 @@
    "scope": "gemm_engine",
    "point": "column tiles (Ncols)",
    "bin": "last tile partial",
-   "hits": 189,
+   "hits": 114,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -81,7 +81,7 @@
    "scope": "gemm_engine",
    "point": "column tile count",
    "bin": "1",
-   "hits": 73,
+   "hits": 65,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -90,7 +90,7 @@
    "scope": "gemm_engine",
    "point": "column tile count",
    "bin": "more than 1",
-   "hits": 166,
+   "hits": 157,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -99,7 +99,7 @@
    "scope": "gemm_engine",
    "point": "K",
    "bin": "K = 1",
-   "hits": 5,
+   "hits": 3,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -108,7 +108,7 @@
    "scope": "gemm_engine",
    "point": "K",
    "bin": "1 < K <= K_TILE",
-   "hits": 116,
+   "hits": 91,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -117,7 +117,7 @@
    "scope": "gemm_engine",
    "point": "K",
    "bin": "K > K_TILE",
-   "hits": 118,
+   "hits": 128,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -126,7 +126,7 @@
    "scope": "gemm_engine",
    "point": "K chunks",
    "bin": "1",
-   "hits": 121,
+   "hits": 61,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -135,7 +135,7 @@
    "scope": "gemm_engine",
    "point": "K chunks",
    "bin": "more than 1",
-   "hits": 118,
+   "hits": 83,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -144,7 +144,7 @@
    "scope": "gemm_engine",
    "point": "layers without work",
    "bin": "C_out = 0",
-   "hits": 10,
+   "hits": 6,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -153,7 +153,7 @@
    "scope": "gemm_engine",
    "point": "layers without work",
    "bin": "M = 0 or K = 0",
-   "hits": 20,
+   "hits": 12,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -192,7 +192,7 @@
    "hits": 0,
    "goal": 1,
    "status": "GAP",
-   "gap": "unreachable: postproc's output is never stalled inside the engine (its i_ready is tied high), so its four stages never fill and its o_ready stays high."
+   "gap": "unreachable, and asserted: with its output never stalled postproc never fills, so the row register never waits (a_pp_in_never_stalled)."
   },
   {
    "scope": "gemm_engine",
@@ -210,13 +210,13 @@
    "hits": 0,
    "goal": 1,
    "status": "GAP",
-   "gap": "unreachable: the buffer write port and the LOGIT registers accept a write every cycle, so the engine ties postproc's i_ready high. Backpressure through postproc is covered by the postproc unit test and its formal proof (testbench/formal/postproc.sby)."
+   "gap": "unreachable, and asserted: the write ports accept a write every cycle, so the engine ties postproc's i_ready high (a_pp_out_never_stalled, gemm_engine_impl_sva.sv). Backpressure through postproc is covered by its unit test and formal proof."
   },
   {
    "scope": "postproc",
    "point": "mode",
    "bin": "requantize",
-   "hits": 4386,
+   "hits": 4334,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -225,7 +225,7 @@
    "scope": "postproc",
    "point": "mode",
    "bin": "FC bypass",
-   "hits": 486,
+   "hits": 476,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -234,7 +234,7 @@
    "scope": "postproc",
    "point": "saturation",
    "bin": "high",
-   "hits": 1554,
+   "hits": 1532,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -243,7 +243,7 @@
    "scope": "postproc",
    "point": "saturation",
    "bin": "low",
-   "hits": 1654,
+   "hits": 1638,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -252,7 +252,7 @@
    "scope": "postproc",
    "point": "saturation",
    "bin": "in range",
-   "hits": 1178,
+   "hits": 1164,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -279,7 +279,7 @@
    "scope": "postproc",
    "point": "ReLU",
    "bin": "clamped",
-   "hits": 994,
+   "hits": 986,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -288,7 +288,7 @@
    "scope": "postproc",
    "point": "ReLU",
    "bin": "passed",
-   "hits": 1210,
+   "hits": 1196,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -387,7 +387,7 @@
    "scope": "systolic_array",
    "point": "steps",
    "bin": "with gaps",
-   "hits": 114,
+   "hits": 79,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -396,7 +396,7 @@
    "scope": "systolic_array",
    "point": "steps",
    "bin": "back to back",
-   "hits": 72,
+   "hits": 107,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -468,7 +468,7 @@
    "scope": "pool_unit",
    "point": "values",
    "bin": "negative window maximum",
-   "hits": 40,
+   "hits": 390,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -477,7 +477,7 @@
    "scope": "pool_unit",
    "point": "values",
    "bin": "int8 extreme maximum",
-   "hits": 44,
+   "hits": 544,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -648,7 +648,7 @@
    "scope": "layer_seq",
    "point": "descriptor errors",
    "bin": "missing last",
-   "hits": 3,
+   "hits": 26,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -674,8 +674,8 @@
   {
    "scope": "layer_seq",
    "point": "reset mid-run",
-   "bin": "after 1 cycles",
-   "hits": 3,
+   "bin": "between units",
+   "hits": 11,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -683,44 +683,8 @@
   {
    "scope": "layer_seq",
    "point": "reset mid-run",
-   "bin": "after 3 cycles",
-   "hits": 3,
-   "goal": 1,
-   "status": "met",
-   "gap": null
-  },
-  {
-   "scope": "layer_seq",
-   "point": "reset mid-run",
-   "bin": "after 5 cycles",
-   "hits": 3,
-   "goal": 1,
-   "status": "met",
-   "gap": null
-  },
-  {
-   "scope": "layer_seq",
-   "point": "reset mid-run",
-   "bin": "after 9 cycles",
-   "hits": 3,
-   "goal": 1,
-   "status": "met",
-   "gap": null
-  },
-  {
-   "scope": "layer_seq",
-   "point": "reset mid-run",
-   "bin": "after 20 cycles",
-   "hits": 3,
-   "goal": 1,
-   "status": "met",
-   "gap": null
-  },
-  {
-   "scope": "layer_seq",
-   "point": "reset mid-run",
-   "bin": "after 60 cycles",
-   "hits": 3,
+   "bin": "while a unit runs",
+   "hits": 7,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -729,7 +693,7 @@
    "scope": "csr_block",
    "point": "CSR bus",
    "bin": "accepted at once",
-   "hits": 3048,
+   "hits": 3144,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -738,7 +702,7 @@
    "scope": "csr_block",
    "point": "CSR bus",
    "bin": "waited (descriptor read)",
-   "hits": 463,
+   "hits": 472,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -747,7 +711,7 @@
    "scope": "accel_top",
    "point": "layers started",
    "bin": "CONV",
-   "hits": 167,
+   "hits": 222,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -756,7 +720,7 @@
    "scope": "accel_top",
    "point": "layers started",
    "bin": "POOL",
-   "hits": 161,
+   "hits": 208,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -765,7 +729,7 @@
    "scope": "accel_top",
    "point": "layers started",
    "bin": "FC",
-   "hits": 71,
+   "hits": 83,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -774,7 +738,7 @@
    "scope": "accel_top",
    "point": "layers started",
    "bin": "ARGMAX",
-   "hits": 91,
+   "hits": 122,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -783,7 +747,7 @@
    "scope": "accel_top",
    "point": "inferences",
    "bin": "after loading images",
-   "hits": 5,
+   "hits": 13,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -792,7 +756,7 @@
    "scope": "accel_top",
    "point": "inferences",
    "bin": "back to back, no reload",
-   "hits": 47,
+   "hits": 142,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -801,7 +765,7 @@
    "scope": "accel_top",
    "point": "descriptor errors",
    "bin": "reserved op",
-   "hits": 1,
+   "hits": 2,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -810,33 +774,6 @@
    "scope": "accel_top",
    "point": "descriptor errors",
    "bin": "dst = IMG",
-   "hits": 2,
-   "goal": 1,
-   "status": "met",
-   "gap": null
-  },
-  {
-   "scope": "accel_top",
-   "point": "descriptor errors",
-   "bin": "dst = LOGIT",
-   "hits": 2,
-   "goal": 1,
-   "status": "met",
-   "gap": null
-  },
-  {
-   "scope": "accel_top",
-   "point": "descriptor errors",
-   "bin": "src = dst",
-   "hits": 1,
-   "goal": 1,
-   "status": "met",
-   "gap": null
-  },
-  {
-   "scope": "accel_top",
-   "point": "descriptor errors",
-   "bin": "src = LOGIT",
    "hits": 4,
    "goal": 1,
    "status": "met",
@@ -845,8 +782,35 @@
   {
    "scope": "accel_top",
    "point": "descriptor errors",
+   "bin": "dst = LOGIT",
+   "hits": 4,
+   "goal": 1,
+   "status": "met",
+   "gap": null
+  },
+  {
+   "scope": "accel_top",
+   "point": "descriptor errors",
+   "bin": "src = dst",
+   "hits": 2,
+   "goal": 1,
+   "status": "met",
+   "gap": null
+  },
+  {
+   "scope": "accel_top",
+   "point": "descriptor errors",
+   "bin": "src = LOGIT",
+   "hits": 8,
+   "goal": 1,
+   "status": "met",
+   "gap": null
+  },
+  {
+   "scope": "accel_top",
+   "point": "descriptor errors",
    "bin": "FC with dst != LOGIT",
-   "hits": 3,
+   "hits": 6,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -855,7 +819,7 @@
    "scope": "accel_top",
    "point": "descriptor errors",
    "bin": "ARGMAX with src != LOGIT",
-   "hits": 3,
+   "hits": 6,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -864,7 +828,7 @@
    "scope": "accel_top",
    "point": "descriptor errors",
    "bin": "missing last",
-   "hits": 1,
+   "hits": 2,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -873,7 +837,7 @@
    "scope": "accel_top",
    "point": "reset during a layer",
    "bin": "layer 0",
-   "hits": 1,
+   "hits": 2,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -882,7 +846,7 @@
    "scope": "accel_top",
    "point": "reset during a layer",
    "bin": "layer 1",
-   "hits": 1,
+   "hits": 2,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -891,7 +855,7 @@
    "scope": "accel_top",
    "point": "reset during a layer",
    "bin": "layer 2",
-   "hits": 1,
+   "hits": 2,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -900,7 +864,7 @@
    "scope": "accel_top",
    "point": "reset during a layer",
    "bin": "layer 3",
-   "hits": 1,
+   "hits": 2,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -909,7 +873,7 @@
    "scope": "accel_top",
    "point": "reset during a layer",
    "bin": "layer 4",
-   "hits": 1,
+   "hits": 2,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -918,7 +882,7 @@
    "scope": "accel_top",
    "point": "reset during a layer",
    "bin": "layer 5",
-   "hits": 1,
+   "hits": 2,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -927,7 +891,7 @@
    "scope": "accel_top",
    "point": "START",
    "bin": "ignored: busy",
-   "hits": 1,
+   "hits": 5,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -963,7 +927,7 @@
    "scope": "accel_top",
    "point": "CSR bus",
    "bin": "accepted at once",
-   "hits": 2938,
+   "hits": 4598,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -981,7 +945,7 @@
    "scope": "accel_top",
    "point": "memory port",
    "bin": "accepted at once",
-   "hits": 10704,
+   "hits": 61388,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -1020,7 +984,7 @@
    "hits": 0,
    "goal": 1,
    "status": "GAP",
-   "gap": "data property, not a design gap: on the quick-subset images the network's requantized values stay inside int8, so real data never saturates in these runs. Saturation high and low is covered by the postproc unit test (directed and random values)."
+   "gap": "data property, not a design gap: no MNIST test image saturates high in any layer (model/reports/saturation.json, all 10,000 images). Covered by the postproc unit test (directed and random values) and its saturation mutant (m22)."
   },
   {
    "scope": "accel_top",
@@ -1029,20 +993,20 @@
    "hits": 0,
    "goal": 1,
    "status": "GAP",
-   "gap": "data property, as for high saturation."
+   "gap": "not in the quick subset: over all 10,000 test images conv2 saturates low only 4 times (images 3081, 5555, 8619, 9427; model/reports/saturation.json), and those images are bit-exact in the full run (testbench/reports/full_run.md). Covered in the postproc unit test."
   }
  ],
  "simulations": [
   "accel_top_icarus_DESC_INITb6a1af1a_PARAM_INIT85cb18e0_WGT_INIT58411a5d",
   "accel_top_verilator_DESC_INITb6a1af1a_PARAM_INIT85cb18e0_PERF_W12_WGT_INIT58411a5d",
   "accel_top_verilator_DESC_INITb6a1af1a_PARAM_INIT85cb18e0_WGT_INIT58411a5d",
+  "agen_a_verilator_N8",
+  "agen_pool_verilator",
   "argmax_unit_icarus",
   "argmax_unit_verilator",
   "csr_block_icarus_DESC_DEPTH4_LOGIT_DEPTH8_PERF_W20",
   "csr_block_icarus_DESC_DEPTH8_LOGIT_DEPTH16_PERF_W32",
   "csr_block_verilator_DESC_DEPTH8_LOGIT_DEPTH16_PERF_W32",
-  "gemm_engine_icarus_K_TILE128_N8_PARAM_DEPTH64_WGT_DEPTH1024",
-  "gemm_engine_icarus_K_TILE16_N3_PARAM_DEPTH64_WGT_DEPTH1024",
   "gemm_engine_verilator_K_TILE128_N8_PARAM_DEPTH64_WGT_DEPTH1024",
   "gemm_engine_verilator_K_TILE16_N8_PARAM_DEPTH64_WGT_DEPTH1024",
   "gemm_engine_verilator_K_TILE1_N3_PARAM_DEPTH64_WGT_DEPTH1024",
