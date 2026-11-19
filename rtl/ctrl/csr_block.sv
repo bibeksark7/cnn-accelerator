@@ -4,6 +4,8 @@
 // Descriptor-table reads take one more cycle: the table is a synchronous RAM. The CSR block reads
 // it only in a cycle where the layer sequencer is not reading it (i_desc_gnt), so a descriptor
 // read during a run waits at most for the sequencer's 4-word fetch. Writes are accepted at once.
+// The master must hold a request stable until it is accepted (§10.1); if it withdraws a pending
+// descriptor read anyway, the RAM data is dropped and a later read starts over.
 //
 // Register map (byte offsets; address bits [1:0] ignored; unmapped addresses read 0, ignore
 // writes):
@@ -108,7 +110,9 @@ module csr_block #(
       desc_pend_q <= 1'b0;
     end else if (o_desc_re) begin
       desc_pend_q <= 1'b1;
-    end else if (o_csr_ready) begin
+    end else if (o_csr_ready || !i_csr_valid) begin
+      // Answered, or the request was withdrawn (a §10.1 violation): never answer a later read
+      // with this read's data.
       desc_pend_q <= 1'b0;
     end
   end

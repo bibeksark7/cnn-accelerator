@@ -208,3 +208,19 @@ requantization, nested-loop convolution, pack/unpack round-trips) in `model/test
   it fails on the old sequencer. Its expected model applies the offset only to buffer-reading ops
   and checks it for FC with `src = IMG`. `test_accel_top.py::test_errors` covers ARGMAX
   `src = IMG/ACT0/ACT1` and FC `dst = IMG/ACT0/ACT1` through the CSR bus.
+
+## BUG-012 — A withdrawn descriptor read left the CSR block's pending flag set (Phase 3 pre-work)
+
+- **Symptom.** If a master raised `i_csr_valid` for a `DESC` read and dropped it before
+  `o_csr_ready` (after the RAM read was issued), the next `DESC` read was answered in its first
+  cycle with the *previous* read's word.
+- **How found.** Review of the §10.1 handshake rule (Phase 2 checkpoint review); then
+  reproduced by `test_withdrawn_descriptor_read`, which fails on the old RTL.
+- **Root cause (RTL).** `desc_pend_q` was cleared only when a request was accepted. Withdrawing a
+  request violates §10.1, but the slave silently answered a different request with stale data
+  instead of starting over.
+- **Fix.** `csr_block` also clears `desc_pend_q` in any cycle without `i_csr_valid`. The
+  master-side rule itself is now checked by `a_csr_req_stable` (`testbench/sva/accel_top_if_sva.sv`).
+- **Regression test.** `test_csr_block.py::test_withdrawn_descriptor_read` (withdrawal followed by
+  a read of another word after 0, 1 and 3 idle cycles; each must wait for its own RAM read and
+  return its own word), on Icarus and Verilator.

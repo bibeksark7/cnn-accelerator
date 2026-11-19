@@ -5,7 +5,7 @@ descriptor table is a Python 1-cycle-latency RAM model, and its read grant (the 
 reading) is randomly withheld. Checked: every register and its decode, address bits [1:0]
 ignored, unmapped and out-of-range addresses read 0 and ignore writes, START pulses, IMG_SEL and
 DESC writes ignored while busy, register reads answered without wait states, descriptor reads
-only through a granted RAM read.
+only through a granted RAM read, and a withdrawn descriptor read leaving nothing pending.
 """
 
 from __future__ import annotations
@@ -199,6 +199,36 @@ async def test_descriptor_window(dut):
     assert ram.mem == model
     dut._log.info("descriptor read wait states: min %d, max %d", min(waits), max(waits))
     assert max(waits) > 1, "the grant was never withheld during a read"
+
+
+@cocotb.test()
+async def test_withdrawn_descriptor_read(dut):
+    """A descriptor read withdrawn after its RAM read (a §10.1 violation) leaves nothing pending:
+    the next descriptor read waits for its own RAM data instead of returning the old word."""
+    rng = seeded_rng(dut, "csr_withdraw")
+    ram, csr = await setup(dut, rng)
+    _, desc_depth, _ = dims(dut)
+    words = [rng.getrandbits(32) for _ in range(4 * desc_depth)]
+    for w, v in enumerate(words):
+        await csr.write(ab.DESC + 4 * w, v)
+    for gap in (0, 1, 3):
+        first, second = rng.sample(range(len(words)), 2)
+        await FallingEdge(dut.clk)
+        dut.i_csr_valid.value, dut.i_csr_we.value = 1, 0
+        dut.i_csr_addr.value = ab.DESC + 4 * first
+        await ReadOnly()
+        assert int(dut.o_desc_re.value) and not int(dut.o_csr_ready.value), "test timing is off"
+        await FallingEdge(dut.clk)
+        dut.i_csr_valid.value = 0  # withdrawn after the RAM read, before the answer
+        for _ in range(gap):
+            await FallingEdge(dut.clk)
+        reads = ram.reads
+        got, wait = await csr.read_with_wait(ab.DESC + 4 * second)
+        assert got == words[second], (
+            f"gap {gap}: DESC[{second}] = {got:#x}, want {words[second]:#x} "
+            f"(DESC[{first}] = {words[first]:#x})"
+        )
+        assert wait >= 1 and ram.reads == reads + 1, f"gap {gap}: answered without its own read"
 
 
 @pytest.mark.parametrize(
