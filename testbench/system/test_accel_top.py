@@ -7,15 +7,17 @@ time (the IMG buffer's capacity), and run back to back with IMG_SEL; weights are
 Tests:
   network          the quick subset (50 images): every logit (LOGIT[i]) and RESULT bit-exact
                    vs the committed golden outputs; STATUS, BUF_WR = the number of activation
-                   outputs, LAYER_CYC; for the first images also every performance counter vs an
-                   independent count of the units' port activity, and the final ACT0 / ACT1
-                   contents (conv2 and pool2 outputs) read back through the memory port
+                   outputs, CYC_TOTAL = sum(LAYER_CYC) + the sequencer's exact overhead; for the
+                   first images also every performance counter, every cycle, vs an independent
+                   count of the units' port activity, and the final ACT0 / ACT1 contents (conv2
+                   and pool2 outputs) read back through the memory port
   memory port      every buffer written and read back (byte buffers, 64-bit WGT and PARAM),
                    address bits above a buffer's width ignored, reserved selects, not ready while
                    busy, exactly one rvalid per read
   CSR              ID, CONFIG, the descriptor window, IMG_SEL / DESC writes and START ignored
                    while busy, START ignored while a memory-port read is pending, a read
-                   accepted in the START cycle returns exactly once while busy
+                   accepted in the START cycle returns exactly once while busy, a write accepted
+                   in the START cycle is performed
   errors           every spec §9 error through descriptors written over the CSR bus (including
                    ARGMAX with src != LOGIT and FC with dst != LOGIT), then a clean run
   reset            reset during each layer, then a clean run without reloading anything
@@ -175,6 +177,15 @@ class PortCounter:
             self.checked += 1
 
 
+def seq_overhead(completed: int, stopped_at_check: bool = False) -> int:
+    """Busy cycles outside LAYER_CYC for a run (layer_seq schedule, D-031): each completed layer
+    adds 7 (4 descriptor reads + capture, check, release), a layer stopped by a descriptor error
+    adds 6 (reads + capture, check), and the run's end adds 1. LAYER_CYC covers the cycles from a
+    unit's start through its done pulse. This is the sequencer's own schedule (not a unit or array
+    latency), so it holds for any array implementation."""
+    return 7 * completed + (6 if stopped_at_check else 0) + 1
+
+
 # Outputs written to ACT0/ACT1 per inference: conv1 + pool1 + conv2 + pool2 (every element once).
 ACT_WRITES = sum(net.LAYER_BY_NAME[n].out_elems for n in ("conv1", "pool1", "conv2", "pool2"))
 
@@ -216,7 +227,11 @@ async def test_network_quick_subset(dut):
             assert perf["wr"] == ACT_WRITES, f"image {i}: BUF_WR {perf['wr']} != {ACT_WRITES}"
             assert int(dut.o_cyc_total.value) == perf["total"]
             assert all(layers[:6]) and not any(layers[6:]), f"image {i}: LAYER_CYC {layers}"
-            assert sum(layers) < perf["total"], f"image {i}: layers {sum(layers)} >= total"
+            want_total = sum(layers) + seq_overhead(6)
+            assert perf["total"] == want_total, (
+                f"image {i}: CYC_TOTAL {perf['total']} != sum(LAYER_CYC) {sum(layers)} + "
+                f"sequencer overhead {seq_overhead(6)}"
+            )
             if counter:
                 seen = {"total": counter.cycles, "mac": counter.mac, "rd": counter.rd}
                 seen["wr"] = counter.wr
@@ -354,6 +369,28 @@ async def test_csr_rules(dut):
     await with_timeout(FallingEdge(dut.o_busy), RUN_TIMEOUT_US, "us")
     assert await csr.read(ab.STATUS) == ab.DONE | 5 << 8
     assert await acc.logits() == [int(v) for v in qs["logits"][0]]
+    # A memory-port write accepted in the same cycle as START (§10.3): both are accepted and the
+    # write is performed. It goes to an image slot the run does not read, so the run is unaffected.
+    addr = (NUM_SLOTS - 1) * IMG_SIZE + 5
+    old_word = await acc.mem.read(ab.SEL_IMG, addr)
+    new_word = (old_word ^ 0xA5) & 0xFF
+    await FallingEdge(dut.clk)
+    dut.i_mem_valid.value, dut.i_mem_we.value = 1, 1
+    dut.i_mem_sel.value, dut.i_mem_addr.value, dut.i_mem_wdata.value = ab.SEL_IMG, addr, new_word
+    dut.i_csr_valid.value, dut.i_csr_we.value = 1, 1
+    dut.i_csr_addr.value, dut.i_csr_wdata.value = ab.CTRL, 1
+    await ReadOnly()
+    both = int(dut.o_mem_ready.value) and int(dut.o_csr_ready.value)
+    assert both and not int(dut.o_busy.value), "write and START not offered in one idle cycle"
+    await FallingEdge(dut.clk)
+    dut.i_mem_valid.value = dut.i_csr_valid.value = 0
+    await ReadOnly()
+    assert int(dut.o_busy.value), "START not accepted together with the write"
+    await with_timeout(FallingEdge(dut.o_busy), RUN_TIMEOUT_US, "us")
+    assert await csr.read(ab.STATUS) == ab.DONE | 5 << 8
+    assert await acc.logits() == [int(v) for v in qs["logits"][0]]
+    got = await acc.mem.read(ab.SEL_IMG, addr)
+    assert got == new_word, f"write in the START cycle: read back {got:#x}, want {new_word:#x}"
 
 
 def network_table() -> list[D]:
@@ -404,12 +441,19 @@ async def test_errors(dut):
         assert await acc.csr.read(ab.RESULT) == 0, f"{what}: RESULT not cleared at START"
         layers = [await acc.csr.read(ab.LAYER_CYC + 4 * k) for k in range(hwmap.DESC_DEPTH)]
         assert all(layers[:layer]) and not any(layers[layer:]), f"{what}: LAYER_CYC {layers}"
+        total = await acc.csr.read(ab.CYC_TOTAL)
+        want_total = sum(layers) + seq_overhead(layer, stopped_at_check=True)
+        assert total == want_total, f"{what}: CYC_TOTAL {total}, want {want_total}"
     # Missing last: every descriptor is a (cheap) ARGMAX without last.
     argmax = replace(table0[5], last=0)
     await acc.write_desc_table([argmax] * hwmap.DESC_DEPTH)
     status = await acc.run(img_sel=0)
     want = ab.DONE | ab.ERROR | (hwmap.DESC_DEPTH - 1) << 8
     assert status == want, f"missing last: STATUS {status:#x}, want {want:#x}"
+    layers = [await acc.csr.read(ab.LAYER_CYC + 4 * k) for k in range(hwmap.DESC_DEPTH)]
+    total = await acc.csr.read(ab.CYC_TOTAL)
+    want_total = sum(layers) + seq_overhead(hwmap.DESC_DEPTH)
+    assert all(layers) and total == want_total, f"missing last: CYC_TOTAL {total}, {layers}"
     await acc.restore_desc_table()
     assert await acc.run(img_sel=0) == ab.DONE | 5 << 8
     assert await acc.logits() == [int(v) for v in qs["logits"][img]]

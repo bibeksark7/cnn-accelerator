@@ -422,7 +422,8 @@ At most one read is outstanding. Read-data latency is not fixed; masters wait fo
 - PARAM: from all 64 bits.
 
 A read accepted in the same cycle as an accepted START (no read was pending yet) completes
-normally: its data returns while `BUSY` is already high.
+normally: its data returns while `BUSY` is already high. A write accepted in the same cycle as an
+accepted START is performed.
 
 ## 11. Module interfaces
 
