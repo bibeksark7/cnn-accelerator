@@ -508,6 +508,15 @@ Earlier fits of `accel_top`, before the §9 LOGIT checks were added to the seque
 post-processing variable shifter). The worst path moves between these logic cones from fit to
 fit; every fit closed at 50 MHz with more than 5 ns of setup slack.
 
+**Performance-counter input register (Phase 3 pre-work, approved).** `perf_counters` registers
+`{busy, rd, wr, mac_active}` before the saturating adds. Every `accel_top` fit so far had a
+counter or a long data path within a few nanoseconds of the worst path, and the last one's worst
+path ran from `agen_a`'s read enable through the buffer multiplexers and the request popcount
+into the 33-bit `BUF_RD` add. The register cuts the counters out of the units' timing: their only
+cost is that the four counters lag the events by one more cycle (spec §10.2: final one cycle after
+`DONE`). The layer counters are not delayed; they count sequencer events, not unit ports. A clear
+also clears the input register, so the counted events are exactly those before (one cycle later).
+
 **Reading.**
 - Both blocks close timing at 50 MHz with margin on every corner. The whole design will be
   checked again in Phase 4.

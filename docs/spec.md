@@ -387,6 +387,12 @@ cycle, `BUF_RD` adds the number of reads issued to IMG, ACT0, ACT1, WGT and PARA
 Every performance counter is `PERF_W` bits wide (zero-extended in its register) and saturates
 at 2^`PERF_W` − 1.
 
+`CYC_TOTAL`, `CYC_MAC`, `BUF_RD` and `BUF_WR` register their inputs before adding, so an event
+shows in the register two cycles after it happens, and these four counters reach their final
+values one cycle after `DONE` is set (a read accepted in the first `DONE` cycle can miss the run's
+last cycle). `LAYER_CYC` is final when `DONE` is set. Events in the `START` cycle itself are not
+counted.
+
 ### 10.3 Memory port
 
 Loads and reads back the buffers while the accelerator is idle (images, weights, parameters, and

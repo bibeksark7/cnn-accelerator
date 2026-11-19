@@ -133,24 +133,46 @@ async def setup(dut) -> Accel:
 
 
 class PortCounter:
-    """Independent count of the units' buffer traffic while BUSY (unit ports, not the muxes)."""
+    """Independent count of the units' buffer traffic while BUSY (unit ports, not the muxes).
+
+    From the START cycle on, every cycle is checked against CYC_TOTAL, CYC_MAC, BUF_RD and BUF_WR:
+    the counters register their inputs before adding (D-024), so an event in cycle t shows in
+    cycle t + 2, and events in the START cycle itself are not counted.
+    """
 
     def __init__(self, dut):
         self.dut = dut
         self.rd = self.wr = self.mac = self.cycles = 0
+        self.checked = 0  # cycles compared against the hardware counters
 
     async def run(self):
         dut, g, p = self.dut, self.dut.u_gemm_engine, self.dut.u_pool_unit
-        while True:
-            await RisingEdge(dut.clk)
+        pc, seq = dut.u_perf_counters, dut.u_layer_seq
+        cum: list[tuple[int, int, int, int]] | None = None  # totals through each cycle since START
+        while True:  # sampled where the inputs driven at the falling edge have settled (D-018)
+            await FallingEdge(dut.clk)
             await ReadOnly()
-            if not int(dut.o_busy.value):
+            if int(seq.o_clear.value):  # START accepted: nothing in this cycle is counted
+                cum = [(0, 0, 0, 0)]
                 continue
-            self.cycles += 1
-            self.rd += int(g.o_src_re.value) + int(g.o_wgt_re.value) + int(g.o_prm_re.value)
-            self.rd += int(p.o_src_re.value)
-            self.wr += int(g.o_dst_we.value) + int(p.o_dst_we.value)
-            self.mac += int(g.o_mac_active.value)
+            if cum is None:
+                continue
+            if int(dut.o_busy.value):
+                self.cycles += 1
+                self.rd += int(g.o_src_re.value) + int(g.o_wgt_re.value) + int(g.o_prm_re.value)
+                self.rd += int(p.o_src_re.value)
+                self.wr += int(g.o_dst_we.value) + int(p.o_dst_we.value)
+                self.mac += int(g.o_mac_active.value)
+            cum.append((self.cycles, self.mac, self.rd, self.wr))
+            want = cum[-3] if len(cum) >= 3 else (0, 0, 0, 0)
+            got = tuple(
+                int(s.value) for s in (pc.o_cyc_total, pc.o_cyc_mac, pc.o_buf_rd, pc.o_buf_wr)
+            )
+            assert got == want, (
+                f"cycle {len(cum) - 1} after START: (total, mac, rd, wr) {got}, want {want} "
+                "(events two cycles earlier)"
+            )
+            self.checked += 1
 
 
 # Outputs written to ACT0/ACT1 per inference: conv1 + pool1 + conv2 + pool2 (every element once).
@@ -199,6 +221,7 @@ async def test_network_quick_subset(dut):
                 seen = {"total": counter.cycles, "mac": counter.mac, "rd": counter.rd}
                 seen["wr"] = counter.wr
                 assert perf == seen, f"image {i}: counters {perf}, unit ports {seen}"
+                assert counter.checked > perf["total"], f"image {i}: per-cycle check incomplete"
                 await check_final_activations(acc, golden_out, i)
             if i == 0:
                 dut._log.info("image 0: counters %s, LAYER_CYC %s", perf, layers)

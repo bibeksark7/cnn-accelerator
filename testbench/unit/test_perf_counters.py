@@ -1,6 +1,9 @@
 """perf_counters: cycle-by-cycle comparison with a Python model of spec §10.2 (D-027, D-028).
 
-Random busy, MAC-active and request patterns, layer start/done events, and clears. A narrow
+Random busy, MAC-active and request patterns, layer start/done events, and clears. The model
+includes the input register (D-024): busy, MAC-active and request events are added one cycle
+after they happen, the layer counters are not delayed, and a clear also drops the events of its
+own cycle. A narrow
 build (PERF_W = 8) drives every counter into saturation; the default width checks the full
 counters without saturation.
 """
@@ -29,6 +32,7 @@ class Model:
         self.tot = self.mac = self.rd = self.wr = 0
         self.layer = [0] * self.depth
         self.lay, self.running = 0, False
+        self.pipe = (0, 0, 0, 0)  # (busy, mac, rd, wr) of the previous cycle
 
     def sat(self, v):
         return min(v, self.max)
@@ -37,6 +41,7 @@ class Model:
         if clear:
             self.clear()
             return
+        (busy, mac, rd, wr), self.pipe = self.pipe, (busy, mac, rd, wr)
         if busy:
             self.tot = self.sat(self.tot + 1)
             self.mac = self.sat(self.mac + mac)

@@ -2,6 +2,13 @@
 //
 // All counters are cleared by i_clear (START), count only while i_busy, hold their values
 // afterwards, and saturate at 2^PERF_W - 1.
+//
+// Input register (timing, docs/decisions.md D-024): i_busy, i_mac_active, i_rd and i_wr are
+// registered before the saturating adds, so the buffer multiplexers' request logic and the adds
+// are in different cycles. An event in cycle t is added at the end of cycle t + 1 and shows in the
+// outputs in cycle t + 2, one cycle later than the layer counters. i_clear also clears the input
+// register, so events in the clear cycle are not counted (as without the register). CYC_TOTAL and
+// the other three counters therefore reach their final values one cycle after BUSY falls.
 //   cyc_total     cycles with i_busy high (START to DONE)
 //   cyc_mac       cycles with i_mac_active high (the array consumed a reduction step)
 //   buf_rd        buffer reads: each cycle adds the number of set bits of i_rd (0 .. RD_N)
@@ -28,7 +35,8 @@
 //   o_cyc_total, o_cyc_mac, o_buf_rd, o_buf_wr - counter values
 //   o_layer_cyc                   - layer counter L at [L*PERF_W +: PERF_W]
 //
-// Latency: a counted event shows in the output the next cycle.
+// Latency: cyc_total, cyc_mac, buf_rd, buf_wr: an event shows in the outputs two cycles later;
+// layer_cyc: one cycle later.
 module perf_counters #(
     parameter int PERF_W     = 32,
     parameter int DESC_DEPTH = 8,
@@ -55,16 +63,34 @@ module perf_counters #(
   localparam int INC_W = 4;  // holds 0 .. 15 requests per cycle
   localparam logic [PERF_W-1:0] MAX = '1;
 
-  // Number of set bits in the request vectors.
+  // Input register: the events of the previous cycle.
+  logic busy_q, mac_q;
+  logic [RD_N-1:0] rd_q;
+  logic [WR_N-1:0] wr_q;
+  always_ff @(posedge clk) begin
+    if (rst || i_clear) begin
+      busy_q <= 1'b0;
+      mac_q  <= 1'b0;
+      rd_q   <= '0;
+      wr_q   <= '0;
+    end else begin
+      busy_q <= i_busy;
+      mac_q  <= i_mac_active;
+      rd_q   <= i_rd;
+      wr_q   <= i_wr;
+    end
+  end
+
+  // Number of set bits in the registered request vectors.
   logic [INC_W-1:0] rd_inc, wr_inc;
   always_comb begin
     rd_inc = '0;
     for (int i = 0; i < RD_N; i++) begin
-      rd_inc = rd_inc + INC_W'(i_rd[i]);
+      rd_inc = rd_inc + INC_W'(rd_q[i]);
     end
     wr_inc = '0;
     for (int i = 0; i < WR_N; i++) begin
-      wr_inc = wr_inc + INC_W'(i_wr[i]);
+      wr_inc = wr_inc + INC_W'(wr_q[i]);
     end
   end
 
@@ -92,9 +118,9 @@ module perf_counters #(
         layer_cyc_q[l] <= '0;
       end
     end else begin
-      if (i_busy) begin
+      if (busy_q) begin
         cyc_total_q <= tot_sum[PERF_W] ? MAX : tot_sum[PERF_W-1:0];
-        if (i_mac_active) begin
+        if (mac_q) begin
           cyc_mac_q <= mac_sum[PERF_W] ? MAX : mac_sum[PERF_W-1:0];
         end
         buf_rd_q <= rd_sum[PERF_W] ? MAX : rd_sum[PERF_W-1:0];
