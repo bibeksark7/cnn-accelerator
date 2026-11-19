@@ -1,0 +1,64 @@
+{
+  "script": "scripts/full_run.py",
+  "images": 10000,
+  "clock_mhz": 50.0,
+  "counters": {
+    "cyc_total": {
+      "min": 47259,
+      "max": 47259,
+      "mean": 47259.0
+    },
+    "cyc_mac": {
+      "min": 3869,
+      "max": 3869,
+      "mean": 3869.0
+    },
+    "buf_rd": {
+      "min": 36137,
+      "max": 36137,
+      "mean": 36137.0
+    },
+    "buf_wr": {
+      "min": 9096,
+      "max": 9096,
+      "mean": 9096.0
+    }
+  },
+  "layer_cyc": {
+    "conv1": {
+      "min": 15386,
+      "max": 15386,
+      "mean": 15386.0
+    },
+    "pool1": {
+      "min": 5441,
+      "max": 5441,
+      "mean": 5441.0
+    },
+    "conv2": {
+      "min": 22914,
+      "max": 22914,
+      "mean": 22914.0
+    },
+    "pool2": {
+      "min": 1618,
+      "max": 1618,
+      "mean": 1618.0
+    },
+    "fc": {
+      "min": 1844,
+      "max": 1844,
+      "mean": 1844.0
+    },
+    "argmax": {
+      "min": 13,
+      "max": 13,
+      "mean": 13.0
+    }
+  },
+  "identical_for_every_image": true,
+  "sequencer_overhead_cycles": 43.0,
+  "time_per_inference_ms": 0.94518,
+  "inferences_per_second": 1057.9995344802048,
+  "mac_active_fraction": 0.08186800397807825
+}

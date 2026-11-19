@@ -1,0 +1,18 @@
+{
+  "script": "scripts/full_run.py",
+  "images": 10000,
+  "test_set_indices": [
+    0,
+    9999
+  ],
+  "logits_bit_exact": 10000,
+  "status_done_no_error": 10000,
+  "result_equals_golden_class": 10000,
+  "hardware_correct": 9865,
+  "hardware_accuracy": 0.9865,
+  "golden_accuracy_same_images": 0.9865,
+  "golden_integer_accuracy_full_test_set": 0.9865,
+  "float_accuracy_full_test_set": 0.9867,
+  "mismatches": [],
+  "simulation_seconds": 2643.3352155685425
+}
