@@ -51,5 +51,8 @@ bind gemm_engine gemm_engine_impl_sva #(
     .step_v_q     (step_v_q),
     .drain_start  (drain_start),
     .drain_active (dstate_q != D_IDLE),
-    .last_chunk   (last_chunk)
+    .last_chunk   (last_chunk),
+    .pp_valid     (pp_valid),
+    .pp_ready     (pp_ready),
+    .pp_out_ready (u_postproc.i_ready)
 );

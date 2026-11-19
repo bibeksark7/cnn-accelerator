@@ -13,6 +13,10 @@
 //   a_stream_after_load_done  streaming starts only on the cycle the chunk's last byte is staged
 //   a_drain_after_last_chunk  the drain starts only after the last K chunk of an output tile
 //   a_one_block_active        at most one of A-load, stream and drain is active (v1.0 schedule)
+//   a_pp_out_never_stalled    postproc's output is never backpressured: its i_ready is high (the
+//                             write ports accept a write every cycle)
+//   a_pp_in_never_stalled     so the row register never waits for postproc: pp_valid |-> pp_ready
+// (the two engine-internal stalls the coverage report lists as unreachable)
 module gemm_engine_impl_sva #(
     parameter int N      = 8,
     parameter int DATA_W = 8
@@ -34,7 +38,10 @@ module gemm_engine_impl_sva #(
     input logic                step_v_q,
     input logic                drain_start,
     input logic                drain_active,  // drain FSM not in D_IDLE (bound in engine scope)
-    input logic                last_chunk
+    input logic                last_chunk,
+    input logic                pp_valid,
+    input logic                pp_ready,
+    input logic                pp_out_ready  // postproc's i_ready (tied high in the engine)
 );
 
   // Lanes of padded rows: all DATA_W bits of lane i set when mask_q[i] is low.
@@ -74,5 +81,11 @@ module gemm_engine_impl_sva #(
   a_one_block_active :
   assert property (@(posedge clk) disable iff (rst)
       $onehot0({load_active, stream_active, drain_active}));
+
+  a_pp_out_never_stalled :
+  assert property (@(posedge clk) disable iff (rst) pp_out_ready);
+
+  a_pp_in_never_stalled :
+  assert property (@(posedge clk) disable iff (rst) pp_valid |-> pp_ready);
 
 endmodule

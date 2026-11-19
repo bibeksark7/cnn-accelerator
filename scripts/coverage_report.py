@@ -124,13 +124,13 @@ GOALS: dict[str, dict[str, list[str]]] = {
 # (scope, point, bin) -> why the bin cannot or need not be hit.
 GAPS: dict[tuple[str, str, str], str] = {
     ("gemm_engine", "postproc -> write port", "stall (valid, not ready)"): (
-        "unreachable: the buffer write port and the LOGIT registers accept a write every cycle, "
-        "so the engine ties postproc's i_ready high. Backpressure through postproc is covered by "
-        "the postproc unit test and its formal proof (testbench/formal/postproc.sby)."
+        "unreachable, and asserted: the write ports accept a write every cycle, so the engine "
+        "ties postproc's i_ready high (a_pp_out_never_stalled, gemm_engine_impl_sva.sv). "
+        "Backpressure through postproc is covered by its unit test and formal proof."
     ),
     ("gemm_engine", "row register -> postproc", "stall (valid, not ready)"): (
-        "unreachable: postproc's output is never stalled inside the engine (its i_ready is tied "
-        "high), so its four stages never fill and its o_ready stays high."
+        "unreachable, and asserted: with its output never stalled postproc never fills, so the "
+        "row register never waits (a_pp_in_never_stalled)."
     ),
     ("accel_top", "network data: post-processing saturation", "high"): (
         "data property, not a design gap: on the quick-subset images the network's requantized "
