@@ -39,7 +39,7 @@ def enum_of(module: str, signal: str) -> tuple[int, int]:
 
 
 def test_every_unused_encoding_fsm_is_bound():
-    assert len(binds()) == 6, binds()
+    assert len(binds()) == 7, binds()
 
 
 @pytest.mark.parametrize(("module", "w", "n", "state"), binds())

@@ -53,3 +53,12 @@ bind pool_unit fsm_legal_sva #(
     .rst  (rst),
     .state(state_q)
 );
+
+bind demo_ctrl fsm_legal_sva #(
+    .W       (2),
+    .N_STATES(3)
+) u_fsm_legal_sva (
+    .clk  (clk),
+    .rst  (rst),
+    .state(state_q)
+);
