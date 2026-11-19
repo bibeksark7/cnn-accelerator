@@ -93,3 +93,17 @@ Status values: **done** (test exists and passes in CI), **planned** (phase in br
 | Reset mid-operation | `reset during a layer` 0..5 (`accel_top`); `reset mid-run` (`layer_seq`); engine resets: FSM transition coverage (`test_gemm_engine.py`) | met |
 | Backpressure on every valid/ready interface | handshake monitors: `postproc` input and output, array `result rows`, engine-internal links (Verilator); bus wait states: `CSR bus`, `memory port` (`accel_top`, `csr_block`) | met, except the two engine-internal postproc stalls, which cannot occur (documented gaps) |
 | Error paths | `descriptor errors`, every §9 kind (`layer_seq`, `accel_top`); `START` ignored while busy / with a read pending | met |
+
+## 6. FPGA demo (Phase 4)
+
+| Feature | Test(s) | Coverage items | Status |
+|---|---|---|---|
+| Board I/O blocks | `test_sync_2ff`, `test_reset_gen` (power-up from 0, POR length, button assert/release latency), `test_debounce` (bounces shorter than the stable time never change the level; one press pulse per press, cycle by cycle vs a model), `test_hex7seg` (every code vs a segment table) | Icarus and Verilator | done |
+| CSR and memory-port register stages | `test_csr_slice`, `test_mem_slice`: random requests and wait states; each request reaches accel_top's side once, in order, held until accepted; every read returns its data once, in order | Icarus and Verilator | done |
+| Demo controller | `test_demo_ctrl`: random presses, busy and host traffic vs the intended behaviour (IMG_SEL then START on an accepted press; other presses ignored; host requests pass unchanged only while idle) | Icarus and Verilator; `fsm_legal_sva` bound | done |
+| Bring-up through the host side | `testbench/system/test_fpga_core.py::test_bring_up`: ID, CONFIG, DESC/WGT/PARAM read back equal to the hex files, image 0 in IMG | Verilator, every accel_top assertion bound (the stages are its bus masters) | done |
+| Demo runs | `test_fpga_core.py::test_demo_runs`: all 16 images via the controller: RESULT = golden class, label, every LOGIT, CYC_TOTAL = the counter report; a press while busy ignored | Verilator with SVA | done |
+| Board top | `testbench/system/test_de10lite_top.py`: power-up, bouncing KEY[0] presses, HEX0/HEX1/HEX5..2 and LEDR decoded for 4 images, '-' while busy, press while busy ignored, KEY[1] reset | Verilator | done |
+| Timing closure and constraints | `fpga/de10lite/build_win.sh`: full compile, setup/hold slack at 50 MHz, `unconstrained_paths.rpt` all zero | reports in `fpga/de10lite/reports/` | done (checkpoint 4 checks) |
+| On the board | the human programs the DE10-Lite and confirms the demo | — | pending (human) |
+

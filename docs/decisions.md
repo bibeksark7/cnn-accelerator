@@ -928,3 +928,36 @@ SystemVerilog covergroups (not supported by Icarus or Verilator).
 
 **Reason.** No new dependency, goals and gaps in one reviewed file, and a report that is
 regenerated from the tests rather than written by hand.
+
+## D-035 — FPGA top: core/board split, register stages, controller, build flow (Phase 4)
+
+**Decision.**
+- **Two levels.** `fpga_core` (controller, register stages, `accel_top`, label ROM, a host side)
+  is board-independent and is what the system-level bring-up test drives; `de10lite_top` adds
+  only the board: pins (Terasic names, `fpga/de10lite/pins.tcl` extracted from the golden top
+  shipped with Quartus 22.1 by `scripts/extract_de10lite_pins.py`), `reset_gen`, `sync_2ff`,
+  `debounce` and `hex7seg`.
+- **Register stages.** `csr_slice` and `mem_slice` register every request and response between
+  the masters and `accel_top`. Each holds one request (ready only when empty), so the handshake
+  rule toward `accel_top` holds by construction, and with the accel_top assertions bound inside
+  `fpga_core` the test checks that it does. They cost one or two cycles per access, which only
+  the host side sees.
+- **Controller.** Two CSR writes per press (IMG_SEL, then CTRL.START) through the same stage as
+  the host; the host owns the stage whenever the controller is idle and sees `ready` low during
+  the two writes, so neither master's request is changed. Status for the display comes from
+  `accel_top`'s status outputs, not CSR reads.
+- **Reset.** The power-on counter relies on the MAX 10 power-up value 0 of its registers (no
+  `initial` block in synthesizable RTL); simulations deposit 0. `KEY[1]` is synchronized; the
+  reset falls two cycles after the request.
+- **Init files.** `img.hex` is zero-filled to the IMG depth, so no buffer word is left undefined
+  and Quartus has no partial-file warnings. Parameters default to "" in RTL; `build.tcl` passes
+  the file names.
+- **Build.** `fpga/de10lite/build_win.sh` copies the RTL (flat), `build.tcl`, `sta_reports.tcl`,
+  `pins.tcl`, the SDC and the init files to a Windows build directory, runs the full compile and
+  the timing reports with Windows Quartus, and copies the reports to `fpga/de10lite/reports/`.
+  The `.sof` stays in the Windows directory for programming.
+
+**Reason.** A board-independent core that the same simulation flow can test end to end (bring-up
+through the host side, demo runs through the controller), and a board top small enough to check
+by inspection plus one board-level test.
+
