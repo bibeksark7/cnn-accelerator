@@ -819,6 +819,25 @@ place, catches a sequencer bug against any unit, and the WS array work (Phase 7)
 (`accel_top`) where they are connected and the whole network is checked against the golden model.
 
 
+## D-032 — Full-network run and performance-counter report (Phase 3)
+
+**Decision.** `scripts/full_run.py` builds the input vectors from the MNIST test set in the
+git-ignored `data/` cache (hardware input `pixel >> 1`) and the golden logits, then runs
+`test_accel_top.py::test_full_run` (`TB_MODE=full`) on Verilator with every assertion bound, in
+its own build directory. The test runs the images exactly as the quick subset does (16 per IMG
+load, back to back with IMG_SEL, weights from the init files) and writes one JSON line per image
+(logit match, RESULT, STATUS, every counter). The script writes
+`testbench/reports/full_run.{md,json}` and `testbench/reports/perf_counters.{md,json}` from those
+lines, so every README number about accuracy and cycles comes from a committed report.
+
+**Alternatives.** A pytest-parameterized full run (it would run on every `pytest testbench` and
+need the MNIST cache in CI); committing the vectors (a dataset copy, which the project rules
+forbid).
+
+**Reason.** The project plan allows the full run to be a locally run regression with a committed
+report (a pre-approved scope cut). A separate script keeps CI free of the dataset, while the
+run uses the same test code as CI.
+
 ## D-033 — Formal proofs: ports-only wrappers, immediate assertions, PDR (Phase 3)
 
 **Decision.**
@@ -847,3 +866,4 @@ state (adds verification code to synthesizable files).
 
 **Reason.** Unbounded proofs with the free toolchain, on the three blocks the verification plan names, with
 evidence that each property set is not vacuous.
+

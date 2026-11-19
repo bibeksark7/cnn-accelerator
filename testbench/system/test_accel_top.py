@@ -22,6 +22,9 @@ Tests:
                    ARGMAX with src != LOGIT and FC with dst != LOGIT), then a clean run
   reset            reset during each layer, then a clean run without reloading anything
   saturation       (PERF_W = 12 build) every counter saturates at 2^12 - 1
+  full run         (TB_MODE = full, driven by scripts/full_run.py, never in pytest) any number
+                   of MNIST test images: logits, RESULT and every counter per image, written to
+                   TB_RESULTS; fails unless every logit matches the golden model
 Verilator runs bind every assertion (units, engine, array, buffer ownership, accel_top, and the
 host-interface handshakes); test_accel_top_sva_fires shows the master-side handshake assertions
 are live.
@@ -67,7 +70,9 @@ SVA_SOURCES = [
     )
 ]
 TB_IMAGES = int(os.environ.get("TB_IMAGES", "50"))
-TB_MODE = os.environ.get("TB_MODE", "main")  # main | quick (network test only) | saturation
+TB_MODE = os.environ.get("TB_MODE", "main")  # main | quick | saturation | full
+TB_VECTORS = os.environ.get("TB_VECTORS", "")  # full mode: npz from scripts/full_run.py
+TB_RESULTS = os.environ.get("TB_RESULTS", "")  # full mode: JSON-lines output, one per image
 SVA_VIOLATION = os.environ.get("SVA_VIOLATION", "")  # set only by test_accel_top_sva_fires
 NUM_SLOTS = hwmap.NUM_IMAGES
 IMG_SIZE = net.IMG_SIZE
@@ -242,6 +247,45 @@ async def test_network_quick_subset(dut):
                 dut._log.info("image 0: counters %s, LAYER_CYC %s", perf, layers)
         dut._log.info("images %d-%d: logits and RESULT match", batch.start, batch.stop - 1)
     dut._log.info("%d images: logits and RESULT bit-exact vs the golden model", n_img)
+
+
+@cocotb.test(skip=TB_MODE != "full")
+async def test_full_run(dut):
+    """Every image of TB_VECTORS back to back (16 per IMG load); one JSON line per image."""
+    import json
+
+    acc = await setup(dut)
+    with np.load(TB_VECTORS) as f:
+        q, gold, labels, index = f["q"], f["logits"], f["label"], f["index"]
+    mismatches = 0
+    with open(TB_RESULTS, "w") as out:
+        for first in range(0, len(q), NUM_SLOTS):
+            batch = range(first, min(first + NUM_SLOTS, len(q)))
+            await acc.load_images(q[batch.start : batch.stop])
+            for i in batch:
+                status = await acc.run(img_sel=i - first)
+                got = await acc.logits()
+                want = [int(v) for v in gold[i]]
+                rec = {
+                    "index": int(index[i]),
+                    "label": int(labels[i]),
+                    "status": status,
+                    "logits_match": got == want,
+                    "result": await acc.csr.read(ab.RESULT),
+                    "golden_pred": int(np.argmax(gold[i])),
+                    "cyc_total": await acc.csr.read(ab.CYC_TOTAL),
+                    "cyc_mac": await acc.csr.read(ab.CYC_MAC),
+                    "buf_rd": await acc.csr.read(ab.BUF_RD),
+                    "buf_wr": await acc.csr.read(ab.BUF_WR),
+                    "layer_cyc": [await acc.csr.read(ab.LAYER_CYC + 4 * k) for k in range(6)],
+                }
+                if not rec["logits_match"]:
+                    rec["logits"], rec["golden_logits"] = got, want
+                    mismatches += 1
+                out.write(json.dumps(rec) + "\n")
+            out.flush()
+            dut._log.info("images %d-%d done, %d logit mismatches so far", first, i, mismatches)
+    assert mismatches == 0, f"{mismatches} of {len(q)} images differ from the golden logits"
 
 
 async def check_final_activations(acc: Accel, gold: dict, i: int) -> None:
