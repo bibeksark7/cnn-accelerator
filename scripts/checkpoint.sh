@@ -157,19 +157,27 @@ run_quartus_probes() {
 }
 
 # Phase 3 helpers.
-# The quick subset passed bit-exact in the checkpoint's own system-test run (Verilator, 50 images).
+# The quick subset passed bit-exact in this checkpoint's own system-test run: its JUnit file
+# ($REPORT_DIR/system.xml) has the Verilator main node passing, and that node's cocotb results
+# file, written during this checkpoint (newer than the phase stamp), has the network test passing.
 check_quick_subset() {
-  python - <<'PY'
-import glob, sys, xml.etree.ElementTree as ET
-files = glob.glob("sim_build/accel_top_verilator_*WGT_INIT*/test_accel_top[[]verilator-main-50[]].result.xml")
-files = [f for f in files if "PERF_W" not in f and "sva_violation" not in f and "full_run" not in f]
-ok = False
+  REPORT_DIR="$REPORT_DIR" python - <<'PY'
+import glob, os, sys, xml.etree.ElementTree as ET
+rd = os.environ["REPORT_DIR"]
+node = "test_accel_top[verilator-main-50]"
+cases = [tc for tc in ET.parse(f"{rd}/system.xml").iter("testcase") if tc.get("name") == node]
+ok_node = len(cases) == 1 and all(cases[0].find(t) is None for t in ("failure", "error", "skipped"))
+stamp = os.path.getmtime(f"{rd}/phase3.start")
+files = [f for f in glob.glob("sim_build/accel_top_verilator_*/test_accel_top[[]verilator-main-50[]].result.xml")
+         if os.path.getmtime(f) >= stamp]
+ok_net = False
 for f in files:
     for tc in ET.parse(f).iter("testcase"):
         if tc.get("name") == "test_network_quick_subset":
-            ok = tc.find("failure") is None and tc.find("skipped") is None and tc.find("error") is None
-print(f"{files}: test_network_quick_subset {'passed' if ok else 'did not pass'}")
-sys.exit(0 if ok else 1)
+            ok_net = all(tc.find(t) is None for t in ("failure", "error", "skipped"))
+print(f"{rd}/system.xml: {node} {'passed' if ok_node else 'NOT passed'}; "
+      f"fresh cocotb results {files}: test_network_quick_subset {'passed' if ok_net else 'NOT passed'}")
+sys.exit(0 if ok_node and ok_net else 1)
 PY
 }
 
@@ -266,6 +274,7 @@ phase_2() {
 phase_3() {
   echo "Phase 3: verification"
   rm -f sim_build/*/coverage.json  # coverage below comes from this run only
+  touch "$REPORT_DIR/phase3.start"
   check "unit tests pass (testbench/unit, Icarus and Verilator with SVA)" check_pytest unit 10 testbench/unit
   check "system tests pass (accel_top: CSR, memory port, errors, reset, layer by layer, SVA fires)" check_pytest system 5 testbench/system
   check "quick subset (50 images) bit-exact on Verilator with every assertion bound" check_quick_subset
