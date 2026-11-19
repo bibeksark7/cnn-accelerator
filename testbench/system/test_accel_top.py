@@ -362,11 +362,17 @@ def network_table() -> list[D]:
 
 @cocotb.test(skip=TB_MODE != "main")
 async def test_errors(dut):
-    """Each §9 error stops the run at its layer with ERROR = DONE = 1; then a clean run."""
+    """Each §9 error stops the run at its layer with ERROR = DONE = 1 and RESULT = 0 (cleared at
+    START, never set); then a clean run."""
     acc = await setup(dut)
     qs = quick_subset()
-    await acc.load_images(qs["q"][:1])
+    img = next(i for i, c in enumerate(qs["pred"]) if c != 0)  # a class RESULT = 0 can't fake
+    await acc.load_images(qs["q"][img : img + 1])
     table0 = network_table()
+    assert await acc.run(img_sel=0) == ab.DONE | 5 << 8
+    want_class = int(qs["pred"][img])
+    assert await acc.csr.read(ab.RESULT) == want_class
+    argmax_only = [table0[5]]  # re-reads the LOGITs left by the run above
     cases = [
         ("reserved op", 2, replace(table0[2], op=5)),
         ("CONV dst = IMG", 2, replace(table0[2], dst=hwmap.BUF_IMG)),
@@ -387,11 +393,15 @@ async def test_errors(dut):
     ]
     for what, layer, bad in cases:
         assert hwmap.descriptor_error(bad), f"test bug: {what} is legal"
+        await acc.write_desc_table(argmax_only)  # sets RESULT to the class again
+        assert await acc.run(img_sel=0) == ab.DONE, f"{what}: ARGMAX-only run"
+        assert await acc.csr.read(ab.RESULT) == want_class, f"{what}: ARGMAX-only RESULT"
         table = [*table0[:layer], bad, *table0[layer + 1 :]]
         await acc.write_desc_table(table)
         status = await acc.run(img_sel=0)
         want = ab.DONE | ab.ERROR | layer << 8
         assert status == want, f"{what}: STATUS {status:#x}, want {want:#x}"
+        assert await acc.csr.read(ab.RESULT) == 0, f"{what}: RESULT not cleared at START"
         layers = [await acc.csr.read(ab.LAYER_CYC + 4 * k) for k in range(hwmap.DESC_DEPTH)]
         assert all(layers[:layer]) and not any(layers[layer:]), f"{what}: LAYER_CYC {layers}"
     # Missing last: every descriptor is a (cheap) ARGMAX without last.
@@ -402,7 +412,8 @@ async def test_errors(dut):
     assert status == want, f"missing last: STATUS {status:#x}, want {want:#x}"
     await acc.restore_desc_table()
     assert await acc.run(img_sel=0) == ab.DONE | 5 << 8
-    assert await acc.logits() == [int(v) for v in qs["logits"][0]]
+    assert await acc.logits() == [int(v) for v in qs["logits"][img]]
+    assert await acc.csr.read(ab.RESULT) == want_class
 
 
 @cocotb.test(skip=TB_MODE != "main")

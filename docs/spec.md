@@ -278,7 +278,7 @@ The network's table is
 
 **Run.** Writing `CTRL.START = 1` while the accelerator is idle (`BUSY = 0`) and no memory-port
 read is pending (§10.3):
-1. clears `DONE`, `ERROR` and the performance counters;
+1. clears `DONE`, `ERROR`, `RESULT` and the performance counters;
 2. latches `IMG_SEL`;
 3. sets `BUSY`;
 4. executes descriptors 0, 1, 2, … in order until one with `last = 1` completes.
@@ -363,7 +363,7 @@ addresses read as 0 and ignore writes.
 | 0x010 | `CTRL` | WO | 0 | [0] `START` (write 1; ignored unless idle with no memory-port read pending, §9); reads 0 |
 | 0x014 | `STATUS` | RO | 0 | [0] `BUSY`, [1] `DONE`, [2] `ERROR`, [11:8] index of the current (or last) layer |
 | 0x018 | `IMG_SEL` | RW | 0 | [3:0] image index; latched at START; writes while busy are ignored |
-| 0x01C | `RESULT` | RO | 0 | [7:0] predicted class (valid when `DONE` and not `ERROR`) |
+| 0x01C | `RESULT` | RO | 0 | [7:0] predicted class (valid when `DONE` and not `ERROR`); cleared at START, set when the ARGMAX layer completes |
 | 0x020 | `CYC_TOTAL` | RO | 0 | cycles from START to DONE |
 | 0x024 | `CYC_MAC` | RO | 0 | cycles in which the array consumed a reduction step (the GEMM engine's `o_mac_active`) |
 | 0x028 | `BUF_RD` | RO | 0 | reads of IMG, ACT0, ACT1, WGT and PARAM issued by the engine and pool unit |

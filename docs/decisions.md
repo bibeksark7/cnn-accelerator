@@ -781,7 +781,12 @@ place, catches a sequencer bug against any unit, and the WS array work (Phase 7)
 - **LOGIT registers, not RAM.** 16 × 32 bits: the CSR block reads any entry combinationally, the
   argmax unit through a registered port with the buffers' 1-cycle latency, and reset clears them
   (the CSR reset value is 0).
-- **RESULT** is the argmax unit's held result register (reset 0), not a copy.
+- **RESULT** *(changed in the Phase 3 pre-work, approved)* is a register in `accel_top`:
+  cleared by reset and at an accepted START, loaded from the argmax unit's result on its done
+  pulse. Before, it was the argmax unit's own result register, which kept the previous run's class
+  through a run that stopped with an error before its ARGMAX layer. The spec only promised RESULT
+  when `DONE` and not `ERROR`, so that was not a spec violation, but a stale class after an error
+  is easy to misread (e.g. on the FPGA's HEX display); 8 flip-flops remove it.
 - **IMG offset.** `IMG_SEL · IMG_SIZE` is computed once at START by shift-and-add over the set
   bits of the constant (784 = 512 + 256 + 16): no multiplier, no per-layer cost.
 - **Sequencer schedule.** About 7 cycles per layer: 4 descriptor reads plus capture, check,

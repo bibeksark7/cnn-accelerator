@@ -375,6 +375,7 @@ module accel_top #(
 
   // ---------------------------------------------------------------- argmax unit, LOGIT registers
   logic a_rd_en;
+  logic [7:0] a_result;
   logic [31:0] logit_rdata;
   // Lint waiver: the maximum logit value is not reported (only its index, RESULT), and LOGIT
   // indices above the register file's width are ignored.
@@ -394,12 +395,24 @@ module accel_top #(
       .i_count  (c_in),
       .o_busy   (argmax_busy),
       .o_done   (argmax_done),
-      .o_result (result),
+      .o_result (a_result),
       .o_max    (a_max),
       .o_rd_en  (a_rd_en),
       .o_rd_idx (a_rd_idx),
       .i_rd_data(logit_rdata)
   );
+
+  // RESULT (spec §10.2): cleared at an accepted START, loaded when the argmax unit is done, so a
+  // run that ends without an ARGMAX (an error) never shows an earlier run's class.
+  logic [7:0] result_q;
+  always_ff @(posedge clk) begin
+    if (rst || seq_clear) begin
+      result_q <= '0;
+    end else if (argmax_done) begin
+      result_q <= a_result;
+    end
+  end
+  assign result = result_q;
 
   logit_rf #(
       .DEPTH(LOGIT_DEPTH),
