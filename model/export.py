@@ -10,6 +10,10 @@ Outputs (committed, under model/artifacts/):
   mem/param.hex      parameter buffer image (bias, M, S), one 64-bit word per line
   mem/desc.hex       layer descriptor table, one 32-bit word per line
   mem/layout.json    per-layer bases, sizes and decoded descriptors
+  mem/img.hex        IMG buffer image for the FPGA demo: 16 quick-subset images (the first of
+                     each class, then the second of classes 0-5), 784 bytes each, one byte per line
+  mem/label.hex      their true labels, one per line (the demo shows it on HEX1)
+  mem/demo.json      which quick-subset images are in img.hex, their labels and golden classes
 With --out DIR, the outputs go to DIR/artifacts/ instead; --params selects another params.npz.
 """
 
@@ -32,6 +36,16 @@ def quick_subset_indices(labels: np.ndarray, per_class: int = QUICK_PER_CLASS) -
     """First `per_class` test images of each class, returned in test-set order."""
     picks = [np.flatnonzero(labels == c)[:per_class] for c in range(net.NUM_CLASSES)]
     return np.sort(np.concatenate(picks))
+
+
+def demo_positions(labels: np.ndarray) -> list[int]:
+    """Quick-subset positions of the 16 FPGA demo images: the first image of each class, then the
+    second of classes 0-5, so every digit appears."""
+    first = [int(np.flatnonzero(labels == c)[0]) for c in range(net.NUM_CLASSES)]
+    second = [
+        int(np.flatnonzero(labels == c)[1]) for c in range(hwmap.NUM_IMAGES - net.NUM_CLASSES)
+    ]
+    return first + second
 
 
 def write_hex(path: Path, words: np.ndarray, digits: int) -> None:
@@ -73,6 +87,19 @@ def main() -> None:
     write_hex(mem_dir / "param.hex", mem.param, 16)
     write_hex(mem_dir / "desc.hex", mem.desc, 8)
     (mem_dir / "layout.json").write_text(json.dumps(mem.layout, indent=2) + "\n")
+
+    labels = data["test_y"][idx]
+    demo = demo_positions(labels)
+    img = np.concatenate([q[i].reshape(-1) for i in demo]).astype(np.uint8)
+    write_hex(mem_dir / "img.hex", img, 2)
+    write_hex(mem_dir / "label.hex", labels[demo].astype(np.uint8), 1)
+    demo_info = {
+        "quick_subset_positions": demo,
+        "test_index": [int(idx[i]) for i in demo],
+        "label": [int(labels[i]) for i in demo],
+        "golden_class": [int(out["pred"][i]) for i in demo],
+    }
+    (mem_dir / "demo.json").write_text(json.dumps(demo_info, indent=2) + "\n")
     t = mem.layout["_totals"]
     print(
         f"memory image: {t['wgt_words']} weight words, {t['param_words']} param words, "

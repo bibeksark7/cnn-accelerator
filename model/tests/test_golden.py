@@ -227,6 +227,23 @@ def test_saturation_report():
     assert all(c["above_127"] == c["below_minus_128"] == 0 for c in quick.values()), quick
 
 
+def test_fpga_demo_init_files(quick):
+    """mem/img.hex and mem/label.hex (FPGA demo) are the quick-subset images and labels named in
+    mem/demo.json, every digit appears, and the golden classes match the quick subset's."""
+    mem_dir = ARTIFACTS / "mem"
+    demo = json.loads((mem_dir / "demo.json").read_text())
+    pos = demo["quick_subset_positions"]
+    assert len(pos) == hwmap.NUM_IMAGES and sorted(set(demo["label"])) == list(range(10))
+    img = np.array([int(x, 16) for x in (mem_dir / "img.hex").read_text().split()], dtype=np.uint8)
+    want = np.concatenate([quick["q"][i].reshape(-1) for i in pos]).astype(np.uint8)
+    np.testing.assert_array_equal(img, want)
+    labels = [int(x, 16) for x in (mem_dir / "label.hex").read_text().split()]
+    assert labels == [int(quick["label"][i]) for i in pos] == demo["label"]
+    assert demo["golden_class"] == [int(quick["pred"][i]) for i in pos]
+    assert demo["test_index"] == [int(quick["test_index"][i]) for i in pos]
+    assert len(img) == hwmap.NUM_IMAGES * net.IMG_SIZE <= hwmap.IMG_DEPTH
+
+
 # ----------------------------------------------------------------------------- primitives
 
 

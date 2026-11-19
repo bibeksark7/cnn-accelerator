@@ -119,6 +119,7 @@ check_artifacts_reproducible() {
   fi
   for f in artifacts/params.npz artifacts/quick_subset.npz artifacts/mem/wgt.hex \
            artifacts/mem/param.hex artifacts/mem/desc.hex artifacts/mem/layout.json \
+           artifacts/mem/img.hex artifacts/mem/label.hex artifacts/mem/demo.json \
            reports/quantize.json; do
     cmp -s "model/$f" "$tmp/$f" || { echo "regenerated $f differs from model/$f"; rc=1; }
   done
