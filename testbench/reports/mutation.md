@@ -27,5 +27,5 @@ design (baseline).
 | `m16_argmax_tie_last` | KILLED | `testbench/unit/test_argmax_unit.py::test_argmax_unit[icarus]` | test_directed: tie at the max: got (index, max) (2, 9), want (1, 9), logits [5, 9, 9, 1, 0, 0, 0, 0, 0, 0] |
 | `m17_argmax_unsigned` | KILLED | `testbench/unit/test_argmax_unit.py::test_argmax_unit[icarus]` | test_random_with_planted_ties: case 0: got (index, max) (1, -54), want (4, 923), logits [-518, -54, 48, -460, 923] |
 | `m18_pool_unsigned_max` | KILLED | `testbench/unit/test_pool_unit.py::test_pool_unit[icarus]` | test_random_signed_shapes: 4 wrong outputs, e.g. (addr, got, want) [(5298, -28, 127), (5299, -61, 127), (5300, -56, 127), (5301, -79, 127)] |
-| `m19_pool_window_restart` | KILLED | `testbench/unit/test_pool_unit.py::test_pool_unit[icarus]` | test_network_pools: Can't convert LogicArray to int: it contains non-0/1 values |
+| `m19_pool_window_restart` | KILLED | `testbench/unit/test_pool_unit.py::test_pool_unit[icarus]` | test_network_pools: pool write data at 0x0: X/Z on o_dst_wdata = XXXXXXXX at 375 ns |
 | `m20_mux_read_not_gated` | KILLED | `testbench/unit/test_buf_port_mux.py::test_buf_port_mux[icarus-3-8-13]` | test_random_ownership: cycle 0: owner 1: got (1, 4426, 0, 6979, 187), want (0, 4426, 0, 6979, 187) |
