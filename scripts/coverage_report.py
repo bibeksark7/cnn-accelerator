@@ -133,12 +133,15 @@ GAPS: dict[tuple[str, str, str], str] = {
         "row register never waits (a_pp_in_never_stalled)."
     ),
     ("accel_top", "network data: post-processing saturation", "high"): (
-        "data property, not a design gap: on the quick-subset images the network's requantized "
-        "values stay inside int8, so real data never saturates in these runs. Saturation high "
-        "and low is covered by the postproc unit test (directed and random values)."
+        "data property, not a design gap: no MNIST test image saturates high in any layer "
+        "(model/reports/saturation.json, all 10,000 images). Covered by the postproc unit test "
+        "(directed and random values) and its saturation mutant (m22)."
     ),
     ("accel_top", "network data: post-processing saturation", "low"): (
-        "data property, as for high saturation."
+        "not in the quick subset: over all 10,000 test images conv2 saturates low only 4 times "
+        "(images 3081, 5555, 8619, 9427; model/reports/saturation.json), and those images are "
+        "bit-exact in the full run (testbench/reports/full_run.md). Covered in the postproc unit "
+        "test."
     ),
 }
 

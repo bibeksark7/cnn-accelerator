@@ -84,16 +84,21 @@ def relu(x: np.ndarray) -> np.ndarray:
     return np.maximum(x, 0)
 
 
-def requantize(y: np.ndarray, m: np.ndarray, s: np.ndarray) -> np.ndarray:
-    """int32 y -> int8: sat8((y * M + 2**(S-1)) >>> S). m, s broadcast over the last axis."""
+def requantize_unclamped(y: np.ndarray, m: np.ndarray, s: np.ndarray) -> np.ndarray:
+    """int32 y -> int64 (y * M + 2**(S-1)) >>> S, before saturation. m, s broadcast over the
+    last axis. requantize() is sat8 of this; it is also used to count saturation."""
     y = np.asarray(y, dtype=np.int64)
     if y.size and (y.min() < INT32_MIN or y.max() > INT32_MAX):
         raise OverflowError32("requantize input outside int32")
     m64 = np.asarray(m, dtype=np.int64)
     s64 = np.asarray(s, dtype=np.int64)
     p = y * m64  # |p| < 2**47: fits the 48-bit signed hardware product
-    r = (p + (np.int64(1) << (s64 - 1))) >> s64  # NumPy >> on int64 is arithmetic
-    return sat8(r).astype(np.int8)
+    return (p + (np.int64(1) << (s64 - 1))) >> s64  # NumPy >> on int64 is arithmetic
+
+
+def requantize(y: np.ndarray, m: np.ndarray, s: np.ndarray) -> np.ndarray:
+    """int32 y -> int8: sat8((y * M + 2**(S-1)) >>> S). m, s broadcast over the last axis."""
+    return sat8(requantize_unclamped(y, m, s)).astype(np.int8)
 
 
 def gemm_bias(a: np.ndarray, b: np.ndarray, bias: np.ndarray) -> np.ndarray:

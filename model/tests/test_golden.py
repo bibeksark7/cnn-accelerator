@@ -171,6 +171,62 @@ def test_descriptor_error_rules():
                 assert (hwmap.descriptor_error(d) is None) == ok, (op, src, dst)
 
 
+def test_descriptor_address_extents(params):
+    """Every access of the exported table stays inside its buffer: addresses wrap modulo the
+    buffer depth (spec §5), so an oversized layer would silently overwrite other data."""
+    mem = hwmap.build_memory_image(params)
+    depth = {hwmap.BUF_IMG: hwmap.IMG_DEPTH, hwmap.BUF_ACT0: hwmap.ACT_DEPTH,
+             hwmap.BUF_ACT1: hwmap.ACT_DEPTH, hwmap.BUF_LOGIT: hwmap.LOGIT_DEPTH}  # fmt: skip
+    for d in mem.descriptors:
+        what = f"{d}"
+        n_in = d.h_in * d.w_in * d.c_in
+        if d.op == hwmap.OP_ARGMAX:
+            assert d.src_base + d.c_in <= hwmap.LOGIT_DEPTH, what
+            continue
+        src_end = d.src_base + n_in
+        if d.src == hwmap.BUF_IMG:  # the last image slot is the farthest one IMG_SEL can pick
+            src_end += (hwmap.NUM_IMAGES - 1) * net.IMG_SIZE
+        assert src_end <= depth[d.src], f"source extent {src_end}: {what}"
+        if d.op == hwmap.OP_POOL:
+            n_out = (d.h_in // 2) * (d.w_in // 2) * d.c_in
+        elif d.op == hwmap.OP_CONV:
+            n_out = (d.h_in - 2) * (d.w_in - 2) * d.c_out
+        else:  # FC: one logit per output channel
+            n_out = d.c_out
+        assert d.dst_base + n_out <= depth[d.dst], f"destination extent: {what}"
+        if d.op in (hwmap.OP_CONV, hwmap.OP_FC):
+            k = 9 * d.c_in if d.op == hwmap.OP_CONV else n_in
+            words = -(-d.c_out // hwmap.N) * k  # packed B: one word per (column tile, k)
+            assert d.wgt_base + words <= hwmap.WGT_DEPTH, f"weight extent: {what}"
+            assert d.param_base + d.c_out <= hwmap.PARAM_DEPTH, f"parameter extent: {what}"
+
+
+def test_requantize_is_sat8_of_unclamped():
+    rng = np.random.default_rng(SEED + 9)
+    y = rng.integers(-(2**31), 2**31, 5000)
+    m = rng.integers(golden.M_MIN, golden.M_MAX + 1, 5000)
+    s = rng.integers(golden.S_MIN, golden.S_MAX + 1, 5000)
+    r = golden.requantize_unclamped(y, m, s)
+    np.testing.assert_array_equal(golden.requantize(y, m, s), golden.sat8(r).astype(np.int8))
+    assert (r > 127).any() and (r < -128).any()
+
+
+def test_saturation_report():
+    """model/reports/saturation.json (model/saturation.py, full test set): consistent counts,
+    and the quick subset, recomputed here, never saturates (as the coverage report records)."""
+    from model import saturation
+
+    r = json.loads((REPORTS / "saturation.json").read_text())
+    assert r["images"] == 10000
+    for name, c in r["layers"].items():
+        assert c["above_127"] + c["below_minus_128"] <= c["outputs"], name
+        assert bool(c["images_with_saturation"]) == bool(c["above_127"] + c["below_minus_128"])
+    with np.load(ARTIFACTS / "quick_subset.npz") as f:
+        q = f["q"]
+    quick = saturation.saturation(golden.QuantParams.load(), q)
+    assert all(c["above_127"] == c["below_minus_128"] == 0 for c in quick.values()), quick
+
+
 # ----------------------------------------------------------------------------- primitives
 
 

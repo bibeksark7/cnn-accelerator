@@ -1,0 +1,25 @@
+{
+  "script": "model/saturation.py",
+  "images": 10000,
+  "layers": {
+    "conv1": {
+      "outputs": 54080000,
+      "above_127": 0,
+      "below_minus_128": 0,
+      "relu_zeroed": 4658788,
+      "images_with_saturation": []
+    },
+    "conv2": {
+      "outputs": 19360000,
+      "above_127": 0,
+      "below_minus_128": 4,
+      "relu_zeroed": 13964376,
+      "images_with_saturation": [
+        3081,
+        5555,
+        8619,
+        9427
+      ]
+    }
+  }
+}
