@@ -19,7 +19,7 @@ from cocotb.triggers import FallingEdge, ReadOnly, RisingEdge
 
 from common.bits import to_signed, to_unsigned
 from common.runner import RTL_DIR, SIMULATORS, SVA_DIR, run_cocotb, run_sva_violation
-from common.sim import seeded_rng, start_clock_and_reset, wait_until
+from common.sim import resolved, seeded_rng, start_clock_and_reset, wait_until
 from model import golden, net
 
 SOURCES = [RTL_DIR / "addr" / "agen_pool.sv", RTL_DIR / "post" / "pool_unit.sv"]
@@ -28,16 +28,21 @@ SVA_VIOLATION = os.environ.get("SVA_VIOLATION", "")
 
 
 async def serve(dut, src: dict[int, int], writes: dict[int, int], dup: list[int]) -> None:
-    """Synchronous-read source buffer (data right after the accepting edge) and a write log."""
+    """Synchronous-read source buffer (data right after the accepting edge) and a write log.
+
+    Strobes, addresses and write data are read with `resolved`: an X fails with its signal name.
+    """
     while True:
         await FallingEdge(dut.clk)
         await ReadOnly()
-        read = int(dut.o_src_addr.value) if int(dut.o_src_re.value) else None
-        if int(dut.o_dst_we.value):
-            a = int(dut.o_dst_addr.value)
+        read = None
+        if resolved(dut.o_src_re, "pool read strobe"):
+            read = resolved(dut.o_src_addr, "pool read address")
+        if resolved(dut.o_dst_we, "pool write strobe"):
+            a = resolved(dut.o_dst_addr, "pool write address")
             if a in writes:
                 dup.append(a)
-            writes[a] = to_signed(int(dut.o_dst_wdata.value), 8)
+            writes[a] = to_signed(resolved(dut.o_dst_wdata, f"pool write data at {a:#x}"), 8)
         await RisingEdge(dut.clk)
         if read is not None:
             dut.i_src_rdata.value = to_unsigned(src.get(read, 0), 8)

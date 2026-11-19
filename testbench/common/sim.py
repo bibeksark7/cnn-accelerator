@@ -1,4 +1,4 @@
-"""Common cocotb helpers: clock, reset, seeded RNG, bounded waits."""
+"""Common cocotb helpers: clock, reset, seeded RNG, bounded waits, X-checked reads."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ import random
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, FallingEdge, ReadOnly, RisingEdge
+from cocotb.utils import get_sim_time
 
 CLK_PERIOD_NS = 10
 DEFAULT_SEED = 20261117
@@ -45,3 +46,17 @@ async def wait_until(dut, predicate, timeout_cycles: int, what: str) -> int:
         if predicate():
             return n
     raise TimeoutError(f"timed out after {timeout_cycles} cycles waiting for {what}")
+
+
+def resolved(handle, what: str) -> int:
+    """The value of `handle` as an int; fails with an explicit message if any bit is X or Z.
+
+    Use it wherever a monitor turns a DUT output into a number, so an X shows up as
+    "<what>: X/Z on <signal>" with its time and bit pattern, not as a conversion error.
+    """
+    value = handle.value
+    if not value.is_resolvable:
+        raise AssertionError(
+            f"{what}: X/Z on {handle._name} = {value} at {get_sim_time(unit='ns'):.0f} ns"
+        )
+    return int(value)

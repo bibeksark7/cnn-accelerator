@@ -17,7 +17,7 @@ from cocotb.triggers import FallingEdge, ReadOnly, RisingEdge
 
 from common.bits import to_signed, to_unsigned
 from common.runner import RTL_DIR, SIMULATORS, SVA_DIR, run_cocotb, run_sva_violation
-from common.sim import seeded_rng, start_clock_and_reset
+from common.sim import resolved, seeded_rng, start_clock_and_reset
 
 I32_MIN, I32_MAX = -(2**31), 2**31 - 1
 SOURCES = [RTL_DIR / "post" / "argmax_unit.sv"]
@@ -26,10 +26,13 @@ SVA_VIOLATION = os.environ.get("SVA_VIOLATION", "")
 
 
 async def serve(dut, regs: list[int]) -> None:
+    """LOGIT register-file model (1-cycle read latency); an X read strobe or index fails."""
     while True:
         await FallingEdge(dut.clk)
         await ReadOnly()
-        idx = int(dut.o_rd_idx.value) if int(dut.o_rd_en.value) else None
+        idx = None
+        if resolved(dut.o_rd_en, "argmax read enable"):
+            idx = resolved(dut.o_rd_idx, "argmax read index")
         await RisingEdge(dut.clk)
         if idx is not None:
             dut.i_rd_data.value = to_unsigned(regs[idx], 32)
@@ -44,13 +47,14 @@ async def run_argmax(dut, regs: list[int], base: int, count: int) -> tuple[int, 
     for _ in range(count + 100):  # hang guard, not a latency
         await RisingEdge(dut.clk)
         await ReadOnly()
-        if int(dut.o_done.value):
+        if resolved(dut.o_done, "argmax done"):
             break
         await FallingEdge(dut.clk)
         dut.i_start.value = 0
     else:
         raise TimeoutError("o_done never pulsed")
-    result, best = int(dut.o_result.value), to_signed(int(dut.o_max.value), 32)
+    result = resolved(dut.o_result, "argmax result at done")
+    best = to_signed(resolved(dut.o_max, "argmax maximum at done"), 32)
     await FallingEdge(dut.clk)
     dut.i_start.value = 0
     await FallingEdge(dut.clk)
