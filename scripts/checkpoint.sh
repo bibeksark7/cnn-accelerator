@@ -280,7 +280,7 @@ phase_3() {
   check "quick subset (50 images) bit-exact on Verilator with every assertion bound" check_quick_subset
   check "full run report: >= 1,000 MNIST test images, 100% logit match (testbench/reports/full_run.json)" check_full_run_report
   check "functional coverage: goals met or gaps documented (scripts/coverage_report.py --check)" check_coverage
-  check "formal proofs pass, and fail on their mutants (testbench/formal)" check_pytest formal 12 testbench/formal
+  check "formal proofs pass, and fail on their mutants (testbench/formal)" check_pytest formal 17 testbench/formal
   check "every mutant killed (scripts/run_mutants.py; committed report complete)" check_mutants
   check "script tests pass (lint fixtures, Quartus compatibility checker, mutant patches)" check_pytest scripts 10 scripts/tests
   check "golden model tests" check_pytest model 20 model/tests

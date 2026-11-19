@@ -1,0 +1,28 @@
+# Bounded check of rtl/post/argmax_unit.sv at full width (VAL_W = 32, IDX_W = 8, symbolic
+# indices, windows of at most MAX_COUNT = 10 logits); properties in argmax_unit_full_props.sv.
+# Run by test_formal.py. Unbounded engines did not finish at this width (D-033); the unbounded
+# proof is argmax_unit.sby at VAL_W = 4, IDX_W = 3.
+# Tasks: prove (BMC to depth 40: every run starting in the first 28 cycles after reset, back
+# to back) and cover (every cover statement reachable).
+[tasks]
+prove
+cover
+
+[options]
+prove: mode bmc
+prove: depth 40
+cover: mode cover
+cover: depth 16
+
+[engines]
+prove: abc bmc3
+cover: smtbmc yices
+
+[script]
+read_verilog -formal -sv argmax_unit.sv
+read_verilog -formal -sv argmax_unit_full_props.sv
+prep -top argmax_unit_full_props
+
+[files]
+../../rtl/post/argmax_unit.sv
+argmax_unit_full_props.sv

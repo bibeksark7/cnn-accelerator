@@ -1,14 +1,17 @@
 """Formal proofs with SymbiYosys (docs/decisions.md D-033).
 
 Each `<module>.sby` has two tasks. `prove` proves the assertions in `<module>_props.sv` for all
-inputs (unbounded: k-induction for the MAC cell, PDR for argmax and postproc); `cover` must reach
+inputs (unbounded: k-induction for the MAC cell, PDR for argmax and postproc; argmax_unit_full is
+a bounded check, see below); `cover` must reach
 every cover statement (a witness trace exists). Every proof must PASS on the RTL, and must FAIL
 on the named mutant from testbench/mutants/ with the named property, which shows the properties
 constrain the behaviour they describe (not vacuous).
 
   mac_cell      accumulate exactly a*b, clear, hold, operand/valid forwarding (32-bit acc)
   argmax_unit   result is the first maximum of the window, done exactly count + 2 cycles after
-                the start (VAL_W = 4, IDX_W = 3: 8 logits)
+                the start (VAL_W = 4, IDX_W = 3: 8 logits; unbounded)
+  argmax_unit_full  the same at full width (VAL_W = 32, IDX_W = 8) with symbolic indices,
+                bounded: BMC to depth 40 with windows of at most 10 logits
   postproc      the elastic pipeline's handshake: in order, no loss or duplication, at most
                 four inside, ready when there is room, output stable under backpressure, a
                 4-cycle latency and a full drain while i_ready stays high
@@ -28,7 +31,7 @@ FORMAL_DIR = Path(__file__).resolve().parent
 MUTANT_DIR = ROOT / "testbench" / "mutants"
 WORK_DIR = ROOT / "sim_build" / "formal"
 
-PROOFS = ["mac_cell", "argmax_unit", "postproc"]
+PROOFS = ["mac_cell", "argmax_unit", "argmax_unit_full", "postproc"]
 MUTANTS = [  # (proof, mutant patch, property that must fail)
     ("mac_cell", "m31_mac_clear_ignored", "p_clear"),
     ("argmax_unit", "m16_argmax_tie_last", "p_lowest_tie"),
@@ -36,6 +39,9 @@ MUTANTS = [  # (proof, mutant patch, property that must fail)
     ("postproc", "m24_postproc_ready_dropped", "p_stable"),
     ("argmax_unit", "m33_argmax_last_hangs", "p_done_on_time"),
     ("postproc", "m34_postproc_deadlock", "p_drains"),
+    ("argmax_unit_full", "m16_argmax_tie_last", "p_j_before_lower"),
+    ("argmax_unit_full", "m17_argmax_unsigned", "p_j_not_above"),
+    ("argmax_unit_full", "m33_argmax_last_hangs", "p_done_on_time"),
 ]
 
 

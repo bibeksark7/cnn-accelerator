@@ -878,6 +878,12 @@ run uses the same test code as CI.
   postproc, four elements inside after a 3-cycle output stall. Mutants m33 (argmax stuck in its
   last state) and m34 (postproc deadlock once stages 3 and 4 are full) change no value, only
   progress; they fail `p_done_on_time` and `p_drains`.
+- **argmax at full width** *(Phase 3 review)*. `argmax_unit_full_props.sv` uses symbolic
+  indices (two free positions with free values; other reads arbitrary) at VAL_W = 32, IDX_W = 8.
+  No unbounded engine finished (PDR stopped after 25 minutes, with and without a count limit;
+  k-induction at depth 20 fails its induction step, since runs last up to 257 cycles), so it is a
+  bounded check: abc bmc3 to depth 40 with windows of at most 10 logits (the network uses 10),
+  14 s. A local one-off run to depth 64 without the count limit also passed (384 s; not in CI).
 - **Each mutant fails on its property alone.** For the mutant runs the test removes every other
   assertion (`chformal -assert -remove t:$check c:<prop> %d`), so the named property by itself
   catches the bug; PDR otherwise stops at whichever property it reaches first.
