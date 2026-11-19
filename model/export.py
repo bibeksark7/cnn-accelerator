@@ -11,7 +11,8 @@ Outputs (committed, under model/artifacts/):
   mem/desc.hex       layer descriptor table, one 32-bit word per line
   mem/layout.json    per-layer bases, sizes and decoded descriptors
   mem/img.hex        IMG buffer image for the FPGA demo: 16 quick-subset images (the first of
-                     each class, then the second of classes 0-5), 784 bytes each, one byte per line
+                     each class, then the second of classes 0-5), 784 bytes each, one byte per line,
+                     zero-filled to the buffer depth
   mem/label.hex      their true labels, one per line (the demo shows it on HEX1)
   mem/demo.json      which quick-subset images are in img.hex, their labels and golden classes
 With --out DIR, the outputs go to DIR/artifacts/ instead; --params selects another params.npz.
@@ -90,7 +91,8 @@ def main() -> None:
 
     labels = data["test_y"][idx]
     demo = demo_positions(labels)
-    img = np.concatenate([q[i].reshape(-1) for i in demo]).astype(np.uint8)
+    img = np.zeros(hwmap.IMG_DEPTH, dtype=np.uint8)  # the whole buffer: no unset words
+    img[: len(demo) * net.IMG_SIZE] = np.concatenate([q[i].reshape(-1) for i in demo])
     write_hex(mem_dir / "img.hex", img, 2)
     write_hex(mem_dir / "label.hex", labels[demo].astype(np.uint8), 1)
     demo_info = {
