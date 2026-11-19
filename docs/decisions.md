@@ -521,6 +521,7 @@ into the 33-bit `BUF_RD` add. The register cuts the counters out of the units' t
 cost is that the four counters lag the events by one more cycle (spec §10.2: final one cycle after
 `DONE`). The layer counters are not delayed; they count sequencer events, not unit ports. A clear
 also clears the input register, so the counted events are exactly those before (one cycle later).
+The spec §10.2 note on the lag (final one cycle after `DONE`) was approved on 2026-11-19.
 
 **Reading.**
 - Both blocks close timing at 50 MHz with margin on every corner. The whole design will be
@@ -714,6 +715,8 @@ reuse the address generators and the 1-cycle read convention already verified.
   instead of returning 0 (§10.1).
 - **A memory-port read accepted in the same cycle as START** completes normally (§10.3; see
   D-016).
+- **A memory-port write accepted in the same cycle as START** is performed (§10.3; approved
+  2026-11-19, tested by `test_csr_rules`).
 - **Address-range policy.** Addresses are taken modulo each buffer's power-of-two depth (high bits
   ignored), as for the memory port. Accesses are never out of range; oversized descriptors wrap
   and are not detected. Checking ranges would need the layer's extent (a multiply per descriptor)
