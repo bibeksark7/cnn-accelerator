@@ -27,7 +27,8 @@ Tests:
   full run         (TB_MODE = full, driven by scripts/full_run.py, never in pytest) any number
                    of MNIST test images: logits, RESULT and every counter per image, written to
                    TB_RESULTS; fails unless every logit matches the golden model
-Icarus runs check that no output is X after reset (data outputs only while valid).
+Icarus runs check that no output is X after reset (data outputs only while valid): the quick
+network run, and (xcheck) the error and mid-run reset tests.
 Verilator runs bind every assertion (units, engine, array, buffer ownership, accel_top, the
 host-interface handshakes, internal valid/ready links and legal FSM states);
 test_accel_top_sva_fires shows the master-side handshake assertions are live.
@@ -81,7 +82,7 @@ SVA_SOURCES = [
     )
 ]
 TB_IMAGES = int(os.environ.get("TB_IMAGES", "50"))
-TB_MODE = os.environ.get("TB_MODE", "main")  # main | quick | saturation | full
+TB_MODE = os.environ.get("TB_MODE", "main")  # main | quick | xcheck | saturation | full
 TB_VECTORS = os.environ.get("TB_VECTORS", "")  # full mode: npz from scripts/full_run.py
 TB_RESULTS = os.environ.get("TB_RESULTS", "")  # full mode: JSON-lines output, one per image
 SVA_VIOLATION = os.environ.get("SVA_VIOLATION", "")  # set only by test_accel_top_sva_fires
@@ -602,7 +603,7 @@ def network_table() -> list[D]:
     return [D.decode(DESC_WORDS[4 * i : 4 * i + 4]) for i in range(hwmap.DESC_DEPTH)]
 
 
-@cocotb.test(skip=TB_MODE != "main")
+@cocotb.test(skip=TB_MODE not in ("main", "xcheck"))
 async def test_errors(dut):
     """Each §9 error stops the run at its layer with ERROR = DONE = 1 and RESULT = 0 (cleared at
     START, never set); then a clean run."""
@@ -665,7 +666,7 @@ async def test_errors(dut):
     assert await acc.csr.read(ab.RESULT) == want_class
 
 
-@cocotb.test(skip=TB_MODE != "main")
+@cocotb.test(skip=TB_MODE not in ("main", "xcheck"))
 async def test_reset_mid_run(dut):
     """Reset during each layer: idle, CSRs reset, buffers and descriptors kept; clean run after."""
     acc = await setup(dut)
@@ -768,6 +769,7 @@ CONFIGS = [  # (simulator, mode, images)
     ("verilator", "main", 50),
     ("verilator", "saturation", 1),
     ("icarus", "quick", 2),
+    ("icarus", "xcheck", 1),  # test_errors and test_reset_mid_run with the X monitor (4-state)
 ]
 
 
