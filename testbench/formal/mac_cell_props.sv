@@ -8,6 +8,7 @@
 //   hold        with neither i_valid nor i_clear it keeps its value
 //   forward     o_valid, o_a, o_b are i_valid, i_a, i_b one cycle later (o_valid 0 after reset)
 // Assumption (spec §11.2): i_clear and i_valid are never high in the same cycle.
+// Cover (task cover): a clear followed by three accumulations that leave a nonzero sum.
 module mac_cell_props #(
     parameter int DATA_W = 8,
     parameter int ACC_W  = 32
@@ -67,6 +68,22 @@ module mac_cell_props #(
       end
       p_a_forward : assert (o_a == $past(i_a));
       p_b_forward : assert (o_b == $past(i_b));
+    end
+  end
+
+  // Accumulations since the last clear (saturating at 3) and whether a clear has happened, for
+  // the cover (formal-only initial values).
+  logic [1:0] n_acc_q = 2'd0;
+  logic       cleared_q = 1'b0;
+  always @(posedge clk) begin
+    if (rst || i_clear) n_acc_q <= '0;
+    else if (i_valid && (n_acc_q != 2'd3)) n_acc_q <= n_acc_q + 2'd1;
+    if (i_clear && !rst) cleared_q <= 1'b1;
+  end
+
+  always @(posedge clk) begin
+    if (!rst) begin
+      c_three_steps : cover (cleared_q && (n_acc_q == 2'd3) && (o_acc != '0));
     end
   end
 

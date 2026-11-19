@@ -54,3 +54,5 @@ applied to the working tree.
 | `m30_perf_clear_keeps_inputs` | counter input register not cleared at START (clear-cycle events counted) | `testbench/unit/test_perf_counters.py::test_perf_counters[icarus-32]` | — |
 | `m31_mac_clear_ignored` | MAC cell ignores `i_clear` | `testbench/unit/test_mac_cell.py::test_mac_cell[icarus]` | — |
 | `m32_mem_ready_while_busy` | memory port ready while BUSY (requests accepted during a run) | `testbench/unit/test_mem_port.py::test_mem_port[icarus-64]` | — |
+| `m33_argmax_last_hangs` | argmax stays in its last-compare state: `o_done` never comes (a hang, no wrong value) | `testbench/unit/test_argmax_unit.py::test_argmax_unit[icarus]` | — |
+| `m34_postproc_deadlock` | output withheld while stage 3 is full and stage 4 waits for its own output: the pipeline deadlocks once both are full (a stall that never drains) | `testbench/unit/test_postproc.py::test_postproc[icarus]` | — |

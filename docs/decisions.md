@@ -859,6 +859,21 @@ run uses the same test code as CI.
 - `test_formal.py` runs each proof (must PASS) and re-runs it on a mutated copy of the RTL (must
   FAIL on a named property): m31 (MAC ignores clear), m16 and m17 (argmax tie and signedness),
   m24 (postproc drops `i_ready`). CI runs it.
+- **Progress properties and covers** *(Phase 3 review)*. argmax: `p_done_on_time` (o_done exactly
+  `count + 2` cycles after the start; 1 cycle for `count = 0`, which issues no reads) and
+  `p_done_not_early`. postproc: `p_latency` (an input accepted 4 cycles ago, with `i_ready` high
+  since, is the output now) and `p_drains` (after 4 cycles with `i_ready` high, occupancy is at
+  most the inputs accepted in those cycles: nothing is stuck). The review's first wording, "i_ready
+  high for 4 cycles and not empty implies o_valid", is false (an element accepted in the last cycle
+  is still in stage 1); PDR gives that counterexample, so `p_drains` states the intent instead.
+  Each `.sby` has a `cover` task (smtbmc, depth 30) that must reach its covers: MAC, a clear and
+  three accumulations with a nonzero sum; argmax, a done with `count = 7` and a tied maximum;
+  postproc, four elements inside after a 3-cycle output stall. Mutants m33 (argmax stuck in its
+  last state) and m34 (postproc deadlock once stages 3 and 4 are full) change no value, only
+  progress; they fail `p_done_on_time` and `p_drains`.
+- **Each mutant fails on its property alone.** For the mutant runs the test removes every other
+  assertion (`chformal -assert -remove t:$check c:<prop> %d`), so the named property by itself
+  catches the bug; PDR otherwise stops at whichever property it reaches first.
 
 **Alternatives.** Bounded model checking only (a proof only up to the depth); Verific-based
 SymbiYosys (commercial); assertions inside the RTL under `` `ifdef FORMAL `` to reach internal

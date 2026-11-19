@@ -1,14 +1,17 @@
 """Formal proofs with SymbiYosys (docs/decisions.md D-033).
 
-Each `<module>.sby` proves the properties in `<module>_props.sv` for all inputs (unbounded:
-k-induction for the MAC cell, PDR for argmax and postproc). Every proof must PASS on the RTL,
-and must FAIL on the named mutant from testbench/mutants/ with the named property, which shows
-the properties constrain the behaviour they describe (not vacuous).
+Each `<module>.sby` has two tasks. `prove` proves the assertions in `<module>_props.sv` for all
+inputs (unbounded: k-induction for the MAC cell, PDR for argmax and postproc); `cover` must reach
+every cover statement (a witness trace exists). Every proof must PASS on the RTL, and must FAIL
+on the named mutant from testbench/mutants/ with the named property, which shows the properties
+constrain the behaviour they describe (not vacuous).
 
   mac_cell      accumulate exactly a*b, clear, hold, operand/valid forwarding (32-bit acc)
-  argmax_unit   result is the first maximum of the window (VAL_W = 4, IDX_W = 3: 8 logits)
+  argmax_unit   result is the first maximum of the window, done exactly count + 2 cycles after
+                the start (VAL_W = 4, IDX_W = 3: 8 logits)
   postproc      the elastic pipeline's handshake: in order, no loss or duplication, at most
-                four inside, ready when there is room, output stable under backpressure
+                four inside, ready when there is room, output stable under backpressure, a
+                4-cycle latency and a full drain while i_ready stays high
 """
 
 from __future__ import annotations
@@ -31,15 +34,17 @@ MUTANTS = [  # (proof, mutant patch, property that must fail)
     ("argmax_unit", "m16_argmax_tie_last", "p_lowest_tie"),
     ("argmax_unit", "m17_argmax_unsigned", "p_is_max"),
     ("postproc", "m24_postproc_ready_dropped", "p_stable"),
+    ("argmax_unit", "m33_argmax_last_hangs", "p_done_on_time"),
+    ("postproc", "m34_postproc_deadlock", "p_drains"),
 ]
 
 
-def run_sby(sby: Path, workdir: Path) -> tuple[str, str]:
-    """Run one .sby; returns (status, log). status is PASS, FAIL or ERROR."""
+def run_sby(sby: Path, workdir: Path, task: str = "prove") -> tuple[str, str]:
+    """Run one task of a .sby; returns (status, log). status is PASS, FAIL or ERROR."""
     if workdir.exists():
         shutil.rmtree(workdir)
     proc = subprocess.run(
-        ["sby", "-f", "-d", str(workdir), str(sby)],
+        ["sby", "-f", "-d", str(workdir), str(sby), task],
         cwd=sby.parent,
         capture_output=True,
         text=True,
@@ -56,9 +61,18 @@ def test_proof(proof: str) -> None:
     assert status == "PASS", f"{proof}: {status}\n{log[-3000:]}"
 
 
+@pytest.mark.parametrize("proof", PROOFS)
+def test_cover(proof: str) -> None:
+    status, log = run_sby(FORMAL_DIR / f"{proof}.sby", WORK_DIR / f"{proof}_cover", "cover")
+    assert status == "PASS", f"{proof} cover: {status}\n{log[-3000:]}"
+    reached = re.findall(r"Reached cover statement in step \d+ at \w+: (\w+)", log)
+    assert reached, f"{proof} cover: no cover statement reported as reached\n{log[-2000:]}"
+
+
 @pytest.mark.parametrize(("proof", "mutant", "prop"), MUTANTS)
 def test_proof_fails_on_mutant(proof: str, mutant: str, prop: str, tmp_path: Path) -> None:
-    """Copy the proof and its RTL file, apply the mutant patch to the copy, expect FAIL."""
+    """Copy the proof and its RTL file, apply the mutant patch to the copy, remove every assertion
+    but `prop`, and expect FAIL on `prop`."""
     sby_text = (FORMAL_DIR / f"{proof}.sby").read_text()
     rtl_rel = next(line for line in sby_text.splitlines() if line.startswith("../../rtl/"))
     rtl_path = rtl_rel.removeprefix("../../")
@@ -71,7 +85,10 @@ def test_proof_fails_on_mutant(proof: str, mutant: str, prop: str, tmp_path: Pat
     )
     shutil.copy(FORMAL_DIR / f"{proof}_props.sv", tmp_path)
     sby = tmp_path / f"{proof}.sby"
-    sby.write_text(sby_text.replace(rtl_rel, str(tmp_path / rtl_path)))
+    # Keep only the named assertion: it alone must catch the mutant.
+    prep = f"prep -top {proof}_props"
+    keep_only = f"{prep}\nchformal -assert -remove t:$check c:{prop} %d"
+    sby.write_text(sby_text.replace(rtl_rel, str(tmp_path / rtl_path)).replace(prep, keep_only))
     status, log = run_sby(sby, WORK_DIR / f"{proof}_{mutant}")
     assert status == "FAIL", f"{proof} with {mutant}: {status}, want FAIL\n{log[-3000:]}"
     failed = re.findall(r"Assert failed in \w+: (\w+)", log)

@@ -11,6 +11,14 @@
 //   p_ready_room   o_ready is high whenever fewer than four elements are inside
 //   p_stable       an output not accepted (o_valid && !i_ready) stays valid with the same tag and
 //                  data (o_tag, o_y, o_q8) in the next cycle
+// Progress (with i_ready held high the pipeline is a plain 4-stage shift):
+//   p_latency      an input accepted 4 cycles ago, with i_ready high in each of the 3 cycles
+//                  since, is the output now
+//   p_drains       after 4 cycles with i_ready high, nothing older than those 4 cycles is still
+//                  inside (occupancy <= inputs accepted in those cycles): no stall that never
+//                  drains. (The stronger-sounding "i_ready high for 4 cycles and not empty
+//                  implies o_valid" is false: an element accepted last cycle is in stage 1.)
+// Cover (task cover): four elements inside while the output has been stalled for 3 cycles.
 // Assumption (producer side of the handshake): a request not accepted stays valid and stable.
 module postproc_props #(
     parameter int ACC_W = 8,
@@ -76,6 +84,27 @@ module postproc_props #(
     end
   end
 
+  // History for the progress properties: consecutive cycles (up to the last one) with i_ready
+  // high or low, and the last four cycles' accepted inputs and their sequence numbers.
+  logic [2:0] rdy_run_q, stall_run_q;
+  logic [3:0] fire_h_q;
+  logic [3:0][TAG_W-1:0] tag_h_q;
+  always @(posedge clk) begin
+    if (rst) begin
+      rdy_run_q   <= '0;
+      stall_run_q <= '0;
+      fire_h_q    <= '0;
+    end else begin
+      rdy_run_q   <= i_ready ? ((rdy_run_q == 3'd4) ? 3'd4 : rdy_run_q + 3'd1) : 3'd0;
+      stall_run_q <= !i_ready ? ((stall_run_q == 3'd4) ? 3'd4 : stall_run_q + 3'd1) : 3'd0;
+      fire_h_q    <= {fire_h_q[2:0], in_fire};
+    end
+    tag_h_q <= {tag_h_q[2:0], in_cnt_q};
+  end
+
+  logic [2:0] recent_inputs;
+  assign recent_inputs = 3'(fire_h_q[0]) + 3'(fire_h_q[1]) + 3'(fire_h_q[2]) + 3'(fire_h_q[3]);
+
   logic past_valid = 1'b0;
   always @(posedge clk) past_valid <= 1'b1;
 
@@ -92,6 +121,12 @@ module postproc_props #(
     if (!rst) begin
       p_bounded : assert (occ_q <= 3'd4);
       p_ready_room : assert ((occ_q == 3'd4) || o_ready);
+      if ((rdy_run_q >= 3'd3) && fire_h_q[3]) begin
+        p_latency : assert (o_valid && (o_tag == tag_h_q[3]));
+      end
+      if (rdy_run_q == 3'd4) begin
+        p_drains : assert (occ_q <= recent_inputs);
+      end
       if (o_valid) begin
         p_not_empty : assert (occ_q != 3'd0);
         p_in_order : assert ((o_tag == out_cnt_q) && (o_y == acc_of(out_cnt_q)));
@@ -102,6 +137,12 @@ module postproc_props #(
   always @(posedge clk) begin
     if (past_valid && !rst && !$past(rst) && $past(o_valid && !i_ready)) begin
       p_stable : assert (o_valid && $stable({o_tag, o_y, o_q8}));
+    end
+  end
+
+  always @(posedge clk) begin
+    if (!rst) begin
+      c_full_under_stall : cover ((occ_q == 3'd4) && (stall_run_q >= 3'd3));
     end
   end
 
