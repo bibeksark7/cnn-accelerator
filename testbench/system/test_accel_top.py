@@ -743,6 +743,19 @@ async def sva_violation_mem_req_changed(dut):
     dut.i_mem_valid.value = 0
 
 
+@cocotb.test(skip=SVA_VIOLATION != "fsm_illegal")
+async def sva_violation_fsm_illegal(dut):
+    """An unused encoding is written into the sequencer's state register (as a corrupted
+    flip-flop would); only run by test_accel_top_sva_fires. The RTL recovers to IDLE at the next
+    edge, so only a_state_legal can notice."""
+    await setup(dut)
+    for _ in range(3):
+        await FallingEdge(dut.clk)
+    dut.u_layer_seq.state_q.value = 7  # S_IDLE .. S_END are 0 .. 6
+    for _ in range(3):
+        await FallingEdge(dut.clk)
+
+
 def init_params() -> dict[str, object]:
     return {
         "WGT_INIT": sv_string(MEM_DIR / "wgt.hex"),
@@ -777,7 +790,11 @@ def test_accel_top(sim: str, mode: str, images: int) -> None:
 
 @pytest.mark.parametrize(
     ("violation", "assertion"),
-    [("csr_withdrawn", "a_csr_req_stable"), ("mem_req_changed", "a_mem_req_stable")],
+    [
+        ("csr_withdrawn", "a_csr_req_stable"),
+        ("mem_req_changed", "a_mem_req_stable"),
+        ("fsm_illegal", "a_state_legal"),
+    ],
 )
 def test_accel_top_sva_fires(violation: str, assertion: str) -> None:
     run_sva_violation(
