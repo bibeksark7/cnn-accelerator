@@ -58,3 +58,25 @@ async def handshake_monitor(clk, valid, ready, point: str) -> None:
 
 def start_handshake_monitor(clk, valid, ready, point: str):
     return cocotb.start_soon(handshake_monitor(clk, valid, ready, point))
+
+
+def is_verilator() -> bool:
+    """True inside a Verilator simulation (False when pytest imports a test module to collect)."""
+    return (getattr(cocotb, "SIM_NAME", None) or "").lower().startswith("verilator")
+
+
+def cover_vr_links(links: dict[str, object], must_stall: set[str]) -> None:
+    """Coverage from the bound valid_ready_sva monitors (testbench/sva/valid_ready_sva.sv).
+
+    `links` maps a link name to the monitor instance's handle. Records each link's transfers and
+    stalls as DUT-observed coverage, and fails if a link in `must_stall` never transferred or
+    never stalled (the stall cover). Verilator runs only (the monitors are SVA binds).
+    """
+    for name, mon in links.items():
+        stalls, transfers = int(mon.stalls_q.value), int(mon.transfers_q.value)
+        if transfers:
+            cover("valid/ready links (SVA monitor)", f"{name}: transfer", transfers)
+        if stalls:
+            cover("valid/ready links (SVA monitor)", f"{name}: stall", stalls)
+        if name in must_stall:
+            assert transfers and stalls, f"{name}: {transfers} transfers, {stalls} stalls"

@@ -7,6 +7,7 @@ golden activations through the generated addresses equals golden.maxpool2.
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 
@@ -15,11 +16,13 @@ import numpy as np
 import pytest
 from cocotb.triggers import FallingEdge, ReadOnly, RisingEdge
 
-from common.runner import RTL_DIR, SIMULATORS, run_cocotb
+from common.coverage import cover_vr_links, is_verilator
+from common.runner import RTL_DIR, SIMULATORS, SVA_DIR, run_cocotb
 from common.sim import seeded_rng, start_clock_and_reset, wait_until
 from model import golden, net
 
 SOURCE = RTL_DIR / "addr" / "agen_pool.sv"
+SVA_SOURCES = [SVA_DIR / "valid_ready_sva.sv", SVA_DIR / "agen_pool_vr_bind.sv"]
 
 
 def expected(src: int, dst: int, h: int, w: int, c: int) -> list[tuple]:
@@ -124,9 +127,21 @@ async def test_shapes_without_output(dut):
         assert await run_pool(dut, 7, 9, h, w, c, rng) == []
 
 
+@cocotb.test(skip=not is_verilator() or os.environ.get("SVA_VIOLATION", "") != "")
+async def test_zz_handshake_stall_cover(dut):
+    """Last test (Verilator): the bound valid_ready_sva monitors saw transfers and stalls."""
+    cover_vr_links({"agen_pool window stream": dut.u_out_vr_sva}, {"agen_pool window stream"})
+
+
 @pytest.mark.parametrize("sim", SIMULATORS)
 def test_agen_pool(sim: str) -> None:
-    run_cocotb(sim=sim, toplevel="agen_pool", sources=[SOURCE], test_module=Path(__file__).stem)
+    run_cocotb(
+        sim=sim,
+        toplevel="agen_pool",
+        sources=[SOURCE] + (SVA_SOURCES if sim == "verilator" else []),
+        test_module=Path(__file__).stem,
+        extra_build_args=["--assert"] if sim == "verilator" else [],
+    )
 
 
 def test_agen_pool_has_no_multipliers() -> None:

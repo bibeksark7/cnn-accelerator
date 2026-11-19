@@ -36,7 +36,7 @@ import numpy as np
 import pytest
 from cocotb.triggers import FallingEdge, ReadOnly, RisingEdge
 
-from common.coverage import cover, start_handshake_monitor
+from common.coverage import cover, cover_vr_links, is_verilator, start_handshake_monitor
 from common.runner import RTL_DIR, SVA_DIR, run_cocotb, run_sva_violation
 from common.sim import seeded_rng, start_clock_and_reset, wait_until
 from model import golden, hwmap
@@ -56,6 +56,10 @@ SVA_SOURCES = [
     SVA_DIR / "unit_if_sva.sv",
     SVA_DIR / "gemm_engine_impl_sva.sv",
     SVA_DIR / "gemm_engine_bind.sv",
+    SVA_DIR / "valid_ready_sva.sv",
+    SVA_DIR / "gemm_engine_vr_bind.sv",
+    SVA_DIR / "postproc_vr_bind.sv",
+    SVA_DIR / "agen_a_vr_bind.sv",
 ]
 TB_N = int(os.environ.get("TB_N", "8"))
 TB_NETWORK = os.environ.get("TB_NETWORK", "1") == "1"
@@ -691,6 +695,24 @@ def build(sim: str) -> tuple[list[Path], list[str]]:
 def run_network_layers(sim: str) -> bool:
     """Push CI runs the slow network-layer test on Verilator only."""
     return not (os.environ.get("CI") == "true" and sim == "icarus")
+
+
+@cocotb.test(skip=not is_verilator() or os.environ.get("SVA_VIOLATION", "") != "")
+async def test_zz_handshake_stall_cover(dut):
+    """Last test (Verilator): the bound valid_ready_sva monitors saw transfers and stalls."""
+    cover_vr_links(
+        {
+            "array rows -> row register": dut.u_rows_vr_sva,
+            "agen_a address stream": dut.u_agen_a.u_out_vr_sva,
+            "row register -> postproc": dut.u_postproc.u_in_vr_sva,
+            "postproc -> write port": dut.u_postproc.u_out_vr_sva,
+        },
+        {"array rows -> row register"},
+    )
+    # agen_a's stream never stalls here (the staging banks always accept; the agen_a unit test
+    # covers its stalls), and the two postproc links cannot (a_pp_*_never_stalled).
+    assert int(dut.u_postproc.u_in_vr_sva.stalls_q.value) == 0
+    assert int(dut.u_postproc.u_out_vr_sva.stalls_q.value) == 0
 
 
 @pytest.mark.parametrize(("sim", "n", "k_tile"), CONFIGS)

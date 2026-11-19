@@ -8,6 +8,7 @@ gather golden-model activations, which must equal golden.im2col.
 
 from __future__ import annotations
 
+import os
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -17,12 +18,14 @@ import numpy as np
 import pytest
 from cocotb.triggers import FallingEdge, ReadOnly, RisingEdge
 
-from common.runner import RTL_DIR, SIMULATORS, run_cocotb
+from common.coverage import cover_vr_links, is_verilator
+from common.runner import RTL_DIR, SIMULATORS, SVA_DIR, run_cocotb
 from common.sim import seeded_rng, start_clock_and_reset, wait_until
 from model import golden, hwmap, net
 
 CMD_STAGE, CMD_NEXT_CHUNK, CMD_REWIND_K, CMD_NEXT_TILE = 0, 1, 2, 3
 SOURCE = RTL_DIR / "addr" / "agen_a.sv"
+SVA_SOURCES = [SVA_DIR / "valid_ready_sva.sv", SVA_DIR / "agen_a_vr_bind.sv"]
 
 
 @dataclass(frozen=True)
@@ -201,14 +204,21 @@ async def test_edge_shapes(dut):
         await run_layer(dut, Layer(False, 100, h, w, c, 4), 4, rng)
 
 
+@cocotb.test(skip=not is_verilator() or os.environ.get("SVA_VIOLATION", "") != "")
+async def test_zz_handshake_stall_cover(dut):
+    """Last test (Verilator): the bound valid_ready_sva monitors saw transfers and stalls."""
+    cover_vr_links({"agen_a address stream": dut.u_out_vr_sva}, {"agen_a address stream"})
+
+
 @pytest.mark.parametrize(("sim", "n"), [(s, 8) for s in SIMULATORS] + [("icarus", 3)])
 def test_agen_a(sim: str, n: int) -> None:
     run_cocotb(
         sim=sim,
         toplevel="agen_a",
-        sources=[SOURCE],
+        sources=[SOURCE] + (SVA_SOURCES if sim == "verilator" else []),
         test_module=Path(__file__).stem,
         parameters={"N": n},
+        extra_build_args=["--assert"] if sim == "verilator" else [],
     )
 
 

@@ -29,8 +29,8 @@ Tests:
                    TB_RESULTS; fails unless every logit matches the golden model
 Icarus runs check that no output is X after reset (data outputs only while valid).
 Verilator runs bind every assertion (units, engine, array, buffer ownership, accel_top, the
-host-interface handshakes and legal FSM states); test_accel_top_sva_fires shows the master-side
-handshake assertions are live.
+host-interface handshakes, internal valid/ready links and legal FSM states);
+test_accel_top_sva_fires shows the master-side handshake assertions are live.
 TB_IMAGES limits the network test to the first images (the Icarus run uses 2).
 """
 
@@ -73,6 +73,11 @@ SVA_SOURCES = [
         "accel_top_bind.sv",
         "fsm_legal_sva.sv",
         "fsm_legal_bind.sv",
+        "valid_ready_sva.sv",
+        "agen_a_vr_bind.sv",
+        "agen_pool_vr_bind.sv",
+        "postproc_vr_bind.sv",
+        "gemm_engine_vr_bind.sv",
     )
 ]
 TB_IMAGES = int(os.environ.get("TB_IMAGES", "50"))

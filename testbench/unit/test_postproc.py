@@ -5,6 +5,7 @@ input gaps and random output backpressure. Directed cases hit rounding ties, sat
 ends, ReLU clamping, S = 1 and 47, M at both ends, and int32 extremes of y = acc + bias.
 """
 
+import os
 from pathlib import Path
 
 import cocotb
@@ -13,13 +14,14 @@ import pytest
 from cocotb.triggers import ClockCycles
 
 from common.bits import to_signed, to_unsigned
-from common.coverage import cover, start_handshake_monitor
+from common.coverage import cover, cover_vr_links, is_verilator, start_handshake_monitor
 from common.handshake import collect_stream, drive_stream
-from common.runner import RTL_DIR, SIMULATORS, run_cocotb
+from common.runner import RTL_DIR, SIMULATORS, SVA_DIR, run_cocotb
 from common.sim import seeded_rng, start_clock_and_reset
 from model import golden
 
 ACC_W, TAG_W = 32, 16
+SVA_SOURCES = [SVA_DIR / "valid_ready_sva.sv", SVA_DIR / "postproc_vr_bind.sv"]
 I32_MIN, I32_MAX = -(2**31), 2**31 - 1
 
 
@@ -158,12 +160,22 @@ async def test_random_with_gaps_and_backpressure(dut):
         await run_stream(dut, random_items(rng, 600, 0), rng, idle_prob, ready_prob)
 
 
+@cocotb.test(skip=not is_verilator() or os.environ.get("SVA_VIOLATION", "") != "")
+async def test_zz_handshake_stall_cover(dut):
+    """Last test (Verilator): the bound valid_ready_sva monitors saw transfers and stalls."""
+    cover_vr_links(
+        {"postproc input": dut.u_in_vr_sva, "postproc output": dut.u_out_vr_sva},
+        {"postproc input", "postproc output"},
+    )
+
+
 @pytest.mark.parametrize("sim", SIMULATORS)
 def test_postproc(sim: str) -> None:
     run_cocotb(
         sim=sim,
         toplevel="postproc",
-        sources=[RTL_DIR / "post" / "postproc.sv"],
+        sources=[RTL_DIR / "post" / "postproc.sv"] + (SVA_SOURCES if sim == "verilator" else []),
         test_module=Path(__file__).stem,
         parameters={"ACC_W": ACC_W, "TAG_W": TAG_W},
+        extra_build_args=["--assert"] if sim == "verilator" else [],
     )

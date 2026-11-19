@@ -25,6 +25,7 @@ from model import golden, net
 
 SOURCES = [RTL_DIR / "addr" / "agen_pool.sv", RTL_DIR / "post" / "pool_unit.sv"]
 SVA_SOURCES = [SVA_DIR / "unit_if_sva.sv", SVA_DIR / "pool_unit_bind.sv"]
+SVA_SOURCES += [SVA_DIR / "valid_ready_sva.sv", SVA_DIR / "agen_pool_vr_bind.sv"]
 SVA_VIOLATION = os.environ.get("SVA_VIOLATION", "")
 
 
