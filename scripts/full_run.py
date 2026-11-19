@@ -7,7 +7,11 @@
    bound, in its own build directory. The test loads the images through the memory port 16 at
    a time, runs them back to back with IMG_SEL (weights loaded once, from the init files) and
    writes one JSON line per image: logits match, RESULT, STATUS and every performance counter.
-3. Writes, from those lines:
+3. Records the provenance of the run before simulating (sim_build/full_run/provenance.json): the
+   commit, `git rev-parse HEAD:rtl` (the RTL tree), whether the working tree was clean, the sha256
+   of wgt/param/desc.hex and of the vectors, and the Verilator version. Both JSON reports carry it,
+   and scripts/checkpoint.sh 3 rejects a report whose RTL tree or init files differ from HEAD's.
+4. Writes, from those lines:
      testbench/reports/full_run.{json,md}      logit match and hardware accuracy
      testbench/reports/perf_counters.{json,md} per-image counters and derived throughput
 
@@ -20,7 +24,9 @@ Exit status: 0 if every image's logits match the golden model, 1 otherwise.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -50,6 +56,30 @@ def build_vectors(start: int, count: int) -> Path:
     return path
 
 
+def sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def git(*args: str) -> str:
+    return subprocess.run(
+        ["git", *args], cwd=ROOT, capture_output=True, text=True, check=True
+    ).stdout
+
+
+def provenance(vectors: Path) -> dict:
+    """What the run is evidence for: taken before simulating, from the files the build reads."""
+    mem = ROOT / "model" / "artifacts" / "mem"
+    verilator = subprocess.run(["verilator", "--version"], capture_output=True, text=True).stdout
+    return {
+        "commit": git("rev-parse", "HEAD").strip(),
+        "rtl_tree": git("rev-parse", "HEAD:rtl").strip(),
+        "tree_clean": git("status", "--porcelain").strip() == "",
+        "init_files_sha256": {f: sha256(mem / f) for f in ("wgt.hex", "param.hex", "desc.hex")},
+        "vectors_sha256": sha256(vectors),
+        "verilator": verilator.strip(),
+    }
+
+
 def simulate(vectors: Path, results: Path) -> None:
     import test_accel_top as t
 
@@ -74,7 +104,7 @@ def stats(values: list[int]) -> dict[str, float | int]:
     return {"min": int(a.min()), "max": int(a.max()), "mean": float(a.mean())}
 
 
-def write_reports(recs: list[dict], seconds: float | None) -> bool:
+def write_reports(recs: list[dict], seconds: float | None, prov: dict) -> bool:
     n = len(recs)
     match = sum(r["logits_match"] for r in recs)
     ok_status = sum(r["status"] == (2 | 5 << 8) for r in recs)  # DONE, last layer 5
@@ -97,6 +127,7 @@ def write_reports(recs: list[dict], seconds: float | None) -> bool:
         "float_accuracy_full_test_set": quant.get("float_test_accuracy"),
         "mismatches": [r for r in recs if not r["logits_match"]][:20],
         "simulation_seconds": seconds,
+        "provenance": prov,
     }
     (REPORTS / "full_run.json").write_text(json.dumps(full, indent=2) + "\n")
     verdict = "all logits bit-exact" if match == n else f"{n - match} IMAGES DIFFER"
@@ -126,7 +157,14 @@ def write_reports(recs: list[dict], seconds: float | None) -> bool:
         )
     if seconds is not None:
         lines.append(f"| Simulation wall time | {seconds / 60:.1f} min |")
-    lines.append("")
+    clean = "clean" if prov["tree_clean"] else "NOT clean"
+    lines += [
+        "",
+        f"Provenance: commit `{prov['commit'][:12]}`, RTL tree `{prov['rtl_tree'][:12]}`, working",
+        f"tree {clean}, {prov['verilator']}; sha256 of the init files and vectors in",
+        "`full_run.json`.",
+        "",
+    ]
     (REPORTS / "full_run.md").write_text("\n".join(lines))
 
     # Performance counters.
@@ -148,6 +186,7 @@ def write_reports(recs: list[dict], seconds: float | None) -> bool:
         "time_per_inference_ms": cyc / (CLOCK_MHZ * 1e3),
         "inferences_per_second": CLOCK_MHZ * 1e6 / cyc,
         "mac_active_fraction": counters["cyc_mac"]["mean"] / cyc,
+        "provenance": prov,
     }
     (REPORTS / "perf_counters.json").write_text(json.dumps(perf, indent=2) + "\n")
 
@@ -197,9 +236,11 @@ def main() -> int:
     ap.add_argument("--from-results", action="store_true")
     args = ap.parse_args()
     results = WORK / "results.jsonl"
+    prov_file = WORK / "provenance.json"
     seconds = None
     if not args.from_results:
         vectors = build_vectors(args.start, args.images)
+        prov_file.write_text(json.dumps(provenance(vectors), indent=2) + "\n")
         t0 = time.time()
         try:
             simulate(vectors, results)
@@ -210,7 +251,7 @@ def main() -> int:
     if not recs:
         print("no results", file=sys.stderr)
         return 1
-    ok = write_reports(recs, seconds)
+    ok = write_reports(recs, seconds, json.loads(prov_file.read_text()))
     print((REPORTS / "full_run.md").read_text())
     print((REPORTS / "perf_counters.md").read_text())
     return 0 if ok else 1

@@ -173,15 +173,35 @@ sys.exit(0 if ok else 1)
 PY
 }
 
-# Full run report: at least 1,000 images, every logit bit-exact, every run DONE without error.
+# Full run report: at least 1,000 images, every logit bit-exact, every run DONE without error,
+# and evidence for this tree: the recorded RTL tree is HEAD:rtl, the init files are unchanged,
+# the run started from a clean tree, and both reports carry the same provenance.
 check_full_run_report() {
-  python - <<'PY'
-import json, sys
+  RTL_TREE="$(git rev-parse HEAD:rtl)" python - <<'PY'
+import hashlib, json, os, sys
 r = json.load(open("testbench/reports/full_run.json"))
-n = r["images"]
+perf = json.load(open("testbench/reports/perf_counters.json"))
+n, prov = r["images"], r.get("provenance", {})
 print(f"{n} images, {r['logits_bit_exact']} bit-exact, {r['status_done_no_error']} clean runs, "
       f"hardware accuracy {r['hardware_accuracy']:.4f}")
-sys.exit(0 if n >= 1000 and r["logits_bit_exact"] == n and r["status_done_no_error"] == n else 1)
+problems = []
+if not (n >= 1000 and r["logits_bit_exact"] == n and r["status_done_no_error"] == n):
+    problems.append("not every image bit-exact and clean")
+if prov.get("rtl_tree") != os.environ["RTL_TREE"]:
+    problems.append(f"RTL tree {prov.get('rtl_tree')} != HEAD:rtl {os.environ['RTL_TREE']}")
+for f, h in prov.get("init_files_sha256", {"(none recorded)": ""}).items():
+    path = os.path.join("model/artifacts/mem", f)
+    if not os.path.exists(path) or hashlib.sha256(open(path, "rb").read()).hexdigest() != h:
+        problems.append(f"init file {f} differs from the one the run used")
+if not prov.get("tree_clean"):
+    problems.append("the run did not start from a clean tree")
+if perf.get("provenance") != prov:
+    problems.append("perf_counters.json provenance differs from full_run.json")
+print(f"provenance: commit {prov.get('commit', '?')[:12]}, rtl {prov.get('rtl_tree', '?')[:12]}, "
+      f"{prov.get('verilator', '?')}")
+for p in problems:
+    print("  ", p)
+sys.exit(1 if problems else 0)
 PY
 }
 

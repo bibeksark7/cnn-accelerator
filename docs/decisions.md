@@ -830,6 +830,13 @@ load, back to back with IMG_SEL, weights from the init files) and writes one JSO
 `testbench/reports/full_run.{md,json}` and `testbench/reports/perf_counters.{md,json}` from those
 lines, so every README number about accuracy and cycles comes from a committed report.
 
+**Traceability** *(Phase 3 review)*. Before simulating, the script records the commit,
+`git rev-parse HEAD:rtl`, whether the working tree is clean, the sha256 of `wgt.hex`,
+`param.hex`, `desc.hex` and of the vectors, and the Verilator version; both JSON reports carry
+this `provenance`. `checkpoint.sh 3` fails unless the recorded RTL tree equals the current
+`HEAD:rtl`, the init files hash the same, the run started from a clean tree, and both reports
+agree. A later RTL change therefore invalidates the report until the full run is repeated.
+
 **Alternatives.** A pytest-parameterized full run (it would run on every `pytest testbench` and
 need the MNIST cache in CI); committing the vectors (a dataset copy, which the project rules
 forbid).
