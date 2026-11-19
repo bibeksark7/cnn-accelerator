@@ -16,4 +16,8 @@ compared with `model/golden.py`; RESULT is compared with the label.
 | Hardware accuracy (RESULT = label) | 0.9865 (9,865 / 10,000) |
 | Golden integer model, same images | 0.9865 |
 | Golden integer / float model, full test set (`model/reports/quantize.json`) | 0.9865 / 0.9867 |
-| Simulation wall time | 44.1 min |
+| Simulation wall time | 79.2 min |
+
+Provenance: commit `ebb5f15a9db9`, RTL tree `99531829be72`, working
+tree clean, Verilator 5.053 devel rev v5.052-654-gdd8a7d5e4 (mod); sha256 of the init files and vectors in
+`full_run.json`.

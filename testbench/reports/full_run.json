@@ -14,5 +14,17 @@
   "golden_integer_accuracy_full_test_set": 0.9865,
   "float_accuracy_full_test_set": 0.9867,
   "mismatches": [],
-  "simulation_seconds": 2643.3352155685425
+  "simulation_seconds": 4750.687570810318,
+  "provenance": {
+    "commit": "ebb5f15a9db95f80b28c768773f3d2ba2e8ba11c",
+    "rtl_tree": "99531829be7291a1150795484d7a47daa07453e9",
+    "tree_clean": true,
+    "init_files_sha256": {
+      "wgt.hex": "ebf6d93a3cdfeff48031a9697445c9d00483d65afe1fbd12ade2d6b2ce104e29",
+      "param.hex": "e317a2d710e81970d1c84cc6c05f04432c6b4596e0edd6875cfeb73734678693",
+      "desc.hex": "ce7ef2a01bb91ca783132d848f192e9404b92e23ecc7aae54fb9cf3d8db5a551"
+    },
+    "vectors_sha256": "fdbcc78af178db531ba85aabe59a835b5b8163104bfe8a8775a53fd5861cec94",
+    "verilator": "Verilator 5.053 devel rev v5.052-654-gdd8a7d5e4 (mod)"
+  }
 }
