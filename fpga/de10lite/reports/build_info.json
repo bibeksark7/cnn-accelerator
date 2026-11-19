@@ -1,0 +1,14 @@
+{
+  "script": "fpga/de10lite/build_win.sh",
+  "commit": "96ceb0364fcd241921324d3235cc6ef3a18cff90",
+  "rtl_tree": "e5cdce507d2d23ea3a0bfe550665b8c236cff236",
+  "tree_clean": true,
+  "init_files_sha256": {
+    "img.hex": "a8fa0fa89b786d89ce6e7eb2a92d9fcbe802f611054dc35a26b1584da7af216c",
+    "wgt.hex": "ebf6d93a3cdfeff48031a9697445c9d00483d65afe1fbd12ade2d6b2ce104e29",
+    "param.hex": "e317a2d710e81970d1c84cc6c05f04432c6b4596e0edd6875cfeb73734678693",
+    "desc.hex": "ce7ef2a01bb91ca783132d848f192e9404b92e23ecc7aae54fb9cf3d8db5a551",
+    "label.hex": "30cfe8d0ca9affd141a326012161530bfe6a7cd41820c54edf66ae3031c96464"
+  },
+  "quartus": "Version 22.1std.0 Build 915 10/25/2022 SC Lite Edition"
+}

@@ -1,0 +1,201 @@
+----------------
+; Command Info ;
+----------------
+Report Timing: Found 1 setup paths (0 violated).  Worst case slack is 6.678 
+
+Tcl Command:
+    report_timing -setup -file timing_setup_worst.rpt -npaths 1 -detail full_path
+
+Options:
+    -setup 
+    -npaths 1 
+    -detail full_path 
+    -file {timing_setup_worst.rpt} 
+
+Delay Model:
+    Slow 1200mV 85C Model
+
++--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+; Summary of Paths                                                                                                                                                                                                                                                                     ;
++-------+---------------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------+--------------+-------------+--------------+------------+------------+
+; Slack ; From Node                                                                                         ; To Node                                                                                            ; Launch Clock ; Latch Clock ; Relationship ; Clock Skew ; Data Delay ;
++-------+---------------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------+--------------+-------------+--------------+------------+------------+
+; 6.678 ; fpga_core:u_fpga_core|accel_top:u_accel_top|gemm_engine:u_gemm_engine|postproc:u_postproc|s2_q[2] ; fpga_core:u_fpga_core|accel_top:u_accel_top|gemm_engine:u_gemm_engine|postproc:u_postproc|r3_q[19] ; clk50        ; clk50       ; 20.000       ; -0.183     ; 13.132     ;
++-------+---------------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------+--------------+-------------+--------------+------------+------------+
+
+Path #1: Setup slack is 6.678 
+===============================================================================
++-------------------------------------------------------------------------------------------------------------------------+
+; Path Summary                                                                                                            ;
++--------------------+----------------------------------------------------------------------------------------------------+
+; Property           ; Value                                                                                              ;
++--------------------+----------------------------------------------------------------------------------------------------+
+; From Node          ; fpga_core:u_fpga_core|accel_top:u_accel_top|gemm_engine:u_gemm_engine|postproc:u_postproc|s2_q[2]  ;
+; To Node            ; fpga_core:u_fpga_core|accel_top:u_accel_top|gemm_engine:u_gemm_engine|postproc:u_postproc|r3_q[19] ;
+; Launch Clock       ; clk50                                                                                              ;
+; Latch Clock        ; clk50                                                                                              ;
+; Data Arrival Time  ; 16.855                                                                                             ;
+; Data Required Time ; 23.533                                                                                             ;
+; Slack              ; 6.678                                                                                              ;
++--------------------+----------------------------------------------------------------------------------------------------+
+
++------------------------------------------------------------------------------------+
+; Statistics                                                                         ;
++------------------------+--------+-------+-------------+------------+-------+-------+
+; Property               ; Value  ; Count ; Total Delay ; % of Total ; Min   ; Max   ;
++------------------------+--------+-------+-------------+------------+-------+-------+
+; Setup Relationship     ; 20.000 ;       ;             ;            ;       ;       ;
+; Clock Skew             ; -0.183 ;       ;             ;            ;       ;       ;
+; Data Delay             ; 13.132 ;       ;             ;            ;       ;       ;
+; Number of Logic Levels ;        ; 10    ;             ;            ;       ;       ;
+; Physical Delays        ;        ;       ;             ;            ;       ;       ;
+;  Arrival Path          ;        ;       ;             ;            ;       ;       ;
+;   Clock                ;        ;       ;             ;            ;       ;       ;
+;    IC                  ;        ; 3     ; 2.420       ; 65         ; 0.000 ; 1.526 ;
+;    Cell                ;        ; 3     ; 1.303       ; 35         ; 0.000 ; 0.793 ;
+;   Data                 ;        ;       ;             ;            ;       ;       ;
+;    IC                  ;        ; 47    ; 6.221       ; 47         ; 0.000 ; 1.371 ;
+;    Cell                ;        ; 48    ; 6.704       ; 51         ; 0.000 ; 0.637 ;
+;    uTco                ;        ; 1     ; 0.207       ; 2          ; 0.207 ; 0.207 ;
+;  Required Path         ;        ;       ;             ;            ;       ;       ;
+;   Clock                ;        ;       ;             ;            ;       ;       ;
+;    IC                  ;        ; 3     ; 2.236       ; 64         ; 0.000 ; 1.378 ;
+;    Cell                ;        ; 3     ; 1.268       ; 36         ; 0.000 ; 0.793 ;
++------------------------+--------+-------+-------------+------------+-------+-------+
+Note: Negative delays are omitted from totals when calculating percentages
+
++-------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+; Data Arrival Path                                                                                                                                                 ;
++----------+---------+----+------+--------+--------------------+----------------------------------------------------------------------------------------------------+
+; Total    ; Incr    ; RF ; Type ; Fanout ; Location           ; Element                                                                                            ;
++----------+---------+----+------+--------+--------------------+----------------------------------------------------------------------------------------------------+
+; 0.000    ; 0.000   ;    ;      ;        ;                    ; launch edge time                                                                                   ;
+; 3.723    ; 3.723   ;    ;      ;        ;                    ; clock path                                                                                         ;
+;   0.000  ;   0.000 ;    ;      ;        ;                    ; source latency                                                                                     ;
+;   0.000  ;   0.000 ;    ;      ; 1      ; PIN_P11            ; MAX10_CLK1_50                                                                                      ;
+;   0.000  ;   0.000 ; RR ; IC   ; 1      ; IOIBUF_X34_Y0_N29  ; MAX10_CLK1_50~input|i                                                                              ;
+;   0.793  ;   0.793 ; RR ; CELL ; 1      ; IOIBUF_X34_Y0_N29  ; MAX10_CLK1_50~input|o                                                                              ;
+;   1.687  ;   0.894 ; RR ; IC   ; 1      ; CLKCTRL_G19        ; MAX10_CLK1_50~inputclkctrl|inclk[0]                                                                ;
+;   1.687  ;   0.000 ; RR ; CELL ; 5732   ; CLKCTRL_G19        ; MAX10_CLK1_50~inputclkctrl|outclk                                                                  ;
+;   3.213  ;   1.526 ; RR ; IC   ; 1      ; FF_X45_Y15_N25     ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|s2_q[2]|clk                                       ;
+;   3.723  ;   0.510 ; RR ; CELL ; 1      ; FF_X45_Y15_N25     ; fpga_core:u_fpga_core|accel_top:u_accel_top|gemm_engine:u_gemm_engine|postproc:u_postproc|s2_q[2]  ;
+; 16.855   ; 13.132  ;    ;      ;        ;                    ; data path                                                                                          ;
+;   3.930  ;   0.207 ;    ; uTco ; 1      ; FF_X45_Y15_N25     ; fpga_core:u_fpga_core|accel_top:u_accel_top|gemm_engine:u_gemm_engine|postproc:u_postproc|s2_q[2]  ;
+;   3.930  ;   0.000 ; RR ; CELL ; 123    ; FF_X45_Y15_N25     ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|s2_q[2]|q                                         ;
+;   4.442  ;   0.512 ; RR ; IC   ; 1      ; LCCOMB_X45_Y15_N30 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|rnd[41]~454|dataa                                 ;
+;   4.881  ;   0.439 ; RF ; CELL ; 6      ; LCCOMB_X45_Y15_N30 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|rnd[41]~454|combout                               ;
+;   5.225  ;   0.344 ; FF ; IC   ; 1      ; LCCOMB_X45_Y15_N16 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add1~0|dataa                                      ;
+;   5.653  ;   0.428 ; FF ; CELL ; 6      ; LCCOMB_X45_Y15_N16 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add1~0|combout                                    ;
+;   5.942  ;   0.289 ; FF ; IC   ; 1      ; LCCOMB_X45_Y15_N2  ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|rnd[0]~474|datad                                  ;
+;   6.073  ;   0.131 ; FF ; CELL ; 1      ; LCCOMB_X45_Y15_N2  ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|rnd[0]~474|combout                                ;
+;   6.532  ;   0.459 ; FF ; IC   ; 2      ; LCCOMB_X46_Y15_N16 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~0|dataa                                      ;
+;   7.009  ;   0.477 ; FF ; CELL ; 1      ; LCCOMB_X46_Y15_N16 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~0|cout                                       ;
+;   7.009  ;   0.000 ; FF ; IC   ; 2      ; LCCOMB_X46_Y15_N18 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~2|cin                                        ;
+;   7.068  ;   0.059 ; FR ; CELL ; 1      ; LCCOMB_X46_Y15_N18 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~2|cout                                       ;
+;   7.068  ;   0.000 ; RR ; IC   ; 2      ; LCCOMB_X46_Y15_N20 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~4|cin                                        ;
+;   7.127  ;   0.059 ; RF ; CELL ; 1      ; LCCOMB_X46_Y15_N20 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~4|cout                                       ;
+;   7.127  ;   0.000 ; FF ; IC   ; 2      ; LCCOMB_X46_Y15_N22 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~6|cin                                        ;
+;   7.186  ;   0.059 ; FR ; CELL ; 1      ; LCCOMB_X46_Y15_N22 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~6|cout                                       ;
+;   7.186  ;   0.000 ; RR ; IC   ; 2      ; LCCOMB_X46_Y15_N24 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~8|cin                                        ;
+;   7.245  ;   0.059 ; RF ; CELL ; 1      ; LCCOMB_X46_Y15_N24 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~8|cout                                       ;
+;   7.245  ;   0.000 ; FF ; IC   ; 2      ; LCCOMB_X46_Y15_N26 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~10|cin                                       ;
+;   7.304  ;   0.059 ; FR ; CELL ; 1      ; LCCOMB_X46_Y15_N26 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~10|cout                                      ;
+;   7.304  ;   0.000 ; RR ; IC   ; 2      ; LCCOMB_X46_Y15_N28 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~12|cin                                       ;
+;   7.363  ;   0.059 ; RF ; CELL ; 1      ; LCCOMB_X46_Y15_N28 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~12|cout                                      ;
+;   7.363  ;   0.000 ; FF ; IC   ; 2      ; LCCOMB_X46_Y15_N30 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~14|cin                                       ;
+;   7.422  ;   0.059 ; FR ; CELL ; 1      ; LCCOMB_X46_Y15_N30 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~14|cout                                      ;
+;   7.422  ;   0.000 ; RR ; IC   ; 2      ; LCCOMB_X46_Y14_N0  ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~16|cin                                       ;
+;   7.481  ;   0.059 ; RF ; CELL ; 1      ; LCCOMB_X46_Y14_N0  ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~16|cout                                      ;
+;   7.481  ;   0.000 ; FF ; IC   ; 2      ; LCCOMB_X46_Y14_N2  ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~18|cin                                       ;
+;   7.540  ;   0.059 ; FR ; CELL ; 1      ; LCCOMB_X46_Y14_N2  ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~18|cout                                      ;
+;   7.540  ;   0.000 ; RR ; IC   ; 2      ; LCCOMB_X46_Y14_N4  ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~20|cin                                       ;
+;   7.599  ;   0.059 ; RF ; CELL ; 1      ; LCCOMB_X46_Y14_N4  ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~20|cout                                      ;
+;   7.599  ;   0.000 ; FF ; IC   ; 2      ; LCCOMB_X46_Y14_N6  ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~22|cin                                       ;
+;   7.658  ;   0.059 ; FR ; CELL ; 1      ; LCCOMB_X46_Y14_N6  ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~22|cout                                      ;
+;   7.658  ;   0.000 ; RR ; IC   ; 2      ; LCCOMB_X46_Y14_N8  ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~24|cin                                       ;
+;   7.717  ;   0.059 ; RF ; CELL ; 1      ; LCCOMB_X46_Y14_N8  ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~24|cout                                      ;
+;   7.717  ;   0.000 ; FF ; IC   ; 2      ; LCCOMB_X46_Y14_N10 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~26|cin                                       ;
+;   7.776  ;   0.059 ; FR ; CELL ; 1      ; LCCOMB_X46_Y14_N10 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~26|cout                                      ;
+;   7.776  ;   0.000 ; RR ; IC   ; 2      ; LCCOMB_X46_Y14_N12 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~28|cin                                       ;
+;   7.835  ;   0.059 ; RF ; CELL ; 1      ; LCCOMB_X46_Y14_N12 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~28|cout                                      ;
+;   7.835  ;   0.000 ; FF ; IC   ; 2      ; LCCOMB_X46_Y14_N14 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~30|cin                                       ;
+;   7.894  ;   0.059 ; FR ; CELL ; 1      ; LCCOMB_X46_Y14_N14 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~30|cout                                      ;
+;   7.894  ;   0.000 ; RR ; IC   ; 2      ; LCCOMB_X46_Y14_N16 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~32|cin                                       ;
+;   7.953  ;   0.059 ; RF ; CELL ; 1      ; LCCOMB_X46_Y14_N16 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~32|cout                                      ;
+;   7.953  ;   0.000 ; FF ; IC   ; 2      ; LCCOMB_X46_Y14_N18 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~34|cin                                       ;
+;   8.012  ;   0.059 ; FR ; CELL ; 1      ; LCCOMB_X46_Y14_N18 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~34|cout                                      ;
+;   8.012  ;   0.000 ; RR ; IC   ; 2      ; LCCOMB_X46_Y14_N20 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~36|cin                                       ;
+;   8.071  ;   0.059 ; RF ; CELL ; 1      ; LCCOMB_X46_Y14_N20 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~36|cout                                      ;
+;   8.071  ;   0.000 ; FF ; IC   ; 2      ; LCCOMB_X46_Y14_N22 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~38|cin                                       ;
+;   8.130  ;   0.059 ; FR ; CELL ; 1      ; LCCOMB_X46_Y14_N22 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~38|cout                                      ;
+;   8.130  ;   0.000 ; RR ; IC   ; 2      ; LCCOMB_X46_Y14_N24 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~40|cin                                       ;
+;   8.189  ;   0.059 ; RF ; CELL ; 1      ; LCCOMB_X46_Y14_N24 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~40|cout                                      ;
+;   8.189  ;   0.000 ; FF ; IC   ; 2      ; LCCOMB_X46_Y14_N26 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~42|cin                                       ;
+;   8.248  ;   0.059 ; FR ; CELL ; 1      ; LCCOMB_X46_Y14_N26 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~42|cout                                      ;
+;   8.248  ;   0.000 ; RR ; IC   ; 2      ; LCCOMB_X46_Y14_N28 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~44|cin                                       ;
+;   8.307  ;   0.059 ; RF ; CELL ; 1      ; LCCOMB_X46_Y14_N28 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~44|cout                                      ;
+;   8.307  ;   0.000 ; FF ; IC   ; 2      ; LCCOMB_X46_Y14_N30 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~46|cin                                       ;
+;   8.366  ;   0.059 ; FR ; CELL ; 1      ; LCCOMB_X46_Y14_N30 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~46|cout                                      ;
+;   8.366  ;   0.000 ; RR ; IC   ; 2      ; LCCOMB_X46_Y13_N0  ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~48|cin                                       ;
+;   8.425  ;   0.059 ; RF ; CELL ; 1      ; LCCOMB_X46_Y13_N0  ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~48|cout                                      ;
+;   8.425  ;   0.000 ; FF ; IC   ; 2      ; LCCOMB_X46_Y13_N2  ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~50|cin                                       ;
+;   8.484  ;   0.059 ; FR ; CELL ; 1      ; LCCOMB_X46_Y13_N2  ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~50|cout                                      ;
+;   8.484  ;   0.000 ; RR ; IC   ; 2      ; LCCOMB_X46_Y13_N4  ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~52|cin                                       ;
+;   8.543  ;   0.059 ; RF ; CELL ; 1      ; LCCOMB_X46_Y13_N4  ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~52|cout                                      ;
+;   8.543  ;   0.000 ; FF ; IC   ; 2      ; LCCOMB_X46_Y13_N6  ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~54|cin                                       ;
+;   8.602  ;   0.059 ; FR ; CELL ; 1      ; LCCOMB_X46_Y13_N6  ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~54|cout                                      ;
+;   8.602  ;   0.000 ; RR ; IC   ; 2      ; LCCOMB_X46_Y13_N8  ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~56|cin                                       ;
+;   8.661  ;   0.059 ; RF ; CELL ; 1      ; LCCOMB_X46_Y13_N8  ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~56|cout                                      ;
+;   8.661  ;   0.000 ; FF ; IC   ; 2      ; LCCOMB_X46_Y13_N10 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~58|cin                                       ;
+;   8.720  ;   0.059 ; FR ; CELL ; 1      ; LCCOMB_X46_Y13_N10 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~58|cout                                      ;
+;   8.720  ;   0.000 ; RR ; IC   ; 2      ; LCCOMB_X46_Y13_N12 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~60|cin                                       ;
+;   8.779  ;   0.059 ; RF ; CELL ; 1      ; LCCOMB_X46_Y13_N12 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~60|cout                                      ;
+;   8.779  ;   0.000 ; FF ; IC   ; 2      ; LCCOMB_X46_Y13_N14 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~62|cin                                       ;
+;   8.838  ;   0.059 ; FR ; CELL ; 1      ; LCCOMB_X46_Y13_N14 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~62|cout                                      ;
+;   8.838  ;   0.000 ; RR ; IC   ; 2      ; LCCOMB_X46_Y13_N16 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~64|cin                                       ;
+;   8.897  ;   0.059 ; RF ; CELL ; 1      ; LCCOMB_X46_Y13_N16 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~64|cout                                      ;
+;   8.897  ;   0.000 ; FF ; IC   ; 2      ; LCCOMB_X46_Y13_N18 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~66|cin                                       ;
+;   8.956  ;   0.059 ; FR ; CELL ; 1      ; LCCOMB_X46_Y13_N18 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~66|cout                                      ;
+;   8.956  ;   0.000 ; RR ; IC   ; 2      ; LCCOMB_X46_Y13_N20 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~68|cin                                       ;
+;   9.015  ;   0.059 ; RF ; CELL ; 1      ; LCCOMB_X46_Y13_N20 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~68|cout                                      ;
+;   9.015  ;   0.000 ; FF ; IC   ; 2      ; LCCOMB_X46_Y13_N22 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~70|cin                                       ;
+;   9.074  ;   0.059 ; FR ; CELL ; 1      ; LCCOMB_X46_Y13_N22 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~70|cout                                      ;
+;   9.074  ;   0.000 ; RR ; IC   ; 2      ; LCCOMB_X46_Y13_N24 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~72|cin                                       ;
+;   9.711  ;   0.637 ; RR ; CELL ; 4      ; LCCOMB_X46_Y13_N24 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|Add2~72|combout                                   ;
+;   10.821 ;   1.110 ; RR ; IC   ; 1      ; LCCOMB_X43_Y12_N4  ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|ShiftRight0~125|dataa                             ;
+;   11.230 ;   0.409 ; RR ; CELL ; 2      ; LCCOMB_X43_Y12_N4  ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|ShiftRight0~125|combout                           ;
+;   11.475 ;   0.245 ; RR ; IC   ; 1      ; LCCOMB_X43_Y12_N8  ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|ShiftRight0~127|datab                             ;
+;   11.898 ;   0.423 ; RR ; CELL ; 1      ; LCCOMB_X43_Y12_N8  ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|ShiftRight0~127|combout                           ;
+;   12.593 ;   0.695 ; RR ; IC   ; 1      ; LCCOMB_X45_Y12_N30 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|ShiftRight0~128|datac                             ;
+;   12.898 ;   0.305 ; RR ; CELL ; 2      ; LCCOMB_X45_Y12_N30 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|ShiftRight0~128|combout                           ;
+;   13.633 ;   0.735 ; RR ; IC   ; 1      ; LCCOMB_X42_Y12_N18 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|r3_q[35]~45|datab                                 ;
+;   14.056 ;   0.423 ; RR ; CELL ; 1      ; LCCOMB_X42_Y12_N18 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|r3_q[35]~45|combout                               ;
+;   14.517 ;   0.461 ; RR ; IC   ; 1      ; LCCOMB_X41_Y12_N10 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|r3_q[35]~20|datab                                 ;
+;   14.966 ;   0.449 ; RF ; CELL ; 3      ; LCCOMB_X41_Y12_N10 ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|r3_q[35]~20|combout                               ;
+;   16.337 ;   1.371 ; FF ; IC   ; 1      ; LCCOMB_X42_Y16_N8  ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|r3_q[19]~4|datab                                  ;
+;   16.761 ;   0.424 ; FF ; CELL ; 1      ; LCCOMB_X42_Y16_N8  ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|r3_q[19]~4|combout                                ;
+;   16.761 ;   0.000 ; FF ; IC   ; 1      ; FF_X42_Y16_N9      ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|r3_q[19]|d                                        ;
+;   16.855 ;   0.094 ; FF ; CELL ; 1      ; FF_X42_Y16_N9      ; fpga_core:u_fpga_core|accel_top:u_accel_top|gemm_engine:u_gemm_engine|postproc:u_postproc|r3_q[19] ;
++----------+---------+----+------+--------+--------------------+----------------------------------------------------------------------------------------------------+
+
++------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+; Data Required Path                                                                                                                                               ;
++----------+---------+----+------+--------+-------------------+----------------------------------------------------------------------------------------------------+
+; Total    ; Incr    ; RF ; Type ; Fanout ; Location          ; Element                                                                                            ;
++----------+---------+----+------+--------+-------------------+----------------------------------------------------------------------------------------------------+
+; 20.000   ; 20.000  ;    ;      ;        ;                   ; latch edge time                                                                                    ;
+; 23.540   ; 3.540   ;    ;      ;        ;                   ; clock path                                                                                         ;
+;   20.000 ;   0.000 ;    ;      ;        ;                   ; source latency                                                                                     ;
+;   20.000 ;   0.000 ;    ;      ; 1      ; PIN_P11           ; MAX10_CLK1_50                                                                                      ;
+;   20.000 ;   0.000 ; RR ; IC   ; 1      ; IOIBUF_X34_Y0_N29 ; MAX10_CLK1_50~input|i                                                                              ;
+;   20.793 ;   0.793 ; RR ; CELL ; 1      ; IOIBUF_X34_Y0_N29 ; MAX10_CLK1_50~input|o                                                                              ;
+;   21.651 ;   0.858 ; RR ; IC   ; 1      ; CLKCTRL_G19       ; MAX10_CLK1_50~inputclkctrl|inclk[0]                                                                ;
+;   21.651 ;   0.000 ; RR ; CELL ; 5732   ; CLKCTRL_G19       ; MAX10_CLK1_50~inputclkctrl|outclk                                                                  ;
+;   23.029 ;   1.378 ; RR ; IC   ; 1      ; FF_X42_Y16_N9     ; u_fpga_core|u_accel_top|u_gemm_engine|u_postproc|r3_q[19]|clk                                      ;
+;   23.504 ;   0.475 ; RR ; CELL ; 1      ; FF_X42_Y16_N9     ; fpga_core:u_fpga_core|accel_top:u_accel_top|gemm_engine:u_gemm_engine|postproc:u_postproc|r3_q[19] ;
+;   23.540 ;   0.036 ;    ;      ;        ;                   ; clock pessimism removed                                                                            ;
+; 23.520   ; -0.020  ;    ;      ;        ;                   ; clock uncertainty                                                                                  ;
+; 23.533   ; 0.013   ;    ; uTsu ; 1      ; FF_X42_Y16_N9     ; fpga_core:u_fpga_core|accel_top:u_accel_top|gemm_engine:u_gemm_engine|postproc:u_postproc|r3_q[19] ;
++----------+---------+----+------+--------+-------------------+----------------------------------------------------------------------------------------------------+
+
+
