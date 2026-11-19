@@ -156,6 +156,58 @@ run_quartus_probes() {
   if [ "$rc" -eq 0 ]; then pass "Quartus Analysis & Synthesis probes (${#rtl_files[@]} modules)"; else fail "Quartus Analysis & Synthesis probes"; fi
 }
 
+# Phase 3 helpers.
+# The quick subset passed bit-exact in the checkpoint's own system-test run (Verilator, 50 images).
+check_quick_subset() {
+  python - <<'PY'
+import glob, sys, xml.etree.ElementTree as ET
+files = glob.glob("sim_build/accel_top_verilator_*WGT_INIT*/test_accel_top[[]verilator-main-50[]].result.xml")
+files = [f for f in files if "PERF_W" not in f and "sva_violation" not in f and "full_run" not in f]
+ok = False
+for f in files:
+    for tc in ET.parse(f).iter("testcase"):
+        if tc.get("name") == "test_network_quick_subset":
+            ok = tc.find("failure") is None and tc.find("skipped") is None and tc.find("error") is None
+print(f"{files}: test_network_quick_subset {'passed' if ok else 'did not pass'}")
+sys.exit(0 if ok else 1)
+PY
+}
+
+# Full run report: at least 1,000 images, every logit bit-exact, every run DONE without error.
+check_full_run_report() {
+  python - <<'PY'
+import json, sys
+r = json.load(open("testbench/reports/full_run.json"))
+n = r["images"]
+print(f"{n} images, {r['logits_bit_exact']} bit-exact, {r['status_done_no_error']} clean runs, "
+      f"hardware accuracy {r['hardware_accuracy']:.4f}")
+sys.exit(0 if n >= 1000 and r["logits_bit_exact"] == n and r["status_done_no_error"] == n else 1)
+PY
+}
+
+# Coverage: the files written by this checkpoint's own unit/system runs meet every goal or have a
+# documented gap, and the committed report says the same (no missed bin).
+check_coverage() {
+  python scripts/coverage_report.py --check || return 1
+  python - <<'PY'
+import json, sys
+r = json.load(open("testbench/reports/coverage.json"))
+print(f"committed report: {r['bins']} bins, {r['met']} met, {r['documented_gaps']} documented gaps, "
+      f"{r['missed']} missed")
+sys.exit(0 if r["missed"] == 0 and r["met"] + r["documented_gaps"] == r["bins"] else 1)
+PY
+}
+
+# Every mutant killed in a fresh run, and the committed report covers every patch, all killed.
+check_mutants() {
+  local n killed
+  python scripts/run_mutants.py -j 4 --report "$REPORT_DIR/mutation.md" || return 1
+  n="$(ls testbench/mutants/*.patch | wc -l)"
+  killed="$(grep -c '| KILLED |' testbench/reports/mutation.md)"
+  echo "committed report: $killed KILLED rows for $n patches"
+  [ "$killed" -eq "$n" ]
+}
+
 # ---------------------------------------------------------------- phases
 phase_0() {
   echo "Phase 0: toolchain"
@@ -191,12 +243,33 @@ phase_2() {
   check "latest CI run on main is green for HEAD" check_ci_green_on_head
 }
 
+phase_3() {
+  echo "Phase 3: verification"
+  rm -f sim_build/*/coverage.json  # coverage below comes from this run only
+  check "unit tests pass (testbench/unit, Icarus and Verilator with SVA)" check_pytest unit 10 testbench/unit
+  check "system tests pass (accel_top: CSR, memory port, errors, reset, layer by layer, SVA fires)" check_pytest system 5 testbench/system
+  check "quick subset (50 images) bit-exact on Verilator with every assertion bound" check_quick_subset
+  check "full run report: >= 1,000 MNIST test images, 100% logit match (testbench/reports/full_run.json)" check_full_run_report
+  check "functional coverage: goals met or gaps documented (scripts/coverage_report.py --check)" check_coverage
+  check "formal proofs pass, and fail on their mutants (testbench/formal)" check_pytest formal 7 testbench/formal
+  check "every mutant killed (scripts/run_mutants.py; committed report complete)" check_mutants
+  check "script tests pass (lint fixtures, Quartus compatibility checker, mutant patches)" check_pytest scripts 10 scripts/tests
+  check "golden model tests" check_pytest model 20 model/tests
+  check "no RTL mutant applied to the working tree (git apply -R --check fails for every patch)" check_no_mutant_applied
+  check "RTL lint (Quartus compat, Verilator -Wall, Icarus, Yosys check)" scripts/lint.sh
+  check "ruff format + ruff check clean" check_ruff
+  run_quartus_probes
+  run_local_checks "optional local repository checks"
+  check "latest CI run on main is green for HEAD" check_ci_green_on_head
+}
+
 phase="${1:-}"
 case "$phase" in
   0) phase_0 ;;
   1) phase_1 ;;
   2) phase_2 ;;
-  *) echo "usage: $0 <phase>   (implemented: 0, 1, 2)" >&2; exit 2 ;;
+  3) phase_3 ;;
+  *) echo "usage: $0 <phase>   (implemented: 0, 1, 2, 3)" >&2; exit 2 ;;
 esac
 
 echo

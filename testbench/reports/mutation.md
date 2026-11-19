@@ -5,7 +5,7 @@ applied in a temporary git worktree and its killing test from
 `testbench/mutants/README.md` is run; every killing test also passes on the unmutated
 design (baseline).
 
-**20 / 20 mutants killed.**
+**32 / 32 mutants killed.**
 
 | Mutant | Verdict | Killing test | First failure |
 |---|---|---|---|
@@ -29,3 +29,15 @@ design (baseline).
 | `m18_pool_unsigned_max` | KILLED | `testbench/unit/test_pool_unit.py::test_pool_unit[icarus]` | test_random_signed_shapes: 4 wrong outputs, e.g. (addr, got, want) [(5298, -28, 127), (5299, -61, 127), (5300, -56, 127), (5301, -79, 127)] |
 | `m19_pool_window_restart` | KILLED | `testbench/unit/test_pool_unit.py::test_pool_unit[icarus]` | test_network_pools: pool write data at 0x0: X/Z on o_dst_wdata = XXXXXXXX at 375 ns |
 | `m20_mux_read_not_gated` | KILLED | `testbench/unit/test_buf_port_mux.py::test_buf_port_mux[icarus-3-8-13]` | test_random_ownership: cycle 0: owner 1: got (1, 4426, 0, 6979, 187), want (0, 4426, 0, 6979, 187) |
+| `m21_postproc_round_const` | KILLED | `testbench/unit/test_postproc.py::test_postproc[icarus]` | test_directed: tag 18: q8 -127 != -128 ({'tag': 18, 'acc': 859627819, 'bias': -859627947, 'm': 32768, 's': 15, 'rq': 1, 'relu': 0}) |
+| `m22_postproc_no_saturation` | KILLED | `testbench/unit/test_postproc.py::test_postproc[icarus]` | test_directed: tag 12: q8 0 != 127 ({'tag': 12, 'acc': 795481769, 'bias': -795481513, 'm': 32768, 's': 15, 'rq': 1, 'relu': 0}) |
+| `m23_postproc_no_relu` | KILLED | `testbench/unit/test_postproc.py::test_postproc[icarus]` | test_directed: tag 3: q8 -2 != 0 ({'tag': 3, 'acc': -263707621, 'bias': 263707616, 'm': 32768, 's': 16, 'rq': 1, 'relu': 1}) |
+| `m24_postproc_ready_dropped` | KILLED | `testbench/unit/test_postproc.py::test_postproc[icarus]` | test_random_with_gaps_and_backpressure: sink got 275/600 items before the guard expired |
+| `m25_array_a_skew` | KILLED | `testbench/unit/test_systolic_array.py::test_systolic_array[icarus-8]` | test_directed_edge_cases: Arrays are not equal |
+| `m26_top_pingpong_dst_swap` | KILLED | `testbench/system/test_accel_top.py::test_accel_top[icarus-quick-2]` | test_network_quick_subset: cycle 156 after START: (total, mac, rd, wr) (154, 9, 89, 0), want (154, 9, 89, 1) (events two cycles earlier) |
+| `m27_seq_fc_dst_unchecked` | KILLED | `testbench/unit/test_layer_seq.py::test_layer_seq[icarus-8]` | test_every_error: FC with src = 0, dst = 0: (done, error, layer) (1, 1, 7), want (1, 1, 2) |
+| `m28_csr_desc_pend_kept` | KILLED | `testbench/unit/test_csr_block.py::test_csr_block[icarus-8-16-32]` | test_withdrawn_descriptor_read: gap 0: DESC[17] = 0x70218b4c, want 0x73d30ddc (DESC[29] = 0x70218b4c) |
+| `m29_top_result_not_cleared` | KILLED | `testbench/system/test_accel_top.py::test_accel_top[verilator-main-50]` | test_errors: reserved op: RESULT not cleared at START |
+| `m30_perf_clear_keeps_inputs` | KILLED | `testbench/unit/test_perf_counters.py::test_perf_counters[icarus-32]` | test_random_events: cycle 1312: (total, mac, rd, wr) (1, 0, 1, 1) != (0, 0, 0, 0) |
+| `m31_mac_clear_ignored` | KILLED | `testbench/unit/test_mac_cell.py::test_mac_cell[icarus]` | test_random_accumulate_with_gaps_and_clears: step 21: got 51328, want 0 |
+| `m32_mem_ready_while_busy` | KILLED | `testbench/unit/test_mem_port.py::test_mem_port[icarus-64]` | test_random_traffic: cycle 5: ready 1, want 0 |
