@@ -338,12 +338,17 @@ out-of-range access:
 
 | Signal | Dir | Width | Meaning |
 |---|---|---|---|
-| `i_csr_valid` | in | 1 | request valid; hold `addr`, `we`, `wdata` stable until accepted |
+| `i_csr_valid` | in | 1 | request valid; once high, stays high until accepted |
 | `i_csr_we` | in | 1 | 1 write, 0 read |
 | `i_csr_addr` | in | 12 | byte address |
 | `i_csr_wdata` | in | 32 | write data |
 | `o_csr_ready` | out | 1 | request accepted in a cycle with `valid && ready` |
 | `o_csr_rdata` | out | 32 | read data, valid in the accepting cycle |
+
+**Handshake rule.** Once `i_csr_valid` is high, `i_csr_valid`, `i_csr_we`, `i_csr_addr` and
+`i_csr_wdata` stay stable until the cycle the request is accepted (`valid && ready`). Changing a
+waiting request violates the protocol and gives undefined read data. A withdrawn request is
+dropped: its data never answers a later request.
 
 Latency from `valid` to `ready` is not fixed: descriptor reads take an extra cycle, and during a
 run they also wait while the sequencer is fetching a descriptor (a few cycles). Unmapped
@@ -389,14 +394,18 @@ activations for debugging).
 
 | Signal | Dir | Width | Meaning |
 |---|---|---|---|
-| `i_mem_valid` | in | 1 | request valid |
+| `i_mem_valid` | in | 1 | request valid; once high, stays high until accepted |
 | `o_mem_ready` | out | 1 | request accepted when `valid && ready`; 0 while `BUSY` or a read is pending |
 | `i_mem_we` | in | 1 | 1 write, 0 read |
 | `i_mem_sel` | in | 3 | 0 IMG, 1 ACT0, 2 ACT1, 3 WGT, 4 PARAM; 5–7 reserved (writes ignored, reads 0) |
 | `i_mem_addr` | in | 16 | word address in the selected buffer (bits above its width are ignored) |
 | `i_mem_wdata` | in | 64 | write data (byte buffers use [7:0]) |
-| `o_mem_rvalid` | out | 1 | one-cycle pulse with read data, exactly once per accepted read |
+| `o_mem_rvalid` | out | 1 | one-cycle pulse with read data, exactly once per accepted read; no backpressure |
 | `o_mem_rdata` | out | 64 | read data (byte buffers zero-extended), valid with `o_mem_rvalid` |
+
+**Handshake rule.** Once `i_mem_valid` is high, `i_mem_valid`, `i_mem_we`, `i_mem_sel`,
+`i_mem_addr` and `i_mem_wdata` stay stable until the cycle the request is accepted
+(`valid && ready`). Read data has no ready: the master must take it in the `o_mem_rvalid` cycle.
 
 At most one read is outstanding. Read-data latency is not fixed; masters wait for `o_mem_rvalid`.
 

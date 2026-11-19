@@ -68,12 +68,12 @@ Status values: **done** (test exists and passes in CI), **planned** (phase in br
 
 | Item | Where | Status |
 |---|---|---|
-| Handshake stability (valid held until ready, payload stable) | SVA bind files, Verilator | planned [3] |
+| Handshake stability (valid held until ready, payload stable) | host interfaces: `testbench/sva/accel_top_if_sva.sv` bound at `accel_top` (CSR and memory-port requests stable until accepted; `o_mem_rvalid` a one-cycle pulse, only for an outstanding read, one read at a time; not ready while busy); `test_accel_top_sva_fires` violates both master rules. Internal handshakes: `systolic_array_if_sva`, `unit_if_sva` | done (host, array, units); planned [3] (remaining internal valid/ready links) |
 | No buffer address out of range; legal FSM states | SVA | planned [3] |
 | No X on outputs after reset, **valid-qualified**: every `o_*valid` / `o_idle` / `o_ready` / status output is never X after reset; a data output is never X in a cycle where its qualifying valid is high (data under a low valid may be X) | SVA (Verilator is 2-state, so X checks run on Icarus with a cocotb monitor) | planned [3] |
 | Formal: MAC accumulate/clear; argmax lowest-index max; one valid/ready buffer | SymbiYosys | planned [3] |
 | Bug injection: all mutants caught | `scripts/run_mutants.py --report testbench/reports/mutation.md` (D-029); 20 mutants so far, Phase 3 adds system-level ones | done (runner and unit-level mutants), planned [3] (system mutants) |
-| Buffer ownership at the top level | `testbench/sva/accel_top_sva.sv` + one `buf_port_mux_sva` per multiplexer (`accel_top_bind.sv`) | owners change only while every unit is idle; one unit busy at a time; start only when idle; memory port quiet while busy; only the owner requests each buffer | done |
+| Buffer ownership at the top level | `testbench/sva/accel_top_sva.sv` + one `buf_port_mux_sva` per multiplexer (`accel_top_bind.sv`) | owners change only while every unit is idle; one unit busy at a time; start only when idle; memory port quiet while busy; only the owner requests each buffer; registered src/dst stable while a unit runs (`a_src_dst_stable_while_busy`) | done |
 
 ## 5. Functional coverage targets (Phase 3 report)
 

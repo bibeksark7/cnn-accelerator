@@ -20,7 +20,9 @@ Tests:
                    ARGMAX with src != LOGIT and FC with dst != LOGIT), then a clean run
   reset            reset during each layer, then a clean run without reloading anything
   saturation       (PERF_W = 12 build) every counter saturates at 2^12 - 1
-Verilator runs bind every assertion (units, engine, array, buffer ownership, accel_top).
+Verilator runs bind every assertion (units, engine, array, buffer ownership, accel_top, and the
+host-interface handshakes); test_accel_top_sva_fires shows the master-side handshake assertions
+are live.
 TB_IMAGES limits the network test to the first images (the Icarus run uses 2).
 """
 
@@ -37,7 +39,7 @@ from cocotb.triggers import FallingEdge, ReadOnly, RisingEdge, with_timeout
 
 from common import accel_bus as ab
 from common.bits import to_signed
-from common.runner import RTL_DIR, SVA_DIR, run_cocotb, sv_string
+from common.runner import RTL_DIR, SVA_DIR, run_cocotb, run_sva_violation, sv_string
 from common.sim import start_clock_and_reset
 from model import golden, hwmap, net
 from model.hwmap import Descriptor as D
@@ -58,11 +60,13 @@ SVA_SOURCES = [
         "argmax_unit_bind.sv",
         "buf_port_mux_sva.sv",
         "accel_top_sva.sv",
+        "accel_top_if_sva.sv",
         "accel_top_bind.sv",
     )
 ]
 TB_IMAGES = int(os.environ.get("TB_IMAGES", "50"))
 TB_MODE = os.environ.get("TB_MODE", "main")  # main | quick (network test only) | saturation
+SVA_VIOLATION = os.environ.get("SVA_VIOLATION", "")  # set only by test_accel_top_sva_fires
 NUM_SLOTS = hwmap.NUM_IMAGES
 IMG_SIZE = net.IMG_SIZE
 RUN_TIMEOUT_US = 5000  # hang guard for one inference (about 50k cycles at 10 ns)
@@ -422,6 +426,47 @@ async def test_counter_saturation(dut):
     assert await acc.logits() == [int(v) for v in qs["logits"][0]], "saturation changed results"
 
 
+@cocotb.test(skip=SVA_VIOLATION != "csr_withdrawn")
+async def sva_violation_csr_withdrawn(dut):
+    """A DESC read dropped before it is accepted; only run by test_accel_top_sva_fires."""
+    await setup(dut)
+    await FallingEdge(dut.clk)
+    dut.i_csr_valid.value, dut.i_csr_we.value, dut.i_csr_addr.value = 1, 0, ab.DESC
+    await ReadOnly()
+    assert not int(dut.o_csr_ready.value), "a DESC read should wait one cycle"
+    await FallingEdge(dut.clk)
+    dut.i_csr_valid.value = 0
+    for _ in range(3):
+        await FallingEdge(dut.clk)
+
+
+@cocotb.test(skip=SVA_VIOLATION != "mem_req_changed")
+async def sva_violation_mem_req_changed(dut):
+    """A memory-port request changes its address while not ready; only run by
+    test_accel_top_sva_fires."""
+    await setup(dut)
+    await FallingEdge(dut.clk)
+    dut.i_mem_valid.value, dut.i_mem_we.value, dut.i_mem_sel.value = 1, 0, ab.SEL_IMG
+    dut.i_mem_addr.value = 0
+    await FallingEdge(dut.clk)  # accepted; the next request waits for the read to return
+    dut.i_mem_addr.value = 1
+    await ReadOnly()
+    assert not int(dut.o_mem_ready.value), "the port should be busy with the first read"
+    await FallingEdge(dut.clk)
+    dut.i_mem_addr.value = 2  # changed while not ready
+    for _ in range(3):
+        await FallingEdge(dut.clk)
+    dut.i_mem_valid.value = 0
+
+
+def init_params() -> dict[str, object]:
+    return {
+        "WGT_INIT": sv_string(MEM_DIR / "wgt.hex"),
+        "PARAM_INIT": sv_string(MEM_DIR / "param.hex"),
+        "DESC_INIT": sv_string(MEM_DIR / "desc.hex"),
+    }
+
+
 CONFIGS = [  # (simulator, mode, images)
     ("verilator", "main", 50),
     ("verilator", "saturation", 1),
@@ -431,11 +476,7 @@ CONFIGS = [  # (simulator, mode, images)
 
 @pytest.mark.parametrize(("sim", "mode", "images"), CONFIGS)
 def test_accel_top(sim: str, mode: str, images: int) -> None:
-    params = {
-        "WGT_INIT": sv_string(MEM_DIR / "wgt.hex"),
-        "PARAM_INIT": sv_string(MEM_DIR / "param.hex"),
-        "DESC_INIT": sv_string(MEM_DIR / "desc.hex"),
-    }
+    params = init_params()
     if mode == "saturation":
         params["PERF_W"] = 12
     sources = RTL_SOURCES + (SVA_SOURCES if sim == "verilator" else [])
@@ -447,4 +488,19 @@ def test_accel_top(sim: str, mode: str, images: int) -> None:
         parameters=params,
         extra_build_args=["--assert"] if sim == "verilator" else [],
         extra_env={"TB_IMAGES": str(images), "TB_MODE": mode},
+    )
+
+
+@pytest.mark.parametrize(
+    ("violation", "assertion"),
+    [("csr_withdrawn", "a_csr_req_stable"), ("mem_req_changed", "a_mem_req_stable")],
+)
+def test_accel_top_sva_fires(violation: str, assertion: str) -> None:
+    run_sva_violation(
+        toplevel="accel_top",
+        sources=RTL_SOURCES + SVA_SOURCES,
+        test_module=Path(__file__).stem,
+        violation=violation,
+        assertion=assertion,
+        parameters=init_params(),
     )

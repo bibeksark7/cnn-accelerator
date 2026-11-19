@@ -9,6 +9,10 @@
 //   a_one_unit_busy           at most one unit runs at a time
 //   a_start_when_idle         a unit is started only while every unit is idle
 //   a_mem_quiet_while_busy    the memory port issues no buffer request while BUSY
+//   a_src_dst_stable_while_busy the registered src/dst fields, which select the units' read data
+//                             and decode their buffer requests, do not change while a unit runs
+//                             (any unit busy in this cycle and the one before)
+// The host-interface handshake assertions are in accel_top_if_sva.sv.
 module accel_top_sva (
     input logic       clk,
     input logic       rst,
@@ -25,7 +29,9 @@ module accel_top_sva (
     input logic       argmax_start,
     input logic       seq_busy,
     input logic [4:0] mem_re,
-    input logic [4:0] mem_we
+    input logic [4:0] mem_we,
+    input logic [1:0] src,
+    input logic [1:0] dst
 );
 
   logic [12:0] owners;
@@ -46,5 +52,9 @@ module accel_top_sva (
 
   a_mem_quiet_while_busy :
   assert property (@(posedge clk) disable iff (rst) seq_busy |-> ((mem_re | mem_we) == '0));
+
+  a_src_dst_stable_while_busy :
+  assert property (@(posedge clk) disable iff (rst)
+      (any_busy && $past(any_busy)) |-> $stable({src, dst}));
 
 endmodule
