@@ -85,6 +85,16 @@ jobs:
         if: always()
         run: python scripts/check_junit.py sim_build/system.xml --min-tests 3
 
+      - name: Formal proofs (SymbiYosys)
+        if: always()
+        run: |
+          source scripts/env.sh
+          pytest testbench/formal --junitxml=sim_build/formal.xml
+
+      - name: Check formal results file
+        if: always()
+        run: python scripts/check_junit.py sim_build/formal.xml --min-tests 7
+
       - name: Script tests (lint fixtures, Quartus compatibility checker)
         if: always()
         run: |

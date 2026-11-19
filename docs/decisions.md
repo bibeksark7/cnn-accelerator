@@ -818,3 +818,32 @@ place, catches a sequencer bug against any unit, and the WS array work (Phase 7)
 **Reason.** Small blocks, each with its own unit test against a Python model, and one place
 (`accel_top`) where they are connected and the whole network is checked against the golden model.
 
+
+## D-033 — Formal proofs: ports-only wrappers, immediate assertions, PDR (Phase 3)
+
+**Decision.**
+- `testbench/formal/<module>_props.sv` instantiates the module and states its properties as
+  immediate assertions with `$past`, using only its ports. The open-source Yosys front end
+  rejects `|=>` and does not resolve hierarchical references (both tried; a reference became an
+  undriven wire), so concurrent SVA and internal signals are out.
+- Engines: k-induction (`smtbmc yices`) for the MAC cell, where every property is one-step;
+  PDR (`abc pdr`) for argmax and postproc. With ports-only properties, k-induction fails on
+  postproc: a stalled pipeline can hold invisible wrong state for any number of cycles. PDR finds
+  the needed internal invariants itself and proves postproc in seconds.
+- argmax is proved at `VAL_W = 4`, `IDX_W = 3` (8 logits). The LOGIT file is a free constant
+  (`anyconst`) read through a constant-index mux (a variable part-select gave `x` bits that the
+  AIG back end rejects). At `VAL_W = 6` neither engine finished (PDR stopped after 8 minutes, k-induction at depth 24
+  after 15); at `VAL_W = 4` both prove it in about 70 s.
+- The handshake block is `postproc`, the design's elastic valid/ready pipeline. Each input
+  carries its sequence number as the tag, and `i_acc` is a function of it, so every output can be
+  traced back to its input.
+- `test_formal.py` runs each proof (must PASS) and re-runs it on a mutated copy of the RTL (must
+  FAIL on a named property): m31 (MAC ignores clear), m16 and m17 (argmax tie and signedness),
+  m24 (postproc drops `i_ready`). CI runs it.
+
+**Alternatives.** Bounded model checking only (a proof only up to the depth); Verific-based
+SymbiYosys (commercial); assertions inside the RTL under `` `ifdef FORMAL `` to reach internal
+state (adds verification code to synthesizable files).
+
+**Reason.** Unbounded proofs with the free toolchain, on the three blocks the verification plan names, with
+evidence that each property set is not vacuous.

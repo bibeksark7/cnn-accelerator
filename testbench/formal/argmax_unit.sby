@@ -1,0 +1,15 @@
+# Formal proof of rtl/post/argmax_unit.sv; properties in argmax_unit_props.sv. Run by test_formal.py.
+[options]
+mode prove
+
+[engines]
+abc pdr
+
+[script]
+read_verilog -formal -sv argmax_unit.sv
+read_verilog -formal -sv argmax_unit_props.sv
+prep -top argmax_unit_props
+
+[files]
+../../rtl/post/argmax_unit.sv
+argmax_unit_props.sv

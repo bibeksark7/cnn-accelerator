@@ -1,0 +1,15 @@
+# Formal proof of rtl/post/postproc.sv; properties in postproc_props.sv. Run by test_formal.py.
+[options]
+mode prove
+
+[engines]
+abc pdr
+
+[script]
+read_verilog -formal -sv postproc.sv
+read_verilog -formal -sv postproc_props.sv
+prep -top postproc_props
+
+[files]
+../../rtl/post/postproc.sv
+postproc_props.sv

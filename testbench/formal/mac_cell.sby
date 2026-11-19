@@ -1,0 +1,16 @@
+# Formal proof of rtl/core/mac_cell.sv; properties in mac_cell_props.sv. Run by test_formal.py.
+[options]
+mode prove
+depth 3
+
+[engines]
+smtbmc yices
+
+[script]
+read_verilog -formal -sv mac_cell.sv
+read_verilog -formal -sv mac_cell_props.sv
+prep -top mac_cell_props
+
+[files]
+../../rtl/core/mac_cell.sv
+mac_cell_props.sv
