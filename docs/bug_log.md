@@ -224,3 +224,17 @@ requantization, nested-loop convolution, pack/unpack round-trips) in `model/test
 - **Regression test.** `test_csr_block.py::test_withdrawn_descriptor_read` (withdrawal followed by
   a read of another word after 0, 1 and 3 idle cycles; each must wait for its own RAM read and
   return its own word), on Icarus and Verilator.
+
+## BUG-013 — The mutant-patch check could not see system-test killing tests (Phase 3)
+
+- **Symptom.** `scripts/tests/test_mutant_patches.py::test_killing_test_exists` failed for the
+  two new mutants whose killing test is `testbench/system/test_accel_top.py` (m26, m29):
+  "is not a collected pytest node", although both tests exist and kill their mutants.
+- **How found.** Running the script tests after adding the system-level mutants.
+- **Root cause (verification infrastructure).** The check collected only `testbench/unit`, so
+  every mutant had to be killed by a unit test. That was true for the first 20 mutants, which hid
+  the limitation.
+- **Fix.** The check collects `testbench/unit` and `testbench/system`.
+- **Regression test.** `test_mutant_patches.py` passes for all 32 mutants, and
+  `scripts/run_mutants.py` kills m26 and m29 with their system tests.
+
