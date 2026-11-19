@@ -33,7 +33,7 @@ ROWS = {m.name: m for m in RUNNER.parse_readme()}
 def _collected_nodes() -> frozenset[str]:
     out = subprocess.run(
         [sys.executable, "-m", "pytest", "--collect-only", "-q", "-p", "no:cacheprovider",
-         "testbench/unit"],
+         "testbench/unit", "testbench/system"],
         cwd=ROOT, capture_output=True, text=True, check=True,
     ).stdout  # fmt: skip
     return frozenset(line.strip() for line in out.splitlines() if "::" in line)
