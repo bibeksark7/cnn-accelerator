@@ -1,7 +1,7 @@
 ----------------
 ; Command Info ;
 ----------------
-Report Timing: Found 1 setup paths (0 violated).  Worst case slack is 6.008 
+Report Timing: Found 1 setup paths (0 violated).  Worst case slack is 7.228 
 
 Tcl Command:
     report_timing -setup -file timing_setup_worst.rpt -npaths 1 -detail full_path
@@ -15,29 +15,29 @@ Options:
 Delay Model:
     Slow 1200mV 85C Model
 
-+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-; Summary of Paths                                                                                                                                                            ;
-+-------+---------------------------------------------------+-------------------------------------------+--------------+-------------+--------------+------------+------------+
-; Slack ; From Node                                         ; To Node                                   ; Launch Clock ; Latch Clock ; Relationship ; Clock Skew ; Data Delay ;
-+-------+---------------------------------------------------+-------------------------------------------+--------------+-------------+--------------+------------+------------+
-; 6.008 ; gemm_engine:u_gemm_engine|agen_a:u_agen_a|o_valid ; perf_counters:u_perf_counters|buf_rd_q[7] ; clk          ; clk         ; 20.000       ; -0.015     ; 13.970     ;
-+-------+---------------------------------------------------+-------------------------------------------+--------------+-------------+--------------+------------+------------+
++----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+; Summary of Paths                                                                                                                                                                             ;
++-------+-------------------------------------------------------+--------------------------------------------------------+--------------+-------------+--------------+------------+------------+
+; Slack ; From Node                                             ; To Node                                                ; Launch Clock ; Latch Clock ; Relationship ; Clock Skew ; Data Delay ;
++-------+-------------------------------------------------------+--------------------------------------------------------+--------------+-------------+--------------+------------+------------+
+; 7.228 ; gemm_engine:u_gemm_engine|postproc:u_postproc|s2_q[1] ; gemm_engine:u_gemm_engine|postproc:u_postproc|r3_q[22] ; clk          ; clk         ; 20.000       ; -0.066     ; 12.699     ;
++-------+-------------------------------------------------------+--------------------------------------------------------+--------------+-------------+--------------+------------+------------+
 
-Path #1: Setup slack is 6.008 
+Path #1: Setup slack is 7.228 
 ===============================================================================
-+------------------------------------------------------------------------+
-; Path Summary                                                           ;
-+--------------------+---------------------------------------------------+
-; Property           ; Value                                             ;
-+--------------------+---------------------------------------------------+
-; From Node          ; gemm_engine:u_gemm_engine|agen_a:u_agen_a|o_valid ;
-; To Node            ; perf_counters:u_perf_counters|buf_rd_q[7]         ;
-; Launch Clock       ; clk                                               ;
-; Latch Clock        ; clk                                               ;
-; Data Arrival Time  ; 17.516                                            ;
-; Data Required Time ; 23.524                                            ;
-; Slack              ; 6.008                                             ;
-+--------------------+---------------------------------------------------+
++-----------------------------------------------------------------------------+
+; Path Summary                                                                ;
++--------------------+--------------------------------------------------------+
+; Property           ; Value                                                  ;
++--------------------+--------------------------------------------------------+
+; From Node          ; gemm_engine:u_gemm_engine|postproc:u_postproc|s2_q[1]  ;
+; To Node            ; gemm_engine:u_gemm_engine|postproc:u_postproc|r3_q[22] ;
+; Launch Clock       ; clk                                                    ;
+; Latch Clock        ; clk                                                    ;
+; Data Arrival Time  ; 16.394                                                 ;
+; Data Required Time ; 23.622                                                 ;
+; Slack              ; 7.228                                                  ;
++--------------------+--------------------------------------------------------+
 
 +------------------------------------------------------------------------------------+
 ; Statistics                                                                         ;
@@ -45,139 +45,141 @@ Path #1: Setup slack is 6.008
 ; Property               ; Value  ; Count ; Total Delay ; % of Total ; Min   ; Max   ;
 +------------------------+--------+-------+-------------+------------+-------+-------+
 ; Setup Relationship     ; 20.000 ;       ;             ;            ;       ;       ;
-; Clock Skew             ; -0.015 ;       ;             ;            ;       ;       ;
-; Data Delay             ; 13.970 ;       ;             ;            ;       ;       ;
-; Number of Logic Levels ;        ; 7     ;             ;            ;       ;       ;
+; Clock Skew             ; -0.066 ;       ;             ;            ;       ;       ;
+; Data Delay             ; 12.699 ;       ;             ;            ;       ;       ;
+; Number of Logic Levels ;        ; 8     ;             ;            ;       ;       ;
 ; Physical Delays        ;        ;       ;             ;            ;       ;       ;
 ;  Arrival Path          ;        ;       ;             ;            ;       ;       ;
 ;   Clock                ;        ;       ;             ;            ;       ;       ;
-;    IC                  ;        ; 3     ; 2.328       ; 66         ; 0.000 ; 1.434 ;
-;    Cell                ;        ; 3     ; 1.218       ; 34         ; 0.000 ; 0.708 ;
+;    IC                  ;        ; 3     ; 2.477       ; 67         ; 0.000 ; 1.583 ;
+;    Cell                ;        ; 3     ; 1.218       ; 33         ; 0.000 ; 0.708 ;
 ;   Data                 ;        ;       ;             ;            ;       ;       ;
-;    IC                  ;        ; 38    ; 8.483       ; 61         ; 0.000 ; 1.905 ;
-;    Cell                ;        ; 39    ; 5.280       ; 38         ; 0.000 ; 0.605 ;
-;    uTco                ;        ; 1     ; 0.207       ; 1          ; 0.207 ; 0.207 ;
+;    IC                  ;        ; 39    ; 7.026       ; 55         ; 0.000 ; 1.466 ;
+;    Cell                ;        ; 40    ; 5.466       ; 43         ; 0.000 ; 0.605 ;
+;    uTco                ;        ; 1     ; 0.207       ; 2          ; 0.207 ; 0.207 ;
 ;  Required Path         ;        ;       ;             ;            ;       ;       ;
 ;   Clock                ;        ;       ;             ;            ;       ;       ;
-;    IC                  ;        ; 3     ; 2.289       ; 66         ; 0.000 ; 1.431 ;
-;    Cell                ;        ; 3     ; 1.183       ; 34         ; 0.000 ; 0.708 ;
+;    IC                  ;        ; 3     ; 2.383       ; 67         ; 0.000 ; 1.525 ;
+;    Cell                ;        ; 3     ; 1.183       ; 33         ; 0.000 ; 0.708 ;
 +------------------------+--------+-------+-------------+------------+-------+-------+
 Note: Negative delays are omitted from totals when calculating percentages
 
-+------------------------------------------------------------------------------------------------------------------+
-; Data Arrival Path                                                                                                ;
-+----------+---------+----+------+--------+--------------------+---------------------------------------------------+
-; Total    ; Incr    ; RF ; Type ; Fanout ; Location           ; Element                                           ;
-+----------+---------+----+------+--------+--------------------+---------------------------------------------------+
-; 0.000    ; 0.000   ;    ;      ;        ;                    ; launch edge time                                  ;
-; 3.546    ; 3.546   ;    ;      ;        ;                    ; clock path                                        ;
-;   0.000  ;   0.000 ;    ;      ;        ;                    ; source latency                                    ;
-;   0.000  ;   0.000 ;    ;      ; 1      ; PIN_M8             ; clk                                               ;
-;   0.000  ;   0.000 ; RR ; IC   ; 1      ; IOIBUF_X0_Y18_N15  ; clk~input|i                                       ;
-;   0.708  ;   0.708 ; RR ; CELL ; 1      ; IOIBUF_X0_Y18_N15  ; clk~input|o                                       ;
-;   1.602  ;   0.894 ; RR ; IC   ; 1      ; CLKCTRL_G3         ; clk~inputclkctrl|inclk[0]                         ;
-;   1.602  ;   0.000 ; RR ; CELL ; 6090   ; CLKCTRL_G3         ; clk~inputclkctrl|outclk                           ;
-;   3.036  ;   1.434 ; RR ; IC   ; 1      ; FF_X26_Y20_N25     ; u_gemm_engine|u_agen_a|o_valid|clk                ;
-;   3.546  ;   0.510 ; RR ; CELL ; 1      ; FF_X26_Y20_N25     ; gemm_engine:u_gemm_engine|agen_a:u_agen_a|o_valid ;
-; 17.516   ; 13.970  ;    ;      ;        ;                    ; data path                                         ;
-;   3.753  ;   0.207 ;    ; uTco ; 1      ; FF_X26_Y20_N25     ; gemm_engine:u_gemm_engine|agen_a:u_agen_a|o_valid ;
-;   3.753  ;   0.000 ; FF ; CELL ; 6      ; FF_X26_Y20_N25     ; u_gemm_engine|u_agen_a|o_valid|q                  ;
-;   5.154  ;   1.401 ; FF ; IC   ; 1      ; LCCOMB_X32_Y17_N24 ; u_gemm_engine|o_src_re|dataa                      ;
-;   5.559  ;   0.405 ; FF ; CELL ; 14     ; LCCOMB_X32_Y17_N24 ; u_gemm_engine|o_src_re|combout                    ;
-;   7.405  ;   1.846 ; FF ; IC   ; 1      ; LCCOMB_X37_Y27_N22 ; u_buf_port_mux_act1|o_re~2|dataa                  ;
-;   7.833  ;   0.428 ; FF ; CELL ; 1      ; LCCOMB_X37_Y27_N22 ; u_buf_port_mux_act1|o_re~2|combout                ;
-;   8.122  ;   0.289 ; FF ; IC   ; 1      ; LCCOMB_X37_Y27_N10 ; u_buf_port_mux_act1|o_re~3|dataa                  ;
-;   8.550  ;   0.428 ; FF ; CELL ; 11     ; LCCOMB_X37_Y27_N10 ; u_buf_port_mux_act1|o_re~3|combout                ;
-;   10.047 ;   1.497 ; FF ; IC   ; 1      ; LCCOMB_X46_Y28_N12 ; u_perf_counters|Add1~0|datac                      ;
-;   10.350 ;   0.303 ; FF ; CELL ; 2      ; LCCOMB_X46_Y28_N12 ; u_perf_counters|Add1~0|combout                    ;
-;   10.651 ;   0.301 ; FF ; IC   ; 1      ; LCCOMB_X46_Y28_N14 ; u_perf_counters|Add3~2|dataa                      ;
-;   11.056 ;   0.405 ; FF ; CELL ; 1      ; LCCOMB_X46_Y28_N14 ; u_perf_counters|Add3~2|combout                    ;
-;   12.961 ;   1.905 ; FF ; IC   ; 2      ; LCCOMB_X32_Y32_N20 ; u_perf_counters|rd_sum[2]~4|dataa                 ;
-;   13.438 ;   0.477 ; FF ; CELL ; 1      ; LCCOMB_X32_Y32_N20 ; u_perf_counters|rd_sum[2]~4|cout                  ;
-;   13.438 ;   0.000 ; FF ; IC   ; 2      ; LCCOMB_X32_Y32_N22 ; u_perf_counters|rd_sum[3]~6|cin                   ;
-;   13.497 ;   0.059 ; FR ; CELL ; 1      ; LCCOMB_X32_Y32_N22 ; u_perf_counters|rd_sum[3]~6|cout                  ;
-;   13.497 ;   0.000 ; RR ; IC   ; 2      ; LCCOMB_X32_Y32_N24 ; u_perf_counters|rd_sum[4]~8|cin                   ;
-;   13.556 ;   0.059 ; RF ; CELL ; 1      ; LCCOMB_X32_Y32_N24 ; u_perf_counters|rd_sum[4]~8|cout                  ;
-;   13.556 ;   0.000 ; FF ; IC   ; 2      ; LCCOMB_X32_Y32_N26 ; u_perf_counters|rd_sum[5]~10|cin                  ;
-;   13.615 ;   0.059 ; FR ; CELL ; 1      ; LCCOMB_X32_Y32_N26 ; u_perf_counters|rd_sum[5]~10|cout                 ;
-;   13.615 ;   0.000 ; RR ; IC   ; 2      ; LCCOMB_X32_Y32_N28 ; u_perf_counters|rd_sum[6]~12|cin                  ;
-;   13.674 ;   0.059 ; RF ; CELL ; 1      ; LCCOMB_X32_Y32_N28 ; u_perf_counters|rd_sum[6]~12|cout                 ;
-;   13.674 ;   0.000 ; FF ; IC   ; 2      ; LCCOMB_X32_Y32_N30 ; u_perf_counters|rd_sum[7]~14|cin                  ;
-;   13.733 ;   0.059 ; FR ; CELL ; 1      ; LCCOMB_X32_Y32_N30 ; u_perf_counters|rd_sum[7]~14|cout                 ;
-;   13.733 ;   0.000 ; RR ; IC   ; 2      ; LCCOMB_X32_Y31_N0  ; u_perf_counters|rd_sum[8]~16|cin                  ;
-;   13.792 ;   0.059 ; RF ; CELL ; 1      ; LCCOMB_X32_Y31_N0  ; u_perf_counters|rd_sum[8]~16|cout                 ;
-;   13.792 ;   0.000 ; FF ; IC   ; 2      ; LCCOMB_X32_Y31_N2  ; u_perf_counters|rd_sum[9]~18|cin                  ;
-;   13.851 ;   0.059 ; FR ; CELL ; 1      ; LCCOMB_X32_Y31_N2  ; u_perf_counters|rd_sum[9]~18|cout                 ;
-;   13.851 ;   0.000 ; RR ; IC   ; 2      ; LCCOMB_X32_Y31_N4  ; u_perf_counters|rd_sum[10]~20|cin                 ;
-;   13.910 ;   0.059 ; RF ; CELL ; 1      ; LCCOMB_X32_Y31_N4  ; u_perf_counters|rd_sum[10]~20|cout                ;
-;   13.910 ;   0.000 ; FF ; IC   ; 2      ; LCCOMB_X32_Y31_N6  ; u_perf_counters|rd_sum[11]~22|cin                 ;
-;   13.969 ;   0.059 ; FR ; CELL ; 1      ; LCCOMB_X32_Y31_N6  ; u_perf_counters|rd_sum[11]~22|cout                ;
-;   13.969 ;   0.000 ; RR ; IC   ; 2      ; LCCOMB_X32_Y31_N8  ; u_perf_counters|rd_sum[12]~24|cin                 ;
-;   14.028 ;   0.059 ; RF ; CELL ; 1      ; LCCOMB_X32_Y31_N8  ; u_perf_counters|rd_sum[12]~24|cout                ;
-;   14.028 ;   0.000 ; FF ; IC   ; 2      ; LCCOMB_X32_Y31_N10 ; u_perf_counters|rd_sum[13]~26|cin                 ;
-;   14.087 ;   0.059 ; FR ; CELL ; 1      ; LCCOMB_X32_Y31_N10 ; u_perf_counters|rd_sum[13]~26|cout                ;
-;   14.087 ;   0.000 ; RR ; IC   ; 2      ; LCCOMB_X32_Y31_N12 ; u_perf_counters|rd_sum[14]~28|cin                 ;
-;   14.146 ;   0.059 ; RF ; CELL ; 1      ; LCCOMB_X32_Y31_N12 ; u_perf_counters|rd_sum[14]~28|cout                ;
-;   14.146 ;   0.000 ; FF ; IC   ; 2      ; LCCOMB_X32_Y31_N14 ; u_perf_counters|rd_sum[15]~30|cin                 ;
-;   14.205 ;   0.059 ; FR ; CELL ; 1      ; LCCOMB_X32_Y31_N14 ; u_perf_counters|rd_sum[15]~30|cout                ;
-;   14.205 ;   0.000 ; RR ; IC   ; 2      ; LCCOMB_X32_Y31_N16 ; u_perf_counters|rd_sum[16]~32|cin                 ;
-;   14.264 ;   0.059 ; RF ; CELL ; 1      ; LCCOMB_X32_Y31_N16 ; u_perf_counters|rd_sum[16]~32|cout                ;
-;   14.264 ;   0.000 ; FF ; IC   ; 2      ; LCCOMB_X32_Y31_N18 ; u_perf_counters|rd_sum[17]~34|cin                 ;
-;   14.323 ;   0.059 ; FR ; CELL ; 1      ; LCCOMB_X32_Y31_N18 ; u_perf_counters|rd_sum[17]~34|cout                ;
-;   14.323 ;   0.000 ; RR ; IC   ; 2      ; LCCOMB_X32_Y31_N20 ; u_perf_counters|rd_sum[18]~36|cin                 ;
-;   14.382 ;   0.059 ; RF ; CELL ; 1      ; LCCOMB_X32_Y31_N20 ; u_perf_counters|rd_sum[18]~36|cout                ;
-;   14.382 ;   0.000 ; FF ; IC   ; 2      ; LCCOMB_X32_Y31_N22 ; u_perf_counters|rd_sum[19]~38|cin                 ;
-;   14.441 ;   0.059 ; FR ; CELL ; 1      ; LCCOMB_X32_Y31_N22 ; u_perf_counters|rd_sum[19]~38|cout                ;
-;   14.441 ;   0.000 ; RR ; IC   ; 2      ; LCCOMB_X32_Y31_N24 ; u_perf_counters|rd_sum[20]~40|cin                 ;
-;   14.500 ;   0.059 ; RF ; CELL ; 1      ; LCCOMB_X32_Y31_N24 ; u_perf_counters|rd_sum[20]~40|cout                ;
-;   14.500 ;   0.000 ; FF ; IC   ; 2      ; LCCOMB_X32_Y31_N26 ; u_perf_counters|rd_sum[21]~42|cin                 ;
-;   14.559 ;   0.059 ; FR ; CELL ; 1      ; LCCOMB_X32_Y31_N26 ; u_perf_counters|rd_sum[21]~42|cout                ;
-;   14.559 ;   0.000 ; RR ; IC   ; 2      ; LCCOMB_X32_Y31_N28 ; u_perf_counters|rd_sum[22]~44|cin                 ;
-;   14.618 ;   0.059 ; RF ; CELL ; 1      ; LCCOMB_X32_Y31_N28 ; u_perf_counters|rd_sum[22]~44|cout                ;
-;   14.618 ;   0.000 ; FF ; IC   ; 2      ; LCCOMB_X32_Y31_N30 ; u_perf_counters|rd_sum[23]~46|cin                 ;
-;   14.677 ;   0.059 ; FR ; CELL ; 1      ; LCCOMB_X32_Y31_N30 ; u_perf_counters|rd_sum[23]~46|cout                ;
-;   14.677 ;   0.000 ; RR ; IC   ; 2      ; LCCOMB_X32_Y30_N0  ; u_perf_counters|rd_sum[24]~48|cin                 ;
-;   14.736 ;   0.059 ; RF ; CELL ; 1      ; LCCOMB_X32_Y30_N0  ; u_perf_counters|rd_sum[24]~48|cout                ;
-;   14.736 ;   0.000 ; FF ; IC   ; 2      ; LCCOMB_X32_Y30_N2  ; u_perf_counters|rd_sum[25]~50|cin                 ;
-;   14.795 ;   0.059 ; FR ; CELL ; 1      ; LCCOMB_X32_Y30_N2  ; u_perf_counters|rd_sum[25]~50|cout                ;
-;   14.795 ;   0.000 ; RR ; IC   ; 2      ; LCCOMB_X32_Y30_N4  ; u_perf_counters|rd_sum[26]~52|cin                 ;
-;   14.854 ;   0.059 ; RF ; CELL ; 1      ; LCCOMB_X32_Y30_N4  ; u_perf_counters|rd_sum[26]~52|cout                ;
-;   14.854 ;   0.000 ; FF ; IC   ; 2      ; LCCOMB_X32_Y30_N6  ; u_perf_counters|rd_sum[27]~54|cin                 ;
-;   14.913 ;   0.059 ; FR ; CELL ; 1      ; LCCOMB_X32_Y30_N6  ; u_perf_counters|rd_sum[27]~54|cout                ;
-;   14.913 ;   0.000 ; RR ; IC   ; 2      ; LCCOMB_X32_Y30_N8  ; u_perf_counters|rd_sum[28]~56|cin                 ;
-;   14.972 ;   0.059 ; RF ; CELL ; 1      ; LCCOMB_X32_Y30_N8  ; u_perf_counters|rd_sum[28]~56|cout                ;
-;   14.972 ;   0.000 ; FF ; IC   ; 2      ; LCCOMB_X32_Y30_N10 ; u_perf_counters|rd_sum[29]~58|cin                 ;
-;   15.031 ;   0.059 ; FR ; CELL ; 1      ; LCCOMB_X32_Y30_N10 ; u_perf_counters|rd_sum[29]~58|cout                ;
-;   15.031 ;   0.000 ; RR ; IC   ; 2      ; LCCOMB_X32_Y30_N12 ; u_perf_counters|rd_sum[30]~60|cin                 ;
-;   15.090 ;   0.059 ; RF ; CELL ; 1      ; LCCOMB_X32_Y30_N12 ; u_perf_counters|rd_sum[30]~60|cout                ;
-;   15.090 ;   0.000 ; FF ; IC   ; 2      ; LCCOMB_X32_Y30_N14 ; u_perf_counters|rd_sum[31]~62|cin                 ;
-;   15.149 ;   0.059 ; FR ; CELL ; 1      ; LCCOMB_X32_Y30_N14 ; u_perf_counters|rd_sum[31]~62|cout                ;
-;   15.149 ;   0.000 ; RR ; IC   ; 1      ; LCCOMB_X32_Y30_N16 ; u_perf_counters|Add7~0|cin                        ;
-;   15.754 ;   0.605 ; RF ; CELL ; 32     ; LCCOMB_X32_Y30_N16 ; u_perf_counters|Add7~0|combout                    ;
-;   16.998 ;   1.244 ; FF ; IC   ; 1      ; LCCOMB_X31_Y31_N0  ; u_perf_counters|buf_rd_q~71|datab                 ;
-;   17.422 ;   0.424 ; FF ; CELL ; 1      ; LCCOMB_X31_Y31_N0  ; u_perf_counters|buf_rd_q~71|combout               ;
-;   17.422 ;   0.000 ; FF ; IC   ; 1      ; FF_X31_Y31_N1      ; u_perf_counters|buf_rd_q[7]|d                     ;
-;   17.516 ;   0.094 ; FF ; CELL ; 1      ; FF_X31_Y31_N1      ; perf_counters:u_perf_counters|buf_rd_q[7]         ;
-+----------+---------+----+------+--------+--------------------+---------------------------------------------------+
++-----------------------------------------------------------------------------------------------------------------------+
+; Data Arrival Path                                                                                                     ;
++----------+---------+----+------+--------+--------------------+--------------------------------------------------------+
+; Total    ; Incr    ; RF ; Type ; Fanout ; Location           ; Element                                                ;
++----------+---------+----+------+--------+--------------------+--------------------------------------------------------+
+; 0.000    ; 0.000   ;    ;      ;        ;                    ; launch edge time                                       ;
+; 3.695    ; 3.695   ;    ;      ;        ;                    ; clock path                                             ;
+;   0.000  ;   0.000 ;    ;      ;        ;                    ; source latency                                         ;
+;   0.000  ;   0.000 ;    ;      ; 1      ; PIN_M8             ; clk                                                    ;
+;   0.000  ;   0.000 ; RR ; IC   ; 1      ; IOIBUF_X0_Y18_N15  ; clk~input|i                                            ;
+;   0.708  ;   0.708 ; RR ; CELL ; 1      ; IOIBUF_X0_Y18_N15  ; clk~input|o                                            ;
+;   1.602  ;   0.894 ; RR ; IC   ; 1      ; CLKCTRL_G3         ; clk~inputclkctrl|inclk[0]                              ;
+;   1.602  ;   0.000 ; RR ; CELL ; 6107   ; CLKCTRL_G3         ; clk~inputclkctrl|outclk                                ;
+;   3.185  ;   1.583 ; RR ; IC   ; 1      ; FF_X70_Y22_N19     ; u_gemm_engine|u_postproc|s2_q[1]|clk                   ;
+;   3.695  ;   0.510 ; RR ; CELL ; 1      ; FF_X70_Y22_N19     ; gemm_engine:u_gemm_engine|postproc:u_postproc|s2_q[1]  ;
+; 16.394   ; 12.699  ;    ;      ;        ;                    ; data path                                              ;
+;   3.902  ;   0.207 ;    ; uTco ; 1      ; FF_X70_Y22_N19     ; gemm_engine:u_gemm_engine|postproc:u_postproc|s2_q[1]  ;
+;   3.902  ;   0.000 ; RR ; CELL ; 123    ; FF_X70_Y22_N19     ; u_gemm_engine|u_postproc|s2_q[1]|q                     ;
+;   5.368  ;   1.466 ; RR ; IC   ; 1      ; LCCOMB_X70_Y19_N18 ; u_gemm_engine|u_postproc|rnd[1]~513|dataa              ;
+;   5.787  ;   0.419 ; RF ; CELL ; 1      ; LCCOMB_X70_Y19_N18 ; u_gemm_engine|u_postproc|rnd[1]~513|combout            ;
+;   7.045  ;   1.258 ; FF ; IC   ; 2      ; LCCOMB_X69_Y22_N18 ; u_gemm_engine|u_postproc|Add2~2|dataa                  ;
+;   7.522  ;   0.477 ; FF ; CELL ; 1      ; LCCOMB_X69_Y22_N18 ; u_gemm_engine|u_postproc|Add2~2|cout                   ;
+;   7.522  ;   0.000 ; FF ; IC   ; 2      ; LCCOMB_X69_Y22_N20 ; u_gemm_engine|u_postproc|Add2~4|cin                    ;
+;   7.581  ;   0.059 ; FR ; CELL ; 1      ; LCCOMB_X69_Y22_N20 ; u_gemm_engine|u_postproc|Add2~4|cout                   ;
+;   7.581  ;   0.000 ; RR ; IC   ; 2      ; LCCOMB_X69_Y22_N22 ; u_gemm_engine|u_postproc|Add2~6|cin                    ;
+;   7.640  ;   0.059 ; RF ; CELL ; 1      ; LCCOMB_X69_Y22_N22 ; u_gemm_engine|u_postproc|Add2~6|cout                   ;
+;   7.640  ;   0.000 ; FF ; IC   ; 2      ; LCCOMB_X69_Y22_N24 ; u_gemm_engine|u_postproc|Add2~8|cin                    ;
+;   7.699  ;   0.059 ; FR ; CELL ; 1      ; LCCOMB_X69_Y22_N24 ; u_gemm_engine|u_postproc|Add2~8|cout                   ;
+;   7.699  ;   0.000 ; RR ; IC   ; 2      ; LCCOMB_X69_Y22_N26 ; u_gemm_engine|u_postproc|Add2~10|cin                   ;
+;   7.758  ;   0.059 ; RF ; CELL ; 1      ; LCCOMB_X69_Y22_N26 ; u_gemm_engine|u_postproc|Add2~10|cout                  ;
+;   7.758  ;   0.000 ; FF ; IC   ; 2      ; LCCOMB_X69_Y22_N28 ; u_gemm_engine|u_postproc|Add2~12|cin                   ;
+;   7.817  ;   0.059 ; FR ; CELL ; 1      ; LCCOMB_X69_Y22_N28 ; u_gemm_engine|u_postproc|Add2~12|cout                  ;
+;   7.817  ;   0.000 ; RR ; IC   ; 2      ; LCCOMB_X69_Y22_N30 ; u_gemm_engine|u_postproc|Add2~14|cin                   ;
+;   7.876  ;   0.059 ; RF ; CELL ; 1      ; LCCOMB_X69_Y22_N30 ; u_gemm_engine|u_postproc|Add2~14|cout                  ;
+;   7.876  ;   0.000 ; FF ; IC   ; 2      ; LCCOMB_X69_Y21_N0  ; u_gemm_engine|u_postproc|Add2~16|cin                   ;
+;   7.935  ;   0.059 ; FR ; CELL ; 1      ; LCCOMB_X69_Y21_N0  ; u_gemm_engine|u_postproc|Add2~16|cout                  ;
+;   7.935  ;   0.000 ; RR ; IC   ; 2      ; LCCOMB_X69_Y21_N2  ; u_gemm_engine|u_postproc|Add2~18|cin                   ;
+;   7.994  ;   0.059 ; RF ; CELL ; 1      ; LCCOMB_X69_Y21_N2  ; u_gemm_engine|u_postproc|Add2~18|cout                  ;
+;   7.994  ;   0.000 ; FF ; IC   ; 2      ; LCCOMB_X69_Y21_N4  ; u_gemm_engine|u_postproc|Add2~20|cin                   ;
+;   8.053  ;   0.059 ; FR ; CELL ; 1      ; LCCOMB_X69_Y21_N4  ; u_gemm_engine|u_postproc|Add2~20|cout                  ;
+;   8.053  ;   0.000 ; RR ; IC   ; 2      ; LCCOMB_X69_Y21_N6  ; u_gemm_engine|u_postproc|Add2~22|cin                   ;
+;   8.112  ;   0.059 ; RF ; CELL ; 1      ; LCCOMB_X69_Y21_N6  ; u_gemm_engine|u_postproc|Add2~22|cout                  ;
+;   8.112  ;   0.000 ; FF ; IC   ; 2      ; LCCOMB_X69_Y21_N8  ; u_gemm_engine|u_postproc|Add2~24|cin                   ;
+;   8.171  ;   0.059 ; FR ; CELL ; 1      ; LCCOMB_X69_Y21_N8  ; u_gemm_engine|u_postproc|Add2~24|cout                  ;
+;   8.171  ;   0.000 ; RR ; IC   ; 2      ; LCCOMB_X69_Y21_N10 ; u_gemm_engine|u_postproc|Add2~26|cin                   ;
+;   8.230  ;   0.059 ; RF ; CELL ; 1      ; LCCOMB_X69_Y21_N10 ; u_gemm_engine|u_postproc|Add2~26|cout                  ;
+;   8.230  ;   0.000 ; FF ; IC   ; 2      ; LCCOMB_X69_Y21_N12 ; u_gemm_engine|u_postproc|Add2~28|cin                   ;
+;   8.289  ;   0.059 ; FR ; CELL ; 1      ; LCCOMB_X69_Y21_N12 ; u_gemm_engine|u_postproc|Add2~28|cout                  ;
+;   8.289  ;   0.000 ; RR ; IC   ; 2      ; LCCOMB_X69_Y21_N14 ; u_gemm_engine|u_postproc|Add2~30|cin                   ;
+;   8.348  ;   0.059 ; RF ; CELL ; 1      ; LCCOMB_X69_Y21_N14 ; u_gemm_engine|u_postproc|Add2~30|cout                  ;
+;   8.348  ;   0.000 ; FF ; IC   ; 2      ; LCCOMB_X69_Y21_N16 ; u_gemm_engine|u_postproc|Add2~32|cin                   ;
+;   8.407  ;   0.059 ; FR ; CELL ; 1      ; LCCOMB_X69_Y21_N16 ; u_gemm_engine|u_postproc|Add2~32|cout                  ;
+;   8.407  ;   0.000 ; RR ; IC   ; 2      ; LCCOMB_X69_Y21_N18 ; u_gemm_engine|u_postproc|Add2~34|cin                   ;
+;   8.466  ;   0.059 ; RF ; CELL ; 1      ; LCCOMB_X69_Y21_N18 ; u_gemm_engine|u_postproc|Add2~34|cout                  ;
+;   8.466  ;   0.000 ; FF ; IC   ; 2      ; LCCOMB_X69_Y21_N20 ; u_gemm_engine|u_postproc|Add2~36|cin                   ;
+;   8.525  ;   0.059 ; FR ; CELL ; 1      ; LCCOMB_X69_Y21_N20 ; u_gemm_engine|u_postproc|Add2~36|cout                  ;
+;   8.525  ;   0.000 ; RR ; IC   ; 2      ; LCCOMB_X69_Y21_N22 ; u_gemm_engine|u_postproc|Add2~38|cin                   ;
+;   8.584  ;   0.059 ; RF ; CELL ; 1      ; LCCOMB_X69_Y21_N22 ; u_gemm_engine|u_postproc|Add2~38|cout                  ;
+;   8.584  ;   0.000 ; FF ; IC   ; 2      ; LCCOMB_X69_Y21_N24 ; u_gemm_engine|u_postproc|Add2~40|cin                   ;
+;   8.643  ;   0.059 ; FR ; CELL ; 1      ; LCCOMB_X69_Y21_N24 ; u_gemm_engine|u_postproc|Add2~40|cout                  ;
+;   8.643  ;   0.000 ; RR ; IC   ; 2      ; LCCOMB_X69_Y21_N26 ; u_gemm_engine|u_postproc|Add2~42|cin                   ;
+;   8.702  ;   0.059 ; RF ; CELL ; 1      ; LCCOMB_X69_Y21_N26 ; u_gemm_engine|u_postproc|Add2~42|cout                  ;
+;   8.702  ;   0.000 ; FF ; IC   ; 2      ; LCCOMB_X69_Y21_N28 ; u_gemm_engine|u_postproc|Add2~44|cin                   ;
+;   8.761  ;   0.059 ; FR ; CELL ; 1      ; LCCOMB_X69_Y21_N28 ; u_gemm_engine|u_postproc|Add2~44|cout                  ;
+;   8.761  ;   0.000 ; RR ; IC   ; 2      ; LCCOMB_X69_Y21_N30 ; u_gemm_engine|u_postproc|Add2~46|cin                   ;
+;   8.820  ;   0.059 ; RF ; CELL ; 1      ; LCCOMB_X69_Y21_N30 ; u_gemm_engine|u_postproc|Add2~46|cout                  ;
+;   8.820  ;   0.000 ; FF ; IC   ; 2      ; LCCOMB_X69_Y20_N0  ; u_gemm_engine|u_postproc|Add2~48|cin                   ;
+;   8.879  ;   0.059 ; FR ; CELL ; 1      ; LCCOMB_X69_Y20_N0  ; u_gemm_engine|u_postproc|Add2~48|cout                  ;
+;   8.879  ;   0.000 ; RR ; IC   ; 2      ; LCCOMB_X69_Y20_N2  ; u_gemm_engine|u_postproc|Add2~50|cin                   ;
+;   8.938  ;   0.059 ; RF ; CELL ; 1      ; LCCOMB_X69_Y20_N2  ; u_gemm_engine|u_postproc|Add2~50|cout                  ;
+;   8.938  ;   0.000 ; FF ; IC   ; 2      ; LCCOMB_X69_Y20_N4  ; u_gemm_engine|u_postproc|Add2~52|cin                   ;
+;   8.997  ;   0.059 ; FR ; CELL ; 1      ; LCCOMB_X69_Y20_N4  ; u_gemm_engine|u_postproc|Add2~52|cout                  ;
+;   8.997  ;   0.000 ; RR ; IC   ; 2      ; LCCOMB_X69_Y20_N6  ; u_gemm_engine|u_postproc|Add2~54|cin                   ;
+;   9.056  ;   0.059 ; RF ; CELL ; 1      ; LCCOMB_X69_Y20_N6  ; u_gemm_engine|u_postproc|Add2~54|cout                  ;
+;   9.056  ;   0.000 ; FF ; IC   ; 2      ; LCCOMB_X69_Y20_N8  ; u_gemm_engine|u_postproc|Add2~56|cin                   ;
+;   9.115  ;   0.059 ; FR ; CELL ; 1      ; LCCOMB_X69_Y20_N8  ; u_gemm_engine|u_postproc|Add2~56|cout                  ;
+;   9.115  ;   0.000 ; RR ; IC   ; 2      ; LCCOMB_X69_Y20_N10 ; u_gemm_engine|u_postproc|Add2~58|cin                   ;
+;   9.174  ;   0.059 ; RF ; CELL ; 1      ; LCCOMB_X69_Y20_N10 ; u_gemm_engine|u_postproc|Add2~58|cout                  ;
+;   9.174  ;   0.000 ; FF ; IC   ; 2      ; LCCOMB_X69_Y20_N12 ; u_gemm_engine|u_postproc|Add2~60|cin                   ;
+;   9.233  ;   0.059 ; FR ; CELL ; 1      ; LCCOMB_X69_Y20_N12 ; u_gemm_engine|u_postproc|Add2~60|cout                  ;
+;   9.233  ;   0.000 ; RR ; IC   ; 2      ; LCCOMB_X69_Y20_N14 ; u_gemm_engine|u_postproc|Add2~62|cin                   ;
+;   9.838  ;   0.605 ; RF ; CELL ; 3      ; LCCOMB_X69_Y20_N14 ; u_gemm_engine|u_postproc|Add2~62|combout               ;
+;   10.847 ;   1.009 ; FF ; IC   ; 1      ; LCCOMB_X67_Y23_N8  ; u_gemm_engine|u_postproc|ShiftRight0~34|dataa          ;
+;   11.275 ;   0.428 ; FF ; CELL ; 4      ; LCCOMB_X67_Y23_N8  ; u_gemm_engine|u_postproc|ShiftRight0~34|combout        ;
+;   11.575 ;   0.300 ; FF ; IC   ; 1      ; LCCOMB_X67_Y23_N22 ; u_gemm_engine|u_postproc|ShiftRight0~168|datab         ;
+;   11.999 ;   0.424 ; FF ; CELL ; 2      ; LCCOMB_X67_Y23_N22 ; u_gemm_engine|u_postproc|ShiftRight0~168|combout       ;
+;   12.993 ;   0.994 ; FF ; IC   ; 1      ; LCCOMB_X70_Y20_N12 ; u_gemm_engine|u_postproc|ShiftRight0~169|dataa         ;
+;   13.421 ;   0.428 ; FF ; CELL ; 4      ; LCCOMB_X70_Y20_N12 ; u_gemm_engine|u_postproc|ShiftRight0~169|combout       ;
+;   14.405 ;   0.984 ; FF ; IC   ; 1      ; LCCOMB_X66_Y21_N22 ; u_gemm_engine|u_postproc|r3_q[22]~49|datac             ;
+;   14.708 ;   0.303 ; FF ; CELL ; 1      ; LCCOMB_X66_Y21_N22 ; u_gemm_engine|u_postproc|r3_q[22]~49|combout           ;
+;   14.995 ;   0.287 ; FF ; IC   ; 1      ; LCCOMB_X66_Y21_N26 ; u_gemm_engine|u_postproc|r3_q[22]~7|dataa              ;
+;   15.411 ;   0.416 ; FR ; CELL ; 1      ; LCCOMB_X66_Y21_N26 ; u_gemm_engine|u_postproc|r3_q[22]~7|combout            ;
+;   16.139 ;   0.728 ; RR ; IC   ; 1      ; LCCOMB_X66_Y23_N28 ; u_gemm_engine|u_postproc|r3_q[22]~feeder|datad         ;
+;   16.305 ;   0.166 ; RR ; CELL ; 1      ; LCCOMB_X66_Y23_N28 ; u_gemm_engine|u_postproc|r3_q[22]~feeder|combout       ;
+;   16.305 ;   0.000 ; RR ; IC   ; 1      ; FF_X66_Y23_N29     ; u_gemm_engine|u_postproc|r3_q[22]|d                    ;
+;   16.394 ;   0.089 ; RR ; CELL ; 1      ; FF_X66_Y23_N29     ; gemm_engine:u_gemm_engine|postproc:u_postproc|r3_q[22] ;
++----------+---------+----+------+--------+--------------------+--------------------------------------------------------+
 
-+---------------------------------------------------------------------------------------------------------+
-; Data Required Path                                                                                      ;
-+----------+---------+----+------+--------+-------------------+-------------------------------------------+
-; Total    ; Incr    ; RF ; Type ; Fanout ; Location          ; Element                                   ;
-+----------+---------+----+------+--------+-------------------+-------------------------------------------+
-; 20.000   ; 20.000  ;    ;      ;        ;                   ; latch edge time                           ;
-; 23.531   ; 3.531   ;    ;      ;        ;                   ; clock path                                ;
-;   20.000 ;   0.000 ;    ;      ;        ;                   ; source latency                            ;
-;   20.000 ;   0.000 ;    ;      ; 1      ; PIN_M8            ; clk                                       ;
-;   20.000 ;   0.000 ; RR ; IC   ; 1      ; IOIBUF_X0_Y18_N15 ; clk~input|i                               ;
-;   20.708 ;   0.708 ; RR ; CELL ; 1      ; IOIBUF_X0_Y18_N15 ; clk~input|o                               ;
-;   21.566 ;   0.858 ; RR ; IC   ; 1      ; CLKCTRL_G3        ; clk~inputclkctrl|inclk[0]                 ;
-;   21.566 ;   0.000 ; RR ; CELL ; 6090   ; CLKCTRL_G3        ; clk~inputclkctrl|outclk                   ;
-;   22.997 ;   1.431 ; RR ; IC   ; 1      ; FF_X31_Y31_N1     ; u_perf_counters|buf_rd_q[7]|clk           ;
-;   23.472 ;   0.475 ; RR ; CELL ; 1      ; FF_X31_Y31_N1     ; perf_counters:u_perf_counters|buf_rd_q[7] ;
-;   23.531 ;   0.059 ;    ;      ;        ;                   ; clock pessimism removed                   ;
-; 23.511   ; -0.020  ;    ;      ;        ;                   ; clock uncertainty                         ;
-; 23.524   ; 0.013   ;    ; uTsu ; 1      ; FF_X31_Y31_N1     ; perf_counters:u_perf_counters|buf_rd_q[7] ;
-+----------+---------+----+------+--------+-------------------+-------------------------------------------+
++----------------------------------------------------------------------------------------------------------------------+
+; Data Required Path                                                                                                   ;
++----------+---------+----+------+--------+-------------------+--------------------------------------------------------+
+; Total    ; Incr    ; RF ; Type ; Fanout ; Location          ; Element                                                ;
++----------+---------+----+------+--------+-------------------+--------------------------------------------------------+
+; 20.000   ; 20.000  ;    ;      ;        ;                   ; latch edge time                                        ;
+; 23.629   ; 3.629   ;    ;      ;        ;                   ; clock path                                             ;
+;   20.000 ;   0.000 ;    ;      ;        ;                   ; source latency                                         ;
+;   20.000 ;   0.000 ;    ;      ; 1      ; PIN_M8            ; clk                                                    ;
+;   20.000 ;   0.000 ; RR ; IC   ; 1      ; IOIBUF_X0_Y18_N15 ; clk~input|i                                            ;
+;   20.708 ;   0.708 ; RR ; CELL ; 1      ; IOIBUF_X0_Y18_N15 ; clk~input|o                                            ;
+;   21.566 ;   0.858 ; RR ; IC   ; 1      ; CLKCTRL_G3        ; clk~inputclkctrl|inclk[0]                              ;
+;   21.566 ;   0.000 ; RR ; CELL ; 6107   ; CLKCTRL_G3        ; clk~inputclkctrl|outclk                                ;
+;   23.091 ;   1.525 ; RR ; IC   ; 1      ; FF_X66_Y23_N29    ; u_gemm_engine|u_postproc|r3_q[22]|clk                  ;
+;   23.566 ;   0.475 ; RR ; CELL ; 1      ; FF_X66_Y23_N29    ; gemm_engine:u_gemm_engine|postproc:u_postproc|r3_q[22] ;
+;   23.629 ;   0.063 ;    ;      ;        ;                   ; clock pessimism removed                                ;
+; 23.609   ; -0.020  ;    ;      ;        ;                   ; clock uncertainty                                      ;
+; 23.622   ; 0.013   ;    ; uTsu ; 1      ; FF_X66_Y23_N29    ; gemm_engine:u_gemm_engine|postproc:u_postproc|r3_q[22] ;
++----------+---------+----+------+--------+-------------------+--------------------------------------------------------+
 
 

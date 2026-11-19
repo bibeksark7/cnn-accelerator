@@ -487,7 +487,7 @@ Reports are committed under `fpga/probe_reports/<module>/`.
 | `gemm_engine` (N = 8, K_TILE = 128; contains the array, post-processing, `agen_a` and 8 staging banks) | +6.722 ns | +0.095 ns | 75.31 MHz | `u_postproc\|s2_q[1]` → `u_postproc\|r3_q[7]`: the post-processing variable shifter again (data delay 13.207 ns) |
 | `pool_unit` (with `agen_pool`) | +11.364 ns | +0.152 ns | 115.79 MHz | `u_agen_pool\|row_stride_q[2]` → `u_agen_pool\|o_addr[15]`: the 4-term source-address sum (data delay 8.258 ns) |
 | `argmax_unit` (re-run after the register restructure, D-031) | +12.926 ns | +0.151 ns | 141.36 MHz | `best_q[6]` → `best_q[1]`: the 32-bit signed compare and update (data delay 6.997 ns) |
-| `accel_top` (the whole core, with the network's WGT, PARAM and descriptor init files) | +6.008 ns | +0.092 ns | 71.47 MHz | `u_gemm_engine\|u_agen_a\|o_valid` → `u_perf_counters\|buf_rd_q[7]`: a source read enable through the buffer multiplexers' request count into the saturating `BUF_RD` add (data delay 13.970 ns) |
+| `accel_top` (the whole core, with the network's WGT, PARAM and descriptor init files; re-run after the Phase 3 pre-work: counter input register, RESULT register, §9 checks) | +7.228 ns | +0.101 ns | 78.3 MHz | `u_gemm_engine\|u_postproc\|s2_q[1]` → `u_gemm_engine\|u_postproc\|r3_q[22]`: the post-processing variable shifter (data delay 12.699 ns) |
 
 Sources: `timing_setup_worst.rpt`, `timing_hold_worst.rpt`, `probe_<module>.sta.summary` and
 `fmax.rpt` in each report directory.
@@ -497,16 +497,21 @@ The engine probe (`fpga/probe_reports/gemm_engine/`) uses 6,832 logic elements, 
 8 for the staging banks and 4 that Quartus chose for the array's input-skew delay lines
 (RAM-based shift registers, `altshift_taps`).
 
-The `accel_top` probe (`fpga/probe_reports/accel_top/`) uses 9,332 logic elements (19 %), 5,919
+The `accel_top` probe (`fpga/probe_reports/accel_top/`) uses 9,345 logic elements (19 %), 5,936
 registers, 68 embedded 9-bit multiplier elements and 341,184 memory bits (20 %): every §5 buffer,
 the descriptor table and the staging banks are block RAM (IMG 128 Kbit, ACT0 and ACT1 64 Kbit each,
 WGT 64 Kbit, PARAM 4 Kbit, descriptors 1 Kbit, staging 8 Kbit: 340,992 bits; the other 192 bits
 are the array's input-skew delay lines, as in the engine probe), and Analysis & Synthesis reports
 no warnings, so the init files were accepted (D-021). Its 274 ports are virtual pins.
-Earlier fits of `accel_top`, before the §9 LOGIT checks were added to the sequencer, gave
-+6.736 ns (worst path: the drain's column select into the bias add) and +5.365 ns (the
-post-processing variable shifter). The worst path moves between these logic cones from fit to
-fit; every fit closed at 50 MHz with more than 5 ns of setup slack.
+The 17 extra registers are the counter input register (9: busy, MAC-active, 5 read and 2 write
+requests) and RESULT (8).
+Earlier fits of `accel_top`: +6.008 ns / 71.47 MHz with 9,332 LEs, before the counter input
+register (worst path: `agen_a`'s read enable through the buffer multiplexers' request count into
+the saturating `BUF_RD` add, data delay 13.970 ns); and, before the §9 LOGIT checks, +6.736 ns
+(the drain's column select into the bias add) and +5.365 ns (the post-processing variable
+shifter). With the counters registered, the worst path is the post-processing shifter, the
+engine's own critical path. The worst path moves between logic cones from fit to fit; every fit
+closed at 50 MHz with more than 5 ns of setup slack.
 
 **Performance-counter input register (Phase 3 pre-work, approved).** `perf_counters` registers
 `{busy, rd, wr, mac_active}` before the saturating adds. Every `accel_top` fit so far had a
