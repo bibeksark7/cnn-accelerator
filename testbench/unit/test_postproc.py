@@ -11,7 +11,7 @@ from pathlib import Path
 import cocotb
 import numpy as np
 import pytest
-from cocotb.triggers import ClockCycles
+from cocotb.triggers import ClockCycles, ReadOnly, RisingEdge
 
 from common.bits import to_signed, to_unsigned
 from common.coverage import cover, cover_vr_links, is_verilator, start_handshake_monitor
@@ -94,29 +94,30 @@ def get_payload(dut) -> dict:
     }
 
 
-def cover_item(item: dict) -> None:
-    """Functional coverage of one element's arithmetic (D-034)."""
-    if not item["rq"]:
-        cover("mode", "FC bypass")
-        return
-    cover("mode", "requantize")
-    y, m, s = item["acc"] + item["bias"], item["m"], item["s"]
-    r = (y * m + (1 << (s - 1))) >> s  # before saturation (Python >> is arithmetic)
-    if r > 127:
-        cover("saturation", "high")
-    elif r < -128:
-        cover("saturation", "low")
-    else:
-        cover("saturation", "in range")
-    if (y * m) & ((1 << s) - 1) == 1 << (s - 1):
-        cover("rounding", "exact tie, positive" if y > 0 else "exact tie, negative")
-    if item["relu"]:
-        cover("ReLU", "clamped" if r < 0 else "passed")
+async def stage_monitor(dut) -> None:
+    """DUT-observed coverage (D-034): what the pipeline actually computes, sampled where data
+    moves between stages: rounding ties (stage 2 -> 3), saturation and ReLU (stage 3 -> 4)."""
+    while True:
+        await RisingEdge(dut.clk)
+        await ReadOnly()
+        if int(dut.rst.value):
+            continue
+        if int(dut.v2_q.value) and int(dut.ready3.value) and int(dut.rq2_q.value):
+            p2, s2 = to_signed(int(dut.p2_q.value), len(dut.p2_q)), int(dut.s2_q.value)
+            if s2 and (p2 & ((1 << s2) - 1)) == 1 << (s2 - 1):
+                cover("rounding", "exact tie, positive" if p2 > 0 else "exact tie, negative")
+        if int(dut.v3_q.value) and int(dut.ready4.value):
+            if not int(dut.rq3_q.value):
+                cover("mode", "FC bypass")
+                continue
+            cover("mode", "requantize")
+            hi, lo = int(dut.sat_hi.value), int(dut.sat_lo.value)
+            cover("saturation", "high" if hi else ("low" if lo else "in range"))
+            if int(dut.relu3_q.value):
+                cover("ReLU", "clamped" if (int(dut.sat_val.value) >> 7) & 1 else "passed")
 
 
 async def run_stream(dut, items, rng, idle_prob, ready_prob) -> None:
-    for item in items:
-        cover_item(item)
     sink = cocotb.start_soon(
         collect_stream(
             dut.clk, dut.o_valid, dut.i_ready, len(items), lambda: get_payload(dut), rng, ready_prob
@@ -141,6 +142,7 @@ async def setup(dut) -> None:
     dut.i_ready.value = 0
     start_handshake_monitor(dut.clk, dut.i_valid, dut.o_ready, "input handshake")
     start_handshake_monitor(dut.clk, dut.o_valid, dut.i_ready, "output handshake")
+    cocotb.start_soon(stage_monitor(dut))
     await start_clock_and_reset(dut)
     await ClockCycles(dut.clk, 1)
 

@@ -26,8 +26,9 @@ SVA_SOURCES = [SVA_DIR / "unit_if_sva.sv", SVA_DIR / "argmax_unit_bind.sv"]
 SVA_VIOLATION = os.environ.get("SVA_VIOLATION", "")
 
 
-async def serve(dut, regs: list[int]) -> None:
-    """LOGIT register-file model (1-cycle read latency); an X read strobe or index fails."""
+async def serve(dut, regs: list[int], seen: list[int] | None = None) -> None:
+    """LOGIT register-file model (1-cycle read latency); an X read strobe or index fails.
+    `seen` collects the values returned to the DUT (for DUT-observed coverage)."""
     while True:
         await FallingEdge(dut.clk)
         await ReadOnly()
@@ -37,10 +38,28 @@ async def serve(dut, regs: list[int]) -> None:
         await RisingEdge(dut.clk)
         if idx is not None:
             dut.i_rd_data.value = to_unsigned(regs[idx], 32)
+            if seen is not None:
+                seen.append(regs[idx])
+
+
+def cover_result(count: int, seen: list[int], result: int, best: int) -> None:
+    """DUT-observed coverage (D-034): the count the unit was started with, the values it read and
+    the result it reported."""
+    cover("count", "0" if count == 0 else ("1" if count == 1 else "more than 1"))
+    if not seen:
+        return
+    if seen.count(best) > 1:
+        cover("maximum", "tie (lowest index wins)")
+    if best < 0:
+        cover("maximum", "negative")
+    if I32_MAX in seen or I32_MIN in seen:
+        cover("values", "int32 extreme")
+    cover("position of the maximum", "last" if result == len(seen) - 1 else "not last")
 
 
 async def run_argmax(dut, regs: list[int], base: int, count: int) -> tuple[int, int]:
-    server = cocotb.start_soon(serve(dut, regs))
+    seen: list[int] = []
+    server = cocotb.start_soon(serve(dut, regs, seen))
     await FallingEdge(dut.clk)
     dut.i_base.value, dut.i_count.value = base, count
     dut.i_start.value = 1
@@ -56,6 +75,7 @@ async def run_argmax(dut, regs: list[int], base: int, count: int) -> tuple[int, 
         raise TimeoutError("o_done never pulsed")
     result = resolved(dut.o_result, "argmax result at done")
     best = to_signed(resolved(dut.o_max, "argmax maximum at done"), 32)
+    cover_result(int(dut.count_q.value), seen, result, best)  # the count the DUT latched
     await FallingEdge(dut.clk)
     dut.i_start.value = 0
     await FallingEdge(dut.clk)
@@ -66,15 +86,7 @@ async def run_argmax(dut, regs: list[int], base: int, count: int) -> tuple[int, 
 async def check(dut, regs: list[int], base: int, count: int, what: str) -> None:
     window = np.array(regs[base : base + count], dtype=np.int64)
     want = (int(np.argmax(window)), int(window.max())) if count else (0, 0)
-    cover("count", "0" if count == 0 else ("1" if count == 1 else "more than 1"))
-    if count:
-        if (window == window.max()).sum() > 1:
-            cover("maximum", "tie (lowest index wins)")
-        if window.max() < 0:
-            cover("maximum", "negative")
-        if window.max() == I32_MAX or window.min() == I32_MIN:
-            cover("values", "int32 extreme")
-        cover("position of the maximum", "last" if want[0] == count - 1 else "not last")
+
     got = await run_argmax(dut, regs, base, count)
     assert got == want, f"{what}: got (index, max) {got}, want {want}, logits {window.tolist()}"
 

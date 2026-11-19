@@ -17,6 +17,7 @@ import pytest
 from cocotb.triggers import FallingEdge, ReadOnly, RisingEdge
 
 from common import accel_bus as ab
+from common.coverage import csr_wait_monitor
 from common.runner import RTL_DIR, run_cocotb
 from common.sim import seeded_rng, start_clock_and_reset
 
@@ -73,6 +74,7 @@ async def setup(dut, rng) -> tuple[DescRam, ab.CsrMaster]:
     dut.i_desc_gnt.value = 1
     ram = DescRam(dut, rng, 4 * desc_depth)
     cocotb.start_soon(ram.run())
+    cocotb.start_soon(csr_wait_monitor(dut))
     await start_clock_and_reset(dut)
     return ram, csr
 

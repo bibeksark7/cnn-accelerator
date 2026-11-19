@@ -160,33 +160,57 @@ async def serve(dut, buf: Buffers) -> None:
                 dut.i_prm_rdata.value = buf.prm[addr]
 
 
-def cover_layer(layer: Layer, n: int) -> None:
-    """Functional coverage of a layer's shape (D-034)."""
-    if layer.fc:
-        m_rows, k = 1, layer.h * layer.w * layer.c_in
-    else:
-        m_rows = max(layer.h - 2, 0) * max(layer.w - 2, 0)
-        k = 9 * layer.c_in
-        cover("ReLU", "on" if layer.relu else "off")
-    cover("layer type", "FC" if layer.fc else "CONV")
-    work = m_rows > 0 and k > 0 and layer.c_out > 0
-    if not work:
-        cover("layers without work", "C_out = 0" if layer.c_out == 0 else "M = 0 or K = 0")
-        return
-    cover("row tiles (M)", "last tile full" if m_rows % n == 0 else "last tile partial")
-    cover("column tiles (Ncols)", "last tile full" if layer.c_out % n == 0 else "last tile partial")
-    cover("column tile count", "1" if layer.c_out <= n else "more than 1")
-    if k == 1:
-        cover("K", "K = 1")
-    elif k <= TB_K_TILE:
-        cover("K", "1 < K <= K_TILE")
-    else:
-        cover("K", "K > K_TILE")
-    cover("K chunks", "1" if k <= TB_K_TILE else "more than 1")
+async def layer_cov_monitor(dut) -> None:
+    """DUT-observed coverage of each layer (D-034): its configuration as the engine accepts it at
+    i_start, and, while it runs, whether a row tile had padded rows (row mask), a column tile had
+    columns beyond C_out (skipped drain elements) and an output tile needed several K chunks
+    (a CMD -> STAGE transition). Sampled where the falling-edge drives have settled (D-018)."""
+    n, k_tile = n_of(dut), TB_K_TILE
+    lay, prev_q = None, None
+    while True:
+        await FallingEdge(dut.clk)
+        await ReadOnly()
+        if int(dut.rst.value):
+            lay, prev_q = None, None
+            continue
+        q = Q_NAMES[int(dut.qstate_q.value)]
+        if int(dut.i_start.value) and not int(dut.o_busy.value):  # accepted at the next edge
+            fc, h, w = int(dut.i_fc.value), int(dut.i_h.value), int(dut.i_w.value)
+            c_in, c_out = int(dut.i_c_in.value), int(dut.i_c_out.value)
+            m_rows = 1 if fc else max(h - 2, 0) * max(w - 2, 0)
+            k = h * w * c_in if fc else 9 * c_in
+            cover("layer type", "FC" if fc else "CONV")
+            if not fc:
+                cover("ReLU", "on" if int(dut.i_relu_en.value) else "off")
+            if not (m_rows and k and c_out):
+                cover("layers without work", "C_out = 0" if c_out == 0 else "M = 0 or K = 0")
+                lay = None
+            else:
+                cover("column tile count", "1" if c_out <= n else "more than 1")
+                cover(
+                    "K", "K = 1" if k == 1 else ("1 < K <= K_TILE" if k <= k_tile else "K > K_TILE")
+                )
+                lay = {"rows": False, "cols": False, "chunks": False}
+        elif lay is not None:
+            if prev_q == "CMD" and q == "STAGE":
+                lay["chunks"] = True
+            if q == "STREAM" and int(dut.mask_q.value) != (1 << n) - 1:
+                lay["rows"] = True
+            if D_NAMES[int(dut.dstate_q.value)] == "ELEM":
+                row_on = (int(dut.mask_q.value) >> int(dut.row_idx_q.value)) & 1
+                if row_on and not int(dut.elem_valid.value):
+                    lay["cols"] = True
+            if int(dut.o_done.value):
+                cover("row tiles (M)", "last tile partial" if lay["rows"] else "last tile full")
+                cover(
+                    "column tiles (Ncols)", "last tile partial" if lay["cols"] else "last tile full"
+                )
+                cover("K chunks", "more than 1" if lay["chunks"] else "1")
+                lay = None
+        prev_q = q
 
 
 async def run_layer(dut, layer: Layer, timeout: int = 400_000) -> Buffers:
-    cover_layer(layer, n_of(dut))
     buf = Buffers(layer)
     server = cocotb.start_soon(serve(dut, buf))
     await start_layer(dut, layer)
@@ -281,6 +305,7 @@ async def setup(dut) -> None:
         pp = dut.u_postproc
         start_handshake_monitor(dut.clk, pp.i_valid, pp.o_ready, "row register -> postproc")
         start_handshake_monitor(dut.clk, pp.o_valid, pp.i_ready, "postproc -> write port")
+        cocotb.start_soon(layer_cov_monitor(dut))
     await start_clock_and_reset(dut)
 
 

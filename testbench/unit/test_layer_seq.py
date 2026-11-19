@@ -126,6 +126,9 @@ class Harness:
                 getattr(dut, f"i_{u}_done").value = int(self.busy[u] == 1)
             await ReadOnly()
             if int(dut.rst.value):  # the units are reset with the sequencer; checks restart
+                if prev_own is not None and int(dut.o_busy.value):  # DUT-observed coverage
+                    unit_running = any(self.busy.values())
+                    cover("reset mid-run", "while a unit runs" if unit_running else "between units")
                 self.busy = dict.fromkeys(UNITS, 0)
                 prev_own = None
                 await RisingEdge(dut.clk)
@@ -152,6 +155,9 @@ class Harness:
                 assert any(self.busy[u] == 1 for u in UNITS), "o_layer_done without unit done"
                 self.layer_events.append("done")
             self.clears += int(dut.o_clear.value)
+            if int(dut.i_start.value) and not int(dut.o_clear.value):  # DUT-observed coverage
+                why = "busy" if int(dut.o_busy.value) else "memory-port read pending"
+                cover("START", f"ignored: {why}")
             re, ra = int(dut.o_desc_re.value), int(dut.o_desc_raddr.value)
             await RisingEdge(dut.clk)
             for u in UNITS:
@@ -194,6 +200,10 @@ async def run_table(dut, h: Harness, table: list[D], img_sel: int, what: str) ->
     assert int(dut.o_busy.value) == 1, f"{what}: not busy after START"
     await wait_until(dut, lambda: int(dut.o_busy.value) == 0, 20_000, f"{what}: end of run")
     status = (int(dut.o_done.value), int(dut.o_error.value), int(dut.o_layer.value))
+    if status[1]:  # DUT-observed coverage: the error kind of the descriptor the DUT stopped on
+        fields = h.sample("o_", ("op", "src", "dst"))
+        bad = D(fields["op"], 0, 0, 0, fields["src"], fields["dst"], 0, 0, 0, 0, 0, 0)
+        cover("descriptor errors", spec_error(bad) or "missing last")
     assert status == (1, int(want.error), want.layer), (
         f"{what}: (done, error, layer) {status}, want {(1, int(want.error), want.layer)}"
     )
@@ -299,7 +309,6 @@ async def test_every_error(dut):
     assert named <= {what for what, _ in cases}, "the new §9 rules' named cases are missing"
     for what, bad in cases:
         assert descriptor_error(bad), f"test bug: {what} is not an error in the model"
-        cover("descriptor errors", spec_error(bad) or "?")
         table = [*good[:2], bad, *good[3:]]
         want = await run_table(dut, h, table, rng.randrange(16), what)
         assert want.error and want.layer == 2 and len(want.starts) == 2, what
@@ -318,7 +327,6 @@ async def test_every_error(dut):
         offset = 7 * IMG_SIZE if src == BUF_IMG else 0
         assert want.starts[0][1]["src_base"] == (ok.src_base + offset) & 0xFFFF
     # Missing last: DESC_DEPTH layers run, then ERROR at the last index.
-    cover("descriptor errors", "missing last")
     want = await run_table(dut, h, good, 5, "no descriptor with last = 1")
     assert want.error and len(want.starts) == h.depth and want.layer == h.depth - 1
 
@@ -340,7 +348,6 @@ async def test_start_ignored_and_reset(dut):
         await FallingEdge(dut.clk)
     await ReadOnly()
     assert int(dut.o_busy.value) == 0 and h.clears == clears, "START accepted with a read pending"
-    cover("START", "ignored: memory-port read pending")
     # START pulses during a run change nothing (run_table checks the whole sequence).
     h.load(table)
 
@@ -363,7 +370,6 @@ async def test_start_ignored_and_reset(dut):
     await FallingEdge(dut.clk)
     dut.i_start.value = 0
     assert sum(ignored) >= 3, f"too few START pulses landed while busy: {ignored}"
-    cover("START", "ignored: busy", sum(ignored))
     # Reset in the middle of a run: idle, DONE and ERROR clear, the memory port owns every buffer.
     for stop_after in (1, 3, 5, 9, 20, 60):
         h.load(table)
@@ -377,7 +383,6 @@ async def test_start_ignored_and_reset(dut):
         status = (int(dut.o_busy.value), int(dut.o_done.value), int(dut.o_error.value))
         assert status == (0, 0, 0), f"after reset at cycle {stop_after}: {status}"
         assert h.sample("o_own_", OWNERS) == dict.fromkeys(OWNERS, MEM)
-        cover("reset mid-run", f"after {stop_after} cycles")
         await run_table(dut, h, table, rng.randrange(16), f"clean run after reset {stop_after}")
 
 

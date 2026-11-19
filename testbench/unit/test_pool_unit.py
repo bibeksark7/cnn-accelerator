@@ -45,6 +45,10 @@ async def serve(dut, src: dict[int, int], writes: dict[int, int], dup: list[int]
             if a in writes:
                 dup.append(a)
             writes[a] = to_signed(resolved(dut.o_dst_wdata, f"pool write data at {a:#x}"), 8)
+            if writes[a] < 0:  # DUT-observed coverage of the values written
+                cover("values", "negative window maximum")
+            if writes[a] in (127, -128):
+                cover("values", "int8 extreme maximum")
         await RisingEdge(dut.clk)
         if read is not None:
             dut.i_src_rdata.value = to_unsigned(src.get(read, 0), 8)
@@ -56,15 +60,8 @@ async def run_pool(dut, act: np.ndarray, src_base: int, dst_base: int) -> None:
     src = {(src_base + i) & 0xFFFF: int(v) for i, v in enumerate(act.reshape(-1))}
     if h >= 2 and w >= 2 and c >= 1:
         want_flat = golden.maxpool2(act[None])[0].reshape(-1)
-        cover("shape", "odd H or W (floor)" if (h % 2 or w % 2) else "even H and W")
-        cover("channels", "C = 1" if c == 1 else "C > 1")
-        if (want_flat < 0).any():
-            cover("values", "negative window maximum")
-        if (want_flat == 127).any() or (want_flat == -128).any():
-            cover("values", "int8 extreme maximum")
     else:
         want_flat = np.zeros(0)
-        cover("shape", "no output (H < 2, W < 2 or C = 0)")
     want = {(dst_base + i) & 0xFFFF: int(v) for i, v in enumerate(want_flat)}
     writes: dict[int, int] = {}
     dup: list[int] = []
@@ -87,7 +84,21 @@ async def run_pool(dut, act: np.ndarray, src_base: int, dst_base: int) -> None:
     assert not wrong, f"{len(wrong)} wrong outputs, e.g. (addr, got, want) {wrong[:5]}"
 
 
+async def shape_monitor(dut) -> None:
+    """DUT-observed coverage: the shape the unit is started with (sampled at i_start)."""
+    while True:
+        await RisingEdge(dut.i_start)
+        await ReadOnly()
+        h, w, c = int(dut.i_h.value), int(dut.i_w.value), int(dut.i_c.value)
+        if h < 2 or w < 2 or c == 0:
+            cover("shape", "no output (H < 2, W < 2 or C = 0)")
+            continue
+        cover("shape", "odd H or W (floor)" if (h % 2 or w % 2) else "even H and W")
+        cover("channels", "C = 1" if c == 1 else "C > 1")
+
+
 async def setup(dut) -> None:
+    cocotb.start_soon(shape_monitor(dut))
     dut.i_start.value = 0
     dut.i_src_rdata.value = 0
     await start_clock_and_reset(dut)

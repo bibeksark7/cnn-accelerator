@@ -87,7 +87,7 @@ GOALS: dict[str, dict[str, list[str]]] = {
             "missing last",
         ],
         "START": ["ignored: busy", "ignored: memory-port read pending"],
-        "reset mid-run": [f"after {n} cycles" for n in (1, 3, 5, 9, 20, 60)],
+        "reset mid-run": ["between units", "while a unit runs"],
     },
     "csr_block": {"CSR bus": ["accepted at once", "waited (descriptor read)"]},
     "accel_top": {

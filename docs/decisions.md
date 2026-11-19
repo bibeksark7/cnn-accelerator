@@ -907,6 +907,16 @@ evidence that each property set is not vacuous.
   needs a written reason in `GAPS` or the report fails, and a documented gap that is hit fails
   too, so the list cannot go stale. Output: `testbench/reports/coverage.{md,json}`.
 
+- **DUT-observed bins** *(Phase 3 review)*. Every bin is sampled from the design, not from
+  what a test intended to drive: postproc's stage registers (rounding ties at stage 2 -> 3,
+  saturation and ReLU at stage 3 -> 4); the array's ports between a clear and its drain (K,
+  step gaps); the engine's configuration as accepted at `i_start`, its row mask, skipped drain
+  elements and CMD -> STAGE transitions (partial row and column tiles, K chunks); the pool and
+  argmax configuration as latched and the values they wrote or read; the sequencer's registered
+  fields when it stops with ERROR (the error kind); START, reset, bus and memory-port events on
+  the DUT's own signals; and the stall/transfer counts of the bound `valid_ready_sva` monitors.
+  The bus masters no longer record coverage.
+
 **Alternatives.** `cocotb-coverage` (does not support cocotb 2.x, and is a new dependency);
 SystemVerilog covergroups (not supported by Icarus or Verilator).
 

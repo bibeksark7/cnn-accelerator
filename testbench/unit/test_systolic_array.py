@@ -96,26 +96,42 @@ async def drain_rows(dut, rng, ready_prob: float, guard: int) -> np.ndarray:
     return np.array(rows, dtype=np.int64)
 
 
-def cover_tile(k: int, n: int, gap_prob: float) -> None:
-    """Functional coverage of one tile (D-034)."""
-    if k in (0, 1, n, 128):
-        cover("K", {0: "0 (drain only)", 1: "1", n: "N", 128: "128 (K_TILE)"}[k])
-    else:
-        cover("K", "2 .. N-1" if k < n else "N+1 .. 127")
-    if k:
-        cover("steps", "with gaps" if gap_prob > 0 else "back to back")
+async def step_monitor(dut) -> None:
+    """DUT-observed coverage (D-034): the reduction steps the array received between a clear and
+    its drain (K, and whether i_valid had gaps between steps)."""
+    n = n_of(dut)
+    steps, gap, idle_since_step = 0, False, False
+    while True:
+        await RisingEdge(dut.clk)
+        await ReadOnly()
+        if int(dut.rst.value) or int(dut.i_clear.value):
+            steps, gap, idle_since_step = 0, False, False
+            continue
+        if int(dut.i_valid.value):
+            gap = gap or idle_since_step
+            steps, idle_since_step = steps + 1, False
+        elif steps:
+            idle_since_step = True
+        if int(dut.i_drain.value):
+            if steps in (0, 1, n, 128):
+                cover("K", {0: "0 (drain only)", 1: "1", n: "N", 128: "128 (K_TILE)"}[steps])
+            else:
+                cover("K", "2 .. N-1" if steps < n else "N+1 .. 127")
+            if steps:
+                cover("steps", "with gaps" if gap else "back to back")
 
 
 async def run_tile(dut, a: np.ndarray, b: np.ndarray, rng, gap_prob: float, ready_prob: float):
     """Clear, stream K steps, drain, and return the N x N result read through the handshake."""
-    cover_tile(a.shape[1], n_of(dut), gap_prob)
     rows = start_handshake_monitor(dut.clk, dut.o_row_valid, dut.i_row_ready, "result rows")
+    steps = cocotb.start_soon(step_monitor(dut))
     await clear_when_idle(dut)
     await stream_steps(dut, a, b, rng, gap_prob)
     try:
         return await drain_rows(dut, rng, ready_prob, 100 * n_of(dut) + 4 * a.shape[1] + 100)
     finally:
         rows.cancel()
+        steps.cancel()
 
 
 def expected(a: np.ndarray, b: np.ndarray) -> np.ndarray:

@@ -17,7 +17,7 @@ from collections import defaultdict
 from pathlib import Path
 
 import cocotb
-from cocotb.triggers import FallingEdge, ReadOnly
+from cocotb.triggers import FallingEdge, ReadOnly, RisingEdge
 
 COVERAGE_FILE = "coverage.json"
 
@@ -80,3 +80,43 @@ def cover_vr_links(links: dict[str, object], must_stall: set[str]) -> None:
             cover("valid/ready links (SVA monitor)", f"{name}: stall", stalls)
         if name in must_stall:
             assert transfers and stalls, f"{name}: {transfers} transfers, {stalls} stalls"
+
+
+async def csr_wait_monitor(dut) -> None:
+    """DUT-observed: each new CSR request (rising i_csr_valid) is accepted at once or waits."""
+    while True:
+        await RisingEdge(dut.i_csr_valid)
+        await ReadOnly()
+        if int(dut.o_csr_ready.value):
+            cover("CSR bus", "accepted at once")
+        else:
+            cover("CSR bus", "waited (descriptor read)")
+
+
+async def mem_wait_monitor(dut, busy) -> None:
+    """DUT-observed: each memory-port request is accepted at once, or held because the
+    accelerator is busy or a read is pending (`busy` is STATUS.BUSY). A request starts when
+    i_mem_valid rises, or in the cycle after an accepted request while i_mem_valid stays high
+    (back-to-back requests); it is followed until accepted or withdrawn."""
+    valid, ready = dut.i_mem_valid, dut.o_mem_ready
+    in_readonly = False  # True when the loop below left us in a ReadOnly phase
+    while True:
+        if not (valid.value.is_resolvable and int(valid.value)):
+            await RisingEdge(valid)
+            await ReadOnly()
+        elif not in_readonly:
+            await ReadOnly()
+        if int(ready.value):
+            cover("memory port", "accepted at once")
+        elif int(busy.value):
+            cover("memory port", "request held while busy")
+        else:
+            cover("memory port", "request held while a read is pending")
+        while True:  # follow the request until it is accepted or withdrawn
+            accepted = int(valid.value) and int(ready.value)
+            await RisingEdge(dut.clk)
+            await FallingEdge(dut.clk)
+            await ReadOnly()
+            if accepted or not int(valid.value):
+                break
+        in_readonly = True

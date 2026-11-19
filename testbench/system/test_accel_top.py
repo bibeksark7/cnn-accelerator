@@ -47,7 +47,7 @@ from cocotb.triggers import FallingEdge, ReadOnly, RisingEdge, with_timeout
 
 from common import accel_bus as ab
 from common.bits import to_signed
-from common.coverage import cover
+from common.coverage import cover, csr_wait_monitor, mem_wait_monitor
 from common.runner import RTL_DIR, SVA_DIR, run_cocotb, run_sva_violation, sv_string
 from common.sim import resolved, start_clock_and_reset
 from model import golden, hwmap, net
@@ -191,11 +191,61 @@ async def x_monitor(dut) -> None:
             resolved(dut.o_mem_rdata, "memory-port read data")
 
 
+async def control_monitor(dut) -> None:
+    """DUT-observed coverage of the control path (D-034), event-driven: every accepted START
+    (after an image load or back to back; with a memory-port read or write in the same cycle),
+    every ignored START (busy, or a read pending), every run that ends with ERROR (the kind of
+    the descriptor the sequencer stopped on), and every reset during a layer."""
+    seq, csr = dut.u_layer_seq, dut.u_csr_block
+    state = {"img_written": True}
+
+    async def img_writes():
+        while True:
+            await RisingEdge(dut.u_sram_1r1w_img.i_we)
+            state["img_written"] = True
+
+    async def starts():
+        while True:
+            await RisingEdge(csr.o_start)
+            await ReadOnly()
+            if not int(seq.o_clear.value):
+                why = "busy" if int(seq.o_busy.value) else "memory-port read pending"
+                cover("START", f"ignored: {why}")
+                continue
+            loaded, state["img_written"] = state["img_written"], False
+            cover("inferences", "after loading images" if loaded else "back to back, no reload")
+            if int(dut.i_mem_valid.value) and int(dut.o_mem_ready.value):
+                rw = "write" if int(dut.i_mem_we.value) else "read"
+                cover("START", f"with a memory-port {rw} in the same cycle")
+
+    async def errors():
+        while True:
+            await RisingEdge(seq.o_error)
+            await ReadOnly()
+            op, src, dst = (int(x.value) for x in (seq.o_op, seq.o_src, seq.o_dst))
+            kind = hwmap.descriptor_error(D(op, 0, 0, 0, src, dst, 0, 0, 0, 0, 0, 0))
+            cover("descriptor errors", kind or "missing last")
+
+    async def resets():
+        while True:
+            await RisingEdge(dut.rst)
+            await ReadOnly()
+            units = (dut.u_gemm_engine.o_busy, dut.u_pool_unit.o_busy, dut.u_argmax_unit.o_busy)
+            if any(u.value.is_resolvable and int(u.value) for u in units):
+                cover("reset during a layer", f"layer {int(seq.o_layer.value)}")
+
+    for task in (img_writes, starts, errors, resets):
+        cocotb.start_soon(task())
+
+
 async def setup(dut) -> Accel:
     acc = Accel(dut)
     if cocotb.SIM_NAME.lower().startswith("icarus"):
         cocotb.start_soon(x_monitor(dut))
     cocotb.start_soon(layer_monitor(dut))
+    cocotb.start_soon(control_monitor(dut))
+    cocotb.start_soon(csr_wait_monitor(dut))
+    cocotb.start_soon(mem_wait_monitor(dut, dut.o_busy))
     pp = dut.u_gemm_engine.u_postproc
     cocotb.start_soon(saturation_monitor(dut, pp.sat_hi, "high"))
     cocotb.start_soon(saturation_monitor(dut, pp.sat_lo, "low"))
@@ -275,7 +325,6 @@ async def test_network_quick_subset(dut):
         for i in batch:
             counter = PortCounter(dut) if i < detailed else None
             task = cocotb.start_soon(counter.run()) if counter else None
-            cover("inferences", "back to back, no reload" if i > first else "after loading images")
             status = await acc.run(img_sel=i - first)
             if task:
                 task.cancel()
@@ -431,7 +480,6 @@ async def test_memory_port(dut):
     dut.i_mem_valid.value = 0
     assert held >= 1, "a request behind a pending read was accepted at once"
     assert await acc.mem.read(ab.SEL_ACT0, 3) == 0x5C, "the held write was lost"
-    cover("memory port", "request held while a read is pending")
     # Restore the weights and parameters the test overwrote, then run one image while hammering
     # the memory port: it must not accept anything while BUSY.
     for a, w in enumerate(WGT_WORDS):
@@ -453,7 +501,6 @@ async def test_memory_port(dut):
     await FallingEdge(dut.clk)
     dut.i_mem_valid.value = 0
     assert accepted_while_busy == 0, f"{accepted_while_busy} requests accepted while busy"
-    cover("memory port", "request held while busy")
     assert await acc.logits() == [int(v) for v in qs["logits"][0]]
 
 
@@ -475,7 +522,6 @@ async def test_csr_rules(dut):
     await csr.write(ab.DESC + 4 * 9, 0xDEAD_BEEF)
     for _ in range(5):
         await csr.write(ab.CTRL, 1)
-    cover("START", "ignored: busy")
     desc_during_run = await csr.read(ab.DESC + 4 * 8)  # readable while busy
     await with_timeout(FallingEdge(dut.o_busy), RUN_TIMEOUT_US, "us")
     assert desc_during_run == DESC_WORDS[8]
@@ -498,7 +544,6 @@ async def test_csr_rules(dut):
     dut.i_csr_valid.value = 0
     await ReadOnly()
     assert int(dut.o_busy.value) == 0, "START accepted while a memory-port read was pending"
-    cover("START", "ignored: memory-port read pending")
     # The next START works and IMG_SEL = 1 selects the second image.
     assert await acc.run(img_sel=1) == ab.DONE | 5 << 8
     assert await acc.logits() == [int(v) for v in qs["logits"][1]]
@@ -526,7 +571,6 @@ async def test_csr_rules(dut):
             rvalids.append(int(dut.o_mem_rdata.value))
         await FallingEdge(dut.clk)
     assert rvalids == [want], f"read in the START cycle returned {rvalids}, want [{want}]"
-    cover("START", "with a memory-port read in the same cycle")
     await with_timeout(FallingEdge(dut.o_busy), RUN_TIMEOUT_US, "us")
     assert await csr.read(ab.STATUS) == ab.DONE | 5 << 8
     assert await acc.logits() == [int(v) for v in qs["logits"][0]]
@@ -552,7 +596,6 @@ async def test_csr_rules(dut):
     assert await acc.logits() == [int(v) for v in qs["logits"][0]]
     got = await acc.mem.read(ab.SEL_IMG, addr)
     assert got == new_word, f"write in the START cycle: read back {got:#x}, want {new_word:#x}"
-    cover("START", "with a memory-port write in the same cycle")
 
 
 def network_table() -> list[D]:
@@ -601,7 +644,6 @@ async def test_errors(dut):
         want = ab.DONE | ab.ERROR | layer << 8
         assert status == want, f"{what}: STATUS {status:#x}, want {want:#x}"
         assert await acc.csr.read(ab.RESULT) == 0, f"{what}: RESULT not cleared at START"
-        cover("descriptor errors", hwmap.descriptor_error(bad) or "?")
         layers = [await acc.csr.read(ab.LAYER_CYC + 4 * k) for k in range(hwmap.DESC_DEPTH)]
         assert all(layers[:layer]) and not any(layers[layer:]), f"{what}: LAYER_CYC {layers}"
         total = await acc.csr.read(ab.CYC_TOTAL)
@@ -613,7 +655,6 @@ async def test_errors(dut):
     status = await acc.run(img_sel=0)
     want = ab.DONE | ab.ERROR | (hwmap.DESC_DEPTH - 1) << 8
     assert status == want, f"missing last: STATUS {status:#x}, want {want:#x}"
-    cover("descriptor errors", "missing last")
     layers = [await acc.csr.read(ab.LAYER_CYC + 4 * k) for k in range(hwmap.DESC_DEPTH)]
     total = await acc.csr.read(ab.CYC_TOTAL)
     want_total = sum(layers) + seq_overhead(hwmap.DESC_DEPTH)
@@ -649,7 +690,6 @@ async def test_reset_mid_run(dut):
         assert await acc.csr.read(ab.CYC_TOTAL) == 0
         assert await acc.run(img_sel=0) == ab.DONE | 5 << 8, f"run after reset in layer {layer}"
         assert await acc.logits() == [int(v) for v in qs["logits"][0]]
-        cover("reset during a layer", f"layer {layer}")
         dut._log.info("reset during layer %d, then a clean run: ok", layer)
 
 
