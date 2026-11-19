@@ -1,0 +1,11 @@
+--- a/rtl/mem/mem_port.sv
++++ b/rtl/mem/mem_port.sv
+@@ -59,7 +59,7 @@
+   logic pend_q;
+   logic [2:0] sel_q;
+ 
+-  assign o_mem_ready = !i_busy && !pend_q;
++  assign o_mem_ready = !pend_q;
+   assign accept      = i_mem_valid && o_mem_ready;
+ 
+   always_comb begin

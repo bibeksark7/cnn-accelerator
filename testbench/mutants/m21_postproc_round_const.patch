@@ -1,0 +1,11 @@
+--- a/rtl/post/postproc.sv
++++ b/rtl/post/postproc.sv
+@@ -119,7 +119,7 @@
+   logic signed [R_W-1:0] p_ext, rnd, r_in;
+ 
+   assign p_ext = R_W'(p2_q);  // sign-extending: p2_q is signed
+-  assign rnd   = (s2_q == 6'd0) ? '0 : ($signed(R_W'(1)) <<< (s2_q - 6'd1));
++  assign rnd   = (s2_q == 6'd0) ? '0 : ($signed(R_W'(1)) <<< s2_q);
+   assign r_in  = (p_ext + rnd) >>> s2_q;  // signed operand: arithmetic shift
+ 
+   logic signed [  R_W-1:0] r3_q;

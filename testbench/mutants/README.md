@@ -42,3 +42,15 @@ applied to the working tree.
 | `m18_pool_unsigned_max` | pool compares bytes unsigned (negative values lose) | `testbench/unit/test_pool_unit.py::test_pool_unit[icarus]` | — |
 | `m19_pool_window_restart` | pool maximum not restarted at a new window | `testbench/unit/test_pool_unit.py::test_pool_unit[icarus]` | — |
 | `m20_mux_read_not_gated` | port mux passes a read request from a non-owner | `testbench/unit/test_buf_port_mux.py::test_buf_port_mux[icarus-3-8-13]` | — |
+| `m21_postproc_round_const` | rounding constant 2^S instead of 2^(S−1) | `testbench/unit/test_postproc.py::test_postproc[icarus]` | — |
+| `m22_postproc_no_saturation` | int8 saturation missing (low 8 bits kept) | `testbench/unit/test_postproc.py::test_postproc[icarus]` | — |
+| `m23_postproc_no_relu` | ReLU not applied | `testbench/unit/test_postproc.py::test_postproc[icarus]` | — |
+| `m24_postproc_ready_dropped` | last pipeline stage ignores `i_ready` (dropped handshake) | `testbench/unit/test_postproc.py::test_postproc[icarus]` | — |
+| `m25_array_a_skew` | A operands of rows ≥ 2 enter the array with a one-cycle skew instead of i cycles | `testbench/unit/test_systolic_array.py::test_systolic_array[icarus-8]` | — |
+| `m26_top_pingpong_dst_swap` | ACT0/ACT1 destination decode swapped (ping-pong error) | `testbench/system/test_accel_top.py::test_accel_top[icarus-quick-2]` | — |
+| `m27_seq_fc_dst_unchecked` | FC with `dst ≠ LOGIT` not reported as a §9 error | `testbench/unit/test_layer_seq.py::test_layer_seq[icarus-8]` | — |
+| `m28_csr_desc_pend_kept` | a withdrawn descriptor read stays pending (BUG-012 regression) | `testbench/unit/test_csr_block.py::test_csr_block[icarus-8-16-32]` | — |
+| `m29_top_result_not_cleared` | RESULT not cleared at START | `testbench/system/test_accel_top.py::test_accel_top[verilator-main-50]` | — |
+| `m30_perf_clear_keeps_inputs` | counter input register not cleared at START (clear-cycle events counted) | `testbench/unit/test_perf_counters.py::test_perf_counters[icarus-32]` | — |
+| `m31_mac_clear_ignored` | MAC cell ignores `i_clear` | `testbench/unit/test_mac_cell.py::test_mac_cell[icarus]` | — |
+| `m32_mem_ready_while_busy` | memory port ready while BUSY (requests accepted during a run) | `testbench/unit/test_mem_port.py::test_mem_port[icarus-64]` | — |

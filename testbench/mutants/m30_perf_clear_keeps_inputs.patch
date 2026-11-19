@@ -1,0 +1,11 @@
+--- a/rtl/ctrl/perf_counters.sv
++++ b/rtl/ctrl/perf_counters.sv
+@@ -68,7 +68,7 @@
+   logic [RD_N-1:0] rd_q;
+   logic [WR_N-1:0] wr_q;
+   always_ff @(posedge clk) begin
+-    if (rst || i_clear) begin
++    if (rst) begin
+       busy_q <= 1'b0;
+       mac_q  <= 1'b0;
+       rd_q   <= '0;

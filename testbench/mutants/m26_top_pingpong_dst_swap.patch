@@ -1,0 +1,13 @@
+--- a/rtl/top/accel_top.sv
++++ b/rtl/top/accel_top.sv
+@@ -436,8 +436,8 @@
+   assign src_img  = (src == 2'd0);
+   assign src_act0 = (src == 2'd1);
+   assign src_act1 = (src == 2'd2);
+-  assign dst_act0 = (dst == 2'd1);
+-  assign dst_act1 = (dst == 2'd2);
++  assign dst_act0 = (dst == 2'd2);
++  assign dst_act1 = (dst == 2'd1);
+ 
+   // Requests presented to each multiplexer (bound by the ownership assertions).
+   logic [2:0] img_req_re, img_req_we, act0_req_re, act0_req_we, act1_req_re, act1_req_we;

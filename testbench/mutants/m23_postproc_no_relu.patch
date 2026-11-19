@@ -1,0 +1,11 @@
+--- a/rtl/post/postproc.sv
++++ b/rtl/post/postproc.sv
+@@ -144,7 +144,7 @@
+   assign sat_hi  = r3_q > SAT_MAX;
+   assign sat_lo  = r3_q < SAT_MIN;
+   assign sat_val = sat_hi ? 8'h7F : (sat_lo ? 8'h80 : r3_q[7:0]);
+-  assign q_val   = (relu3_q && sat_val[7]) ? 8'h00 : sat_val;
++  assign q_val   = sat_val;
+ 
+   logic [      7:0] q4_q;
+   logic [ACC_W-1:0] y4_q;

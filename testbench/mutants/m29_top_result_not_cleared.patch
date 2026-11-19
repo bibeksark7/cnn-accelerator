@@ -1,0 +1,11 @@
+--- a/rtl/top/accel_top.sv
++++ b/rtl/top/accel_top.sv
+@@ -406,7 +406,7 @@
+   // run that ends without an ARGMAX (an error) never shows an earlier run's class.
+   logic [7:0] result_q;
+   always_ff @(posedge clk) begin
+-    if (rst || seq_clear) begin
++    if (rst) begin
+       result_q <= '0;
+     end else if (argmax_done) begin
+       result_q <= a_result;

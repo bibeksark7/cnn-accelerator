@@ -1,0 +1,11 @@
+--- a/rtl/core/systolic_array.sv
++++ b/rtl/core/systolic_array.sv
+@@ -92,7 +92,7 @@
+         assign b_edge[gi*DATA_W+:DATA_W] = i_b[gi*DATA_W+:DATA_W];
+         assign v_edge[gi]                = i_valid;
+       end else begin : g_tap_dly
+-        assign a_edge[gi*DATA_W+:DATA_W] = a_dly_q[gi-1][gi*DATA_W+:DATA_W];
++        assign a_edge[gi*DATA_W+:DATA_W] = a_dly_q[0][gi*DATA_W+:DATA_W];
+         assign b_edge[gi*DATA_W+:DATA_W] = b_dly_q[gi-1][gi*DATA_W+:DATA_W];
+         assign v_edge[gi]                = v_dly_q[gi-1];
+       end

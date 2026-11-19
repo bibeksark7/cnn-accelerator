@@ -1,0 +1,11 @@
+--- a/rtl/post/postproc.sv
++++ b/rtl/post/postproc.sv
+@@ -59,7 +59,7 @@
+   logic v1_q, v2_q, v3_q, v4_q;
+   logic ready1, ready2, ready3, ready4;
+ 
+-  assign ready4  = !v4_q || i_ready;
++  assign ready4  = 1'b1;
+   assign ready3  = !v3_q || ready4;
+   assign ready2  = !v2_q || ready3;
+   assign ready1  = !v1_q || ready2;

@@ -1,0 +1,10 @@
+--- a/rtl/ctrl/layer_seq.sv
++++ b/rtl/ctrl/layer_seq.sv
+@@ -184,7 +184,6 @@
+   logic err_desc;
+   assign err_desc = (op > OP_ARGMAX)
+                  || ((op == OP_ARGMAX) && (src != B_LOGIT))
+-                 || ((op == OP_FC) && (dst != B_LOGIT))
+                  || (unit_op && (src == B_LOGIT))
+                  || (writes_dst && ((dst == B_IMG) || (dst == B_LOGIT) || (src == dst)));
+ 

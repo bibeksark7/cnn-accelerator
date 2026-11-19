@@ -1,0 +1,11 @@
+--- a/rtl/ctrl/csr_block.sv
++++ b/rtl/ctrl/csr_block.sv
+@@ -110,7 +110,7 @@
+       desc_pend_q <= 1'b0;
+     end else if (o_desc_re) begin
+       desc_pend_q <= 1'b1;
+-    end else if (o_csr_ready || !i_csr_valid) begin
++    end else if (o_csr_ready) begin
+       // Answered, or the request was withdrawn (a §10.1 violation): never answer a later read
+       // with this read's data.
+       desc_pend_q <= 1'b0;

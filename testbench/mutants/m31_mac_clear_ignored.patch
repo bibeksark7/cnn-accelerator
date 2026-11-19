@@ -1,0 +1,11 @@
+--- a/rtl/core/mac_cell.sv
++++ b/rtl/core/mac_cell.sv
+@@ -39,7 +39,7 @@
+ 
+   // The size cast evaluates the signed product at ACC_W bits (operands sign-extended first).
+   always_ff @(posedge clk) begin
+-    if (rst || i_clear) begin
++    if (rst) begin
+       acc_q <= '0;
+     end else if (i_valid) begin
+       acc_q <= acc_q + ACC_W'(i_a * i_b);
