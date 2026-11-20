@@ -1,0 +1,25 @@
+# Quartus warnings expected in the DE10-Lite build (fpga/de10lite/reports/warnings.txt, written by
+# build_win.sh). scripts/check_quartus_warnings.py (run by scripts/checkpoint.sh 4) fails on any
+# warning that no entry matches, on any Critical Warning or Error, and if the list is incomplete.
+#
+# Format, one entry per line:   <message id> | <regex for the whole message text> | <reason>
+# The separator is " | " (space, bar, space); a hierarchy bar in a regex is written "\|".
+
+# PARAM bits [63:54] (10 RAM columns)
+14284 | Synthesized away the following node\(s\): | Header of the 14285/14320 lines below.
+14285 | Synthesized away the following RAM node\(s\): | Header of the 14320 lines below.
+14320 | Synthesized away node "fpga_core:u_fpga_core\|accel_top:u_accel_top\|sram_1r1w:u_sram_1r1w_prm\|altsyncram:mem_rtl_0\|altsyncram_[0-9a-z]+:auto_generated\|ram_block1a(5[4-9]|6[0-3])" | PARAM bits [63:54] are reserved and 0 (spec §7). Only the memory port reads them, and de10lite_top ties the host memory port off, so these ten RAM columns drive nothing.
+
+# Unused board outputs
+13024 | Output pins are stuck at VCC or GND | Header of the 13410 lines below.
+13410 | Pin "HEX[0-5]\[7\]" is stuck at VCC | The decimal points are not used; the segments are active low, so VCC keeps them off (spec §12).
+13410 | Pin "LEDR\[[3-8]\]" is stuck at GND | LEDR[8:3] are not used (spec §12 assigns LEDR[0..2] and LEDR[9]); held off.
+
+# Unused board inputs
+21074 | Design contains 6 input pin\(s\) that do not drive logic | Header of the 15610 lines below: SW[9:4].
+15610 | No output dependent on input pin "SW\[[4-9]\]" | Only SW[3:0] are used (IMG_SEL, 16 images); SW[9:4] are left unconnected.
+
+# Tool and board notices
+292013 | Feature LogicLock is only available with a valid subscription license\. You can purchase a software subscription to gain full access to this feature\. | Printed by every Quartus Prime Lite compile; the project uses no LogicLock regions.
+15714 | Some pins have incomplete I/O assignments\. Refer to the I/O Assignment Warnings report for details | The 57 HEX and LEDR outputs have no drive-strength assignment: pins.tcl takes only location and I/O standard from Terasic's golden top, so Quartus uses the 3.3-V LVTTL default. They drive LEDs and segments, are static between runs and false-pathed.
+169177 | 13 pins must meet Intel FPGA requirements for 3\.3-, 3\.0-, and 2\.5-V interfaces\. For more information, refer to AN 447: Interfacing MAX 10 Devices with 3\.3/3\.0/2\.5-V LVTTL/LVCMOS I/O Systems\. | The 13 inputs (SW[9:0], KEY[1:0], MAX10_CLK1_50) are 3.3-V; AN 447's limits apply to the board's signals, which the DE10-Lite board design sets. Nothing in the FPGA design changes them.

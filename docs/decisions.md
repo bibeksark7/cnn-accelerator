@@ -955,7 +955,8 @@ regenerated from the tests rather than written by hand.
 - **Build.** `fpga/de10lite/build_win.sh` copies the RTL (flat), `build.tcl`, `sta_reports.tcl`,
   `pins.tcl`, the SDC and the init files to a Windows build directory, runs the full compile and
   the timing reports with Windows Quartus, and copies the reports to `fpga/de10lite/reports/`.
-  The `.sof` stays in the Windows directory for programming.
+  The programming files stay in the Windows directory: the `.sof` (SRAM, for a quick test) and
+  the `.pof` (internal flash, survives power cycles; D-037).
 
 **Reason.** A board-independent core that the same simulation flow can test end to end (bring-up
 through the host side, demo runs through the controller), and a board top small enough to check
@@ -986,3 +987,34 @@ always asynchronous here, so FORCED states the intent directly); the assignment 
 
 **Reason.** The initializer makes the power-up assumption explicit in the RTL and true in every
 tool. The attribute travels with the module, so any synchronizer instance is analysed.
+
+## D-037 — FPGA sign-off checks: every corner, MTBF, expected warnings, board record (Phase 4)
+
+**Decision.**
+- **Corners.** `sta_reports.tcl` analyses every operating condition of the device (MAX 10 C7:
+  slow 1200 mV 85 °C, slow 1200 mV 0 °C, fast 1200 mV 0 °C) and writes the worst setup and hold
+  slack of each to `timing_corners.rpt`; the worst-path and summary reports are per corner.
+  `checkpoint.sh 4` requires all three corners in `de10lite.sta.summary`, takes the minimum slack
+  over them, and checks that `timing_corners.rpt` agrees. Setup is worst in the slow 85 °C corner,
+  hold in the fast corner.
+- **MTBF.** `report_metastability` runs in every corner (`mtbf.rpt`); the checkpoint expects 6
+  chains (SW[3:0], KEY[0], KEY[1]) of 2 registers, each with a computed MTBF (D-036).
+- **Expected warnings.** `build_win.sh` writes every warning of the compile and of the timing run,
+  nested ones included, to `reports/warnings.txt`. `fpga/de10lite/expected_warnings.txt` lists
+  each expected one (message id, a regex for the whole text, a reason).
+  `scripts/check_quartus_warnings.py` fails on any unlisted warning, on any Critical Warning or
+  Error, and if the list is shorter than the totals Quartus prints (so nothing was missed).
+- **Programming files.** The Assembler writes `de10lite.pof` (internal flash, with the
+  `SINGLE IMAGE WITH ERAM` mode that M9K initialization needs, D-021) next to the `.sof`;
+  `build_win.sh` fails if either is missing.
+- **Board record.** Until `fpga/de10lite/demo.md` (the record of the on-board demo) exists,
+  checkpoint 4 ends with `PASS (board confirmation pending)`.
+
+**Alternatives.** Only the default (slow) corner (it misses the fast-corner hold slack, the
+smallest one); matching warnings by message id only (a new node or pin with the same id would pass
+unseen); converting the `.sof` with `quartus_cpf` (the Assembler already writes the `.pof` with the
+project's flash mode).
+
+**Reason.** Sign-off covers every corner the device is specified for. A new warning is either a
+design change to look at or a new expected entry with its reason, never silently accepted. The
+checkpoint output says plainly when the hardware result is still missing.

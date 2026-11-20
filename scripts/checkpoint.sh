@@ -11,6 +11,7 @@ REPORT_DIR=sim_build/checkpoint
 mkdir -p "$REPORT_DIR"
 
 failures=0
+pass_note=""
 pass() { printf '  [PASS] %s\n' "$1"; }
 fail() { printf '  [FAIL] %s\n' "$1"; failures=$((failures + 1)); }
 skip() { printf '  [SKIP] %s\n' "$1"; }
@@ -304,13 +305,35 @@ info = json.load(open(f"{d}/build_info.json"))
 sta = open(f"{d}/de10lite.sta.summary").read()
 slacks = {m.group(1): float(m.group(2)) for m in
           re.finditer(r"Type\s*:\s*(.+?)\nSlack\s*:\s*(-?[\d.]+)", sta)}
-setup = {k: v for k, v in slacks.items() if "Setup 'clk50'" in k}
-hold = {k: v for k, v in slacks.items() if "Hold 'clk50'" in k}
+# Every operating condition (corner): the minimum slack over all of them must be positive.
+CORNERS = {"Slow 1200mV 85C Model", "Slow 1200mV 0C Model", "Fast 1200mV 0C Model"}
+setup = {k.split(" Setup")[0]: v for k, v in slacks.items() if "Setup 'clk50'" in k}
+hold = {k.split(" Hold")[0]: v for k, v in slacks.items() if "Hold 'clk50'" in k}
 ucp = open(f"{d}/unconstrained_paths.rpt").read()
 counts = [int(x) for x in re.findall(r";\s*Unconstrained[^;]*;\s*(\d+)\s*;\s*(\d+)", ucp) for x in x]
 problems = []
+if set(setup) != CORNERS or set(hold) != CORNERS:
+    problems.append(f"corners in de10lite.sta.summary: setup {sorted(setup)}, hold {sorted(hold)}")
 if not setup or min(setup.values()) <= 0: problems.append(f"setup slack {setup}")
 if not hold or min(hold.values()) <= 0: problems.append(f"hold slack {hold}")
+# sta_reports.tcl's per-corner table must agree with the Quartus summary.
+rows = [l.split(";") for l in open(f"{d}/timing_corners.rpt").read().splitlines()
+        if l and not l.startswith(("#", "corner;"))]
+per_corner = {r[0]: (float(r[1]), float(r[2])) for r in rows}
+if set(per_corner) != CORNERS:
+    problems.append(f"corners in timing_corners.rpt: {sorted(per_corner)}")
+for c, (s, h) in per_corner.items():
+    if abs(s - setup.get(c, 1e9)) > 5e-4 or abs(h - hold.get(c, 1e9)) > 5e-4:
+        problems.append(f"{c}: timing_corners.rpt {s}/{h} differs from de10lite.sta.summary")
+# Synchronizers: 6 chains (SW[3:0], KEY[0], KEY[1]) of 2 registers each, MTBF known, every corner.
+mtbf = open(f"{d}/mtbf.rpt").read()
+chains = re.findall(r"Number of Synchronizer Chains Found: (\d+)", mtbf)
+shortest = re.findall(r"Shortest Synchronizer Chain: (\d+) Registers", mtbf)
+unknown = re.findall(r"Fraction of Chains for which MTBFs Could Not be Calculated: ([\d.]+)", mtbf)
+design_mtbf = re.findall(r"Worst-Case MTBF of Design is (\S+) years", mtbf)
+if not (len(chains) == len(CORNERS) and set(chains) == {"6"} and set(shortest) == {"2"}
+        and unknown and all(float(u) == 0 for u in unknown)):
+    problems.append(f"mtbf.rpt: chains {chains}, shortest {shortest}, unknown {unknown}")
 if not counts or any(counts): problems.append(f"unconstrained paths: {counts}")
 if "Illegal Clocks" not in ucp: problems.append("unconstrained-paths report incomplete")
 if info.get("rtl_tree") != os.environ["RTL_TREE"]: problems.append("build is not of HEAD:rtl")
@@ -318,8 +341,13 @@ if not info.get("tree_clean"): problems.append("build did not start from a clean
 for f, h in info.get("init_files_sha256", {}).items():
     if hashlib.sha256(open(f"model/artifacts/mem/{f}", "rb").read()).hexdigest() != h:
         problems.append(f"{f} changed since the build")
-print(f"worst setup {min(setup.values(), default=0):+.3f} ns, worst hold {min(hold.values(), default=0):+.3f} ns, "
-      f"unconstrained paths {sum(counts)}, build of commit {info.get('commit', '?')[:12]}")
+print(f"worst setup {min(setup.values(), default=0):+.3f} ns, worst hold {min(hold.values(), default=0):+.3f} ns "
+      f"(minimum over {len(setup)} corners), unconstrained paths {sum(counts)}, "
+      f"build of commit {info.get('commit', '?')[:12]}")
+for c in sorted(CORNERS):
+    print(f"  {c}: setup {setup.get(c, float('nan')):+.3f} ns, hold {hold.get(c, float('nan')):+.3f} ns")
+print(f"  synchronizers: {chains[0] if chains else '?'} chains, shortest {shortest[0] if shortest else '?'} "
+      f"registers, worst-case design MTBF {min(design_mtbf, key=float, default='?')} years")
 for p in problems: print("  ", p)
 sys.exit(1 if problems else 0)
 PY
@@ -354,12 +382,18 @@ phase_4() {
   check "script and golden model tests" check_pytest scripts_model 30 scripts/tests model/tests
   check "RTL lint (Quartus compat, Verilator -Wall, Icarus, Yosys check)" scripts/lint.sh
   check "ruff format + ruff check clean" check_ruff
-  check "DE10-Lite build: positive setup and hold slack at 50 MHz, no unconstrained paths, reports of HEAD:rtl" check_fpga_build
+  check "DE10-Lite build: positive setup and hold slack at 50 MHz in every corner, no unconstrained paths, synchronizer MTBF, reports of HEAD:rtl" check_fpga_build
+  check "DE10-Lite build: every Quartus warning listed in fpga/de10lite/expected_warnings.txt" python scripts/check_quartus_warnings.py
   check "README results table: every row links a committed report" check_readme_results
   check "README badges match the committed coverage and mutation reports" python scripts/readme_badges.py --check
   run_local_checks "optional local repository checks"
   check "latest CI run on main is green for HEAD" check_ci_green_on_head
-  echo "  [HUMAN] the demo works on the board (confirmed by the human before tagging v1.0)"
+  if [ -f fpga/de10lite/demo.md ]; then
+    echo "  [BOARD] demo confirmed on the board: fpga/de10lite/demo.md"
+  else
+    echo "  [BOARD] demo not yet confirmed on the board (fpga/de10lite/demo.md does not exist)"
+    pass_note=" (board confirmation pending)"
+  fi
 }
 
 phase="${1:-}"
@@ -374,7 +408,7 @@ esac
 
 echo
 if [ "$failures" -eq 0 ]; then
-  echo "CHECKPOINT $phase: PASS"
+  echo "CHECKPOINT $phase: PASS${pass_note:-}"
   exit 0
 fi
 echo "CHECKPOINT $phase: FAIL ($failures check(s) failed)"
