@@ -111,6 +111,18 @@ fpga/de10lite/build_win.sh               # Quartus build (Windows Quartus Prime 
 Training and quantization (`pip install -r requirements-dev.txt`): `python -m model.train`,
 `python -m model.quantize`, `python -m model.export`.
 
+## Data
+
+The network is trained and evaluated on the [MNIST database](http://yann.lecun.com/exdb/mnist/)
+of handwritten digits by Yann LeCun, Corinna Cortes and Christopher J. C. Burges, used under the
+[Creative Commons Attribution-Share Alike 3.0](https://creativecommons.org/licenses/by-sa/3.0/)
+license (CC BY-SA 3.0). The repository commits a few MNIST test images and their labels:
+`model/artifacts/quick_subset.npz` (50 images, the CI system test),
+`model/artifacts/saturation_subset.npz` (the 4 images that saturate) and
+`model/artifacts/mem/img.hex` and `label.hex` (the 16 board-demo images). These files are
+distributed under CC BY-SA 3.0, not the MIT license. The full dataset is downloaded at training
+time into the git-ignored `data/` directory and is never committed.
+
 ## Repository
 
 | Path | Contents |
@@ -121,3 +133,8 @@ Training and quantization (`pip install -r requirements-dev.txt`): `python -m mo
 | `fpga/de10lite/` | build scripts, pins, constraints, build reports |
 | `scripts/` | lint, checkpoints, mutation runner, coverage and full-run reports |
 | `docs/` | spec, architecture, verification plan, decisions, bug log |
+
+## License
+
+MIT ([LICENSE](LICENSE)), except the MNIST-derived files listed under [Data](#data)
+(CC BY-SA 3.0).
