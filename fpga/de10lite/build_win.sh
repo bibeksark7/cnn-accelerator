@@ -3,8 +3,11 @@
 #
 # Quartus handles \\wsl$ paths poorly, so this copies the RTL (flat), the FPGA files and the init
 # files to a Windows build directory, runs build.tcl (full compile) and sta_reports.tcl there,
-# and copies the reports back to fpga/de10lite/reports/. The programming file stays in the
-# build directory (de10lite.sof); the board is programmed from Windows.
+# and copies the reports back to fpga/de10lite/reports/, with every Quartus warning in
+# warnings.txt (checked against fpga/de10lite/expected_warnings.txt by
+# scripts/check_quartus_warnings.py). The programming files stay in the build directory:
+# de10lite.sof (SRAM configuration, lost at power-off) and de10lite.pof (internal flash, kept
+# across power cycles; the Assembler writes it for MAX 10). The board is programmed from Windows.
 #
 # Environment:
 #   QUARTUS_ROOT  Quartus install (default /mnt/c/intelFPGA_lite/22.1std/quartus)
@@ -58,13 +61,22 @@ if [ "$status" -eq 0 ]; then
   (cd "$BUILD_DIR" && "$QSTA" -t sta_reports.tcl > quartus_sta.log 2>&1) || status=1
 fi
 
-for f in de10lite.map.summary de10lite.fit.summary de10lite.sta.summary timing_setup_worst.rpt \
-         timing_hold_worst.rpt timing_summary_setup.rpt timing_summary_hold.rpt fmax.rpt \
-         unconstrained_paths.rpt; do
+for f in de10lite.sof de10lite.pof; do
+  [ -f "$BUILD_DIR/$f" ] || { echo "build_win: $f was not generated" >&2; status=1; }
+done
+
+for f in de10lite.map.summary de10lite.fit.summary de10lite.sta.summary timing_corners.rpt \
+         timing_setup_worst.rpt timing_hold_worst.rpt timing_summary_setup.rpt \
+         timing_summary_hold.rpt fmax.rpt unconstrained_paths.rpt mtbf.rpt; do
   [ -f "$BUILD_DIR/$f" ] && cp "$BUILD_DIR/$f" "$here/reports/"
 done
-grep -hE "^(Error|Critical Warning|Warning) \(" "$BUILD_DIR/quartus_sh.log" | sed 's/ File: .*//' \
+logs=("$BUILD_DIR/quartus_sh.log")
+[ -f "$BUILD_DIR/quartus_sta.log" ] && logs+=("$BUILD_DIR/quartus_sta.log")
+# Top-level messages (summary), then every warning including the nested ones (the check list).
+grep -hE "^(Error|Critical Warning|Warning) \(" "${logs[@]}" | sed 's/ File: .*//' \
   > "$here/reports/messages.txt" || true
-grep -hE "was (un)?successful" "$BUILD_DIR/quartus_sh.log" >> "$here/reports/messages.txt" || true
-echo "build_win: $( [ "$status" -eq 0 ] && echo success || echo FAILED ) ($BUILD_DIR/de10lite.sof)"
+grep -hE "was (un)?successful" "${logs[@]}" >> "$here/reports/messages.txt" || true
+grep -hE "^ *(Error|Critical Warning|Warning) \(" "${logs[@]}" | sed -E 's/ File: .*//; s/^ +//' \
+  > "$here/reports/warnings.txt" || true
+echo "build_win: $( [ "$status" -eq 0 ] && echo success || echo FAILED ) ($BUILD_DIR/de10lite.sof, $BUILD_DIR/de10lite.pof)"
 exit "$status"
