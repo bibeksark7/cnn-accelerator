@@ -4,6 +4,9 @@ A verified int8 CNN accelerator in SystemVerilog: an 8×8 output-stationary syst
 an MNIST network bit-exactly against a Python golden model, and closes timing at 50 MHz on an
 Intel MAX 10 (Terasic DE10-Lite).
 
+**Stack:** SystemVerilog · cocotb + pytest · Icarus Verilog · Verilator · Yosys · SymbiYosys ·
+Python, NumPy, PyTorch · Quartus Prime Lite · GitHub Actions
+
 <!-- badges:start -->
 [![CI](https://github.com/bibeksark7/cnn-accelerator/actions/workflows/ci.yml/badge.svg)](https://github.com/bibeksark7/cnn-accelerator/actions/workflows/ci.yml)
 [![functional coverage](https://img.shields.io/badge/functional%20coverage-107%2F110%20bins%2C%203%20documented%20gaps-brightgreen)](testbench/reports/coverage.md)
@@ -17,20 +20,24 @@ confirmation on hardware (a GIF follows once it has been run on the board).
 
 | Metric | Value | Source |
 |---|---|---|
-| Hardware accuracy, full MNIST test set (RTL simulation) | 98.65 % (9,865 / 10,000); all 100,000 logits bit-exact vs the golden model | [full run](testbench/reports/full_run.md) |
+| Accuracy, RTL simulation | 98.65 % on the full MNIST test set (9,865 / 10,000); all 100,000 logits bit-exact vs the golden model | [full run](testbench/reports/full_run.md) |
 | Float vs integer model accuracy | 98.67 % vs 98.65 % | [quantization report](model/reports/quantize.json) |
-| Cycles per inference | 47,259 (0.945 ms, 1,058 inferences/s at 50 MHz); identical for every image | [counters](testbench/reports/perf_counters.md) |
+| Cycles per inference | 47,259; 0.945 ms and 1,058 inferences/s at 50 MHz (compute only; images preloaded); identical for every image | [counters](testbench/reports/perf_counters.md) |
 | MAC array busy | 3,869 cycles per inference (8.2 %) | [counters](testbench/reports/perf_counters.md) |
-| Timing on MAX 10 (10M50DAF484C7G) | 75.06 MHz Fmax; +6.678 ns setup, +0.116 ns hold slack at 50 MHz | [Fmax](fpga/de10lite/reports/fmax.rpt), [timing](fpga/de10lite/reports/de10lite.sta.summary) |
-| Resources (whole demo) | 8,324 LEs (17 %), 5,587 registers, 340,608 memory bits (20 %), 68 9-bit multipliers | [fit summary](fpga/de10lite/reports/de10lite.fit.summary) |
+| Timing on MAX 10 (10M50DAF484C7G) | 65.85 MHz Fmax; worst slack at 50 MHz over all three corners: +4.813 ns setup, +0.095 ns hold | [Fmax](fpga/de10lite/reports/fmax.rpt), [timing per corner](fpga/de10lite/reports/timing_corners.rpt), [summary](fpga/de10lite/reports/de10lite.sta.summary) |
+| Resources (whole demo) | 8,322 LEs (17 %), 5,587 registers, 340,608 memory bits (20 %), 68 9-bit multipliers | [fit summary](fpga/de10lite/reports/de10lite.fit.summary) |
 | Mutation testing | 34 / 34 injected bugs caught | [mutation report](testbench/reports/mutation.md) |
 | Functional coverage | every goal met or documented as a gap (bins sampled from the design) | [coverage report](testbench/reports/coverage.md) |
+
+The array is busy only 8.2 % of the cycles because its im2col operands are staged one byte per
+cycle before each tile streams, so staging takes about eight times as long as streaming; Milestone
+1 is correctness first ([why, and the fix](docs/architecture.md#feeding-the-array-the-bandwidth-problem-spec-5)).
 
 ## Three bugs worth telling
 
 - **A bug hidden by arithmetic** (BUG-011): an ARGMAX descriptor naming the image buffer added
   the image offset (`IMG_SEL × 784`) to its logit index; it vanished only because 784 is a
-  multiple of 16. Found in review; fixed in the spec (ARGMAX must read LOGIT) and the RTL.
+  multiple of 16. Found in code review; fixed in the spec (ARGMAX must read LOGIT) and the RTL.
 - **A test suite that could not see saturation** (BUG-014): with saturation removed from the
   requantizer, every system test still passed, because no quick-subset image saturates. A
   deliberate CI failure run exposed it; the 4 test images that do saturate now run in CI.

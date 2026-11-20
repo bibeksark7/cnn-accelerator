@@ -110,13 +110,16 @@ stay off the critical path (D-024).
 - `fpga_core`: `accel_top` with the weights, parameters, descriptors and 16 test images
   preloaded from init files, a demo controller that turns a button press into two CSR writes
   (IMG_SEL, START), and a register stage on each host path.
-- `de10lite_top`: the DE10-Lite pins, a power-on reset OR'd with KEY[1], 2-FF synchronizers on
-  every switch and key, a debounced start button, and the displays (predicted digit, true label,
-  cycle count).
+- `de10lite_top`: the DE10-Lite pins, a power-on reset OR'd with KEY[1], 2-FF synchronizers on every
+  switch and key (6 chains; the Timing Analyzer's worst-case MTBF is over 10^9 years,
+  `fpga/de10lite/reports/mtbf.rpt`), a debounced start button, and the displays (predicted digit,
+  true label, cycle count).
 
-The full design uses 8,324 logic elements (17 %), 68 of the 288 9-bit multipliers and 20 % of the
-memory bits of the MAX 10, and closes timing at 50 MHz with +6.678 ns of setup slack (75.06 MHz;
-`fpga/de10lite/reports/`). The critical path is the post-processing shifter.
+The full design uses 8,322 logic elements (17 %), 68 of the 288 9-bit multipliers and 20 % of the
+memory bits of the MAX 10, and closes timing at 50 MHz in all three timing corners: worst setup
+slack +4.813 ns (slow 85 °C; Fmax 65.85 MHz), worst hold slack +0.095 ns (fast corner)
+(`fpga/de10lite/reports/timing_corners.rpt`). The critical path is the post-processing
+round-and-shift.
 
 ## 7. How correctness is established
 
