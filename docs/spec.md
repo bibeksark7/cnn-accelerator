@@ -1,8 +1,7 @@
 # Accelerator specification
 
 Authoritative hardware specification for the int8 MNIST CNN accelerator (Milestone 1).
-Changes to this document, or to any interface it defines, require review and approval and are
-recorded in `docs/decisions.md`.
+Changes to this document, or to any interface it defines, are recorded in `docs/decisions.md`.
 
 **Normative scope.** Binding requirements are:
 - the arithmetic (§3);

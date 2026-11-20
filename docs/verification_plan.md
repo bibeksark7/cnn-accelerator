@@ -98,12 +98,14 @@ Status values: **done** (test exists and passes in CI), **planned** (phase in br
 
 | Feature | Test(s) | Coverage items | Status |
 |---|---|---|---|
-| Board I/O blocks | `test_sync_2ff`, `test_reset_gen` (power-up from 0, POR length, button assert/release latency), `test_debounce` (bounces shorter than the stable time never change the level; one press pulse per press, cycle by cycle vs a model), `test_hex7seg` (every code vs a segment table) | Icarus and Verilator | done |
+| Board I/O blocks | `test_sync_2ff`, `test_reset_gen` (power-up from 0 with nothing deposited, POR length, button assert/release latency), `test_debounce` (bounces shorter than the stable time never change the level; one press pulse per press, cycle by cycle vs a model), `test_hex7seg` (every code vs a segment table) | Icarus and Verilator | done |
 | CSR and memory-port register stages | `test_csr_slice`, `test_mem_slice`: random requests and wait states; each request reaches accel_top's side once, in order, held until accepted; every read returns its data once, in order | Icarus and Verilator | done |
 | Demo controller | `test_demo_ctrl`: random presses, busy and host traffic vs the intended behaviour (IMG_SEL then START on an accepted press; other presses ignored; host requests pass unchanged only while idle) | Icarus and Verilator; `fsm_legal_sva` bound | done |
 | Bring-up through the host side | `testbench/system/test_fpga_core.py::test_bring_up`: ID, CONFIG, DESC/WGT/PARAM read back equal to the hex files, image 0 in IMG | Verilator, every accel_top assertion bound (the stages are its bus masters) | done |
 | Demo runs | `test_fpga_core.py::test_demo_runs`: all 16 images via the controller: RESULT = golden class, label, every LOGIT, CYC_TOTAL = the counter report; a press while busy ignored | Verilator with SVA | done |
 | Board top | `testbench/system/test_de10lite_top.py`: power-up, bouncing KEY[0] presses, HEX0/HEX1/HEX5..2 and LEDR decoded for 4 images, '-' while busy, press while busy ignored, KEY[1] reset | Verilator | done |
-| Timing closure and constraints | `fpga/de10lite/build_win.sh`: full compile, setup/hold slack at 50 MHz, `unconstrained_paths.rpt` all zero | reports in `fpga/de10lite/reports/` | done (checkpoint 4 checks) |
-| On the board | the human programs the DE10-Lite and confirms the demo | — | pending (human) |
+| Timing closure and constraints | `fpga/de10lite/build_win.sh`: full compile, setup/hold slack at 50 MHz in all three corners (`timing_corners.rpt`), `unconstrained_paths.rpt` all zero | reports in `fpga/de10lite/reports/` | done (checkpoint 4 checks) |
+| Synchronizers | `report_metastability` (`mtbf.rpt`): 6 chains of 2 registers (SW[3:0], KEY[0], KEY[1]), MTBF computed for each, every corner (D-036) | `fpga/de10lite/reports/mtbf.rpt` | done (checkpoint 4 checks) |
+| Quartus warnings | `scripts/check_quartus_warnings.py`: every warning in `reports/warnings.txt` matches an entry with a reason in `fpga/de10lite/expected_warnings.txt`; no critical warnings; list complete (D-037) | `scripts/tests/test_check_quartus_warnings.py` | done (checkpoint 4 checks) |
+| On the board | the DE10-Lite is programmed and the demo run; the record is `fpga/de10lite/demo.md` | — | pending |
 

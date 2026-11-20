@@ -64,7 +64,7 @@ requantization, nested-loop convolution, pack/unpack round-trips) in `model/test
 
 - **Symptom.** A mutant that left the PE-grid valid bits out of the "in flight" condition passed
   every array test. I recorded it in D-017 as equivalent.
-- **How found.** Phase 2 batch 1 review: `o_idle` is part of the §11.2 interface, so a mutant that
+- **How found.** Code review: `o_idle` is part of the §11.2 interface, so a mutant that
   changes it cannot be equivalent.
 - **Root cause.**
   - **Test gap:** every test cleared the array only after a completed drain. That is long after
@@ -90,7 +90,7 @@ requantization, nested-loop convolution, pack/unpack round-trips) in `model/test
   - `postproc.sv`: `Error (10170): ... near text: "'"; expecting ","` on `-R_W'(128)` (unary minus
     applied to a size cast).
 - **How found.** Quartus probe compiles: the `sram_1r1w` M9K probe (D-021), then the same check
-  on every batch 1 module. Verilator `-Wall`, Icarus and Yosys had accepted all three files.
+  on every module written so far. Verilator `-Wall`, Icarus and Yosys had accepted all three files.
 - **Root cause.** Quartus 22.1 Lite's SystemVerilog front end is stricter than the other three
   tools:
   - it needs explicit `generate … endgenerate`;
@@ -188,14 +188,14 @@ requantization, nested-loop convolution, pack/unpack round-trips) in `model/test
 - **Regression test.** `test_accel_top.py::test_reset_mid_run` (one-cycle reset in each of the six
   layers, then a clean bit-exact run) passes on Verilator with every assertion bound.
 
-## BUG-011 — ARGMAX with `src = IMG` added the image offset to its LOGIT base (Phase 3 pre-work)
+## BUG-011 — ARGMAX with `src = IMG` added the image offset to its LOGIT base (Phase 3)
 
 - **Symptom.** None observed. With `src = IMG` and `IMG_SEL = s`, an ARGMAX layer read its logits
   from `src_base + s · 784` instead of `src_base`. The error was hidden only because 784 is a
   multiple of 16: the argmax unit takes the low 8 bits of the base (784 mod 256 = 16), and the
   16-entry LOGIT file keeps only the low 4 bits of the index, so the offset vanished. A different
   `IMG_SIZE` or a 32-entry LOGIT file would have read the wrong logits for every image but 0.
-- **How found.** Review of `layer_seq.sv` (Phase 2 checkpoint review).
+- **How found.** Code review of `layer_seq.sv`.
 - **Root cause (RTL and spec).** The sequencer applied the offset for any `src = IMG`, as spec §9
   then said, and ARGMAX ignored `src` (it always reads LOGIT), so §9 accepted ARGMAX
   `src = IMG`. The unit test's expected model followed the same rule and its random tables always
@@ -209,12 +209,12 @@ requantization, nested-loop convolution, pack/unpack round-trips) in `model/test
   and checks it for FC with `src = IMG`. `test_accel_top.py::test_errors` covers ARGMAX
   `src = IMG/ACT0/ACT1` and FC `dst = IMG/ACT0/ACT1` through the CSR bus.
 
-## BUG-012 — A withdrawn descriptor read left the CSR block's pending flag set (Phase 3 pre-work)
+## BUG-012 — A withdrawn descriptor read left the CSR block's pending flag set (Phase 3)
 
 - **Symptom.** If a master raised `i_csr_valid` for a `DESC` read and dropped it before
   `o_csr_ready` (after the RAM read was issued), the next `DESC` read was answered in its first
   cycle with the *previous* read's word.
-- **How found.** Review of the §10.1 handshake rule (Phase 2 checkpoint review); then
+- **How found.** Code review of the §10.1 handshake rule; then
   reproduced by `test_withdrawn_descriptor_read`, which fails on the old RTL.
 - **Root cause (RTL).** `desc_pend_q` was cleared only when a request was accepted. Withdrawing a
   request violates §10.1, but the slave silently answered a different request with stale data

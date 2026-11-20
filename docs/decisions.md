@@ -205,9 +205,9 @@ Internal module interfaces are defined in module headers during Phase 2 and summ
 weight-stationary array (Milestone 3) depend on. Keeping internal partitioning out of the spec
 leaves room to refactor RTL without changing the spec.
 
-## D-014 — Spec review changes before Phase 2 (Phase 1 review)
+## D-014 — Spec additions before Phase 2 (Phase 1)
 
-**Decision** (approved in the Phase 1 review). `docs/spec.md` now specifies:
+**Decision.** `docs/spec.md` now specifies:
 - **Reset values** for every CSR (§10.2): 0 unless stated; `ID`/`CONFIG` are constants. `rst`
   does not clear the descriptor table or any buffer.
 - **Array step timing** (§11.2): `i_valid` may deassert between steps (including between K
@@ -229,7 +229,7 @@ leaves room to refactor RTL without changing the spec.
 - Pipelining the multiply → round/shift → saturate path gives timing margin at 50 MHz on the
   MAX 10. Whether a single-cycle path would close was not evaluated.
 
-## D-015 — The `systolic_array` interface (spec §11.2) is implementable weight-stationary (Phase 1 review)
+## D-015 — The `systolic_array` interface (spec §11.2) is implementable weight-stationary (Phase 1)
 
 **Decision.** Freeze §11.2 for both arrays. This sketch shows `systolic_array_ws` can implement it
 with no backpressure and no interface change.
@@ -268,9 +268,9 @@ array row `r` will need.
 **Conclusion.** Workable. Testbenches written against §11.2 (handshakes only, no cycle counts)
 run unchanged on both arrays.
 
-## D-016 — Spec review round 2: rounding width, array handshake ordering, START condition (Phase 1 review)
+## D-016 — Spec: rounding width, array handshake ordering, START condition (Phase 1)
 
-**Decision** (approved in the Phase 1 review, round 2). `docs/spec.md` now requires:
+**Decision.** `docs/spec.md` now requires:
 - **§3.1:** the rounding constant is a signed value at least 49 bits wide (e.g.
   `49'sd1 <<< (S − 1)`), and `>>>` is applied to a signed operand.
 - **§11.2:**
@@ -291,7 +291,7 @@ its steps have arrived.
 - Refusing `START` while a memory-port read is in flight keeps the port's response from
   colliding with a run's buffer accesses.
 
-**Clarification (Phase 2 batch 3 review, approved).** "Pending" means accepted at an earlier
+**Clarification (Phase 2).** "Pending" means accepted at an earlier
 edge. A read accepted in the same cycle as `START` was not pending when `START` was checked, so
 both are accepted: the buffer is read at that edge, while the memory port still owns it, and the
 data returns with `o_mem_rvalid` while `BUSY` is already high (spec §10.3). The select is
@@ -325,7 +325,7 @@ and checks that both are accepted, that exactly one `o_mem_rvalid` returns the r
 §11.2 allows, and makes `o_idle` exact. The row multiplexer keeps drain logic trivial; its cost
 will be measured in the Phase 4 synthesis report.
 
-**Correction (Phase 2 batch 1 review).** An earlier version of this entry called "remove the grid
+**Correction (Phase 2).** An earlier version of this entry called "remove the grid
 valid bits from the flush condition" an *equivalent* mutant. That was wrong. Output rows are
 unaffected (emission trails the wavefront), but `o_idle` is part of the §11.2 interface. With the
 mutant, `o_idle` rises while later PEs are still accumulating, and a clear issued then leaves stale
@@ -357,7 +357,7 @@ keeps RTL and model bit-exact by construction.
 
 ## D-019 — Spec §3.1: post-processing stage list allows a split multiply stage (Phase 2)
 
-**Decision** (approved in the Phase 2 batch 1 review). §3.1 already required "at least three"
+**Decision.** §3.1 already required "at least three"
 register stages. Its stage list now states that the first step (bias add and multiply) may take
 two stages: register `y`, `M` and `S`, then multiply the registered operands into a registered
 product. `postproc` uses four stages: y/M/S → multiply → round/shift → saturate/ReLU.
@@ -487,7 +487,7 @@ Reports are committed under `fpga/probe_reports/<module>/`.
 | `gemm_engine` (N = 8, K_TILE = 128; contains the array, post-processing, `agen_a` and 8 staging banks) | +6.722 ns | +0.095 ns | 75.31 MHz | `u_postproc\|s2_q[1]` → `u_postproc\|r3_q[7]`: the post-processing variable shifter again (data delay 13.207 ns) |
 | `pool_unit` (with `agen_pool`) | +11.364 ns | +0.152 ns | 115.79 MHz | `u_agen_pool\|row_stride_q[2]` → `u_agen_pool\|o_addr[15]`: the 4-term source-address sum (data delay 8.258 ns) |
 | `argmax_unit` (re-run after the register restructure, D-031) | +12.926 ns | +0.151 ns | 141.36 MHz | `best_q[6]` → `best_q[1]`: the 32-bit signed compare and update (data delay 6.997 ns) |
-| `accel_top` (the whole core, with the network's WGT, PARAM and descriptor init files; re-run after the Phase 3 pre-work: counter input register, RESULT register, §9 checks) | +7.228 ns | +0.101 ns | 78.3 MHz | `u_gemm_engine\|u_postproc\|s2_q[1]` → `u_gemm_engine\|u_postproc\|r3_q[22]`: the post-processing variable shifter (data delay 12.699 ns) |
+| `accel_top` (the whole core, with the network's WGT, PARAM and descriptor init files; re-run after adding the counter input register, the RESULT register and the §9 checks) | +7.228 ns | +0.101 ns | 78.3 MHz | `u_gemm_engine\|u_postproc\|s2_q[1]` → `u_gemm_engine\|u_postproc\|r3_q[22]`: the post-processing variable shifter (data delay 12.699 ns) |
 
 Sources: `timing_setup_worst.rpt`, `timing_hold_worst.rpt`, `probe_<module>.sta.summary` and
 `fmax.rpt` in each report directory.
@@ -513,7 +513,7 @@ shifter). With the counters registered, the worst path is the post-processing sh
 engine's own critical path. The worst path moves between logic cones from fit to fit; every fit
 closed at 50 MHz with more than 5 ns of setup slack.
 
-**Performance-counter input register (Phase 3 pre-work, approved).** `perf_counters` registers
+**Performance-counter input register (Phase 3).** `perf_counters` registers
 `{busy, rd, wr, mac_active}` before the saturating adds. Every `accel_top` fit so far had a
 counter or a long data path within a few nanoseconds of the worst path, and the last one's worst
 path ran from `agen_a`'s read enable through the buffer multiplexers and the request popcount
@@ -521,7 +521,6 @@ into the 33-bit `BUF_RD` add. The register cuts the counters out of the units' t
 cost is that the four counters lag the events by one more cycle (spec §10.2: final one cycle after
 `DONE`). The layer counters are not delayed; they count sequencer events, not unit ports. A clear
 also clears the input register, so the counted events are exactly those before (one cycle later).
-The spec §10.2 note on the lag (final one cycle after `DONE`) was approved on 2026-11-19.
 
 **Reading.**
 - Both blocks close timing at 50 MHz with margin on every corner. The whole design will be
@@ -605,12 +604,12 @@ them one after another per (row tile, column tile, K chunk).
   In the Quartus probe, the engine's critical path is inside post-processing, not at that
   boundary (D-024).
 
-**Padded rows (spec §5 reworded, approved in the engine review).** §5 previously said rows
+**Padded rows (spec §5 reworded).** §5 previously said rows
 `m ≥ M` are written as 0 when staging. The engine does not stage them; instead it forces their
 array inputs to zero. §5 now says exactly that ("padded rows are forced to zero at the array
 input"), and the zero-forcing stays in the RTL.
 
-**The zero-forcing mutant is killed by SVA (engine review).** Removing the zero-forcing
+**The zero-forcing mutant is killed by SVA.** Removing the zero-forcing
 (`testbench/mutants/m15_engine_no_zero_forcing.patch`) changes no layer output:
 - **Output-stationary:** a row's result depends only on that row's A-values, and padded rows are
   never written back.
@@ -628,10 +627,10 @@ It is still observable, and §5 stays normative, because:
 The implementation assertion `a_padded_rows_zero` (every array step presents 0 on padded lanes)
 fires on the mutant in Verilator runs, so the mutant is recorded as **killed**, not equivalent.
 
-## D-027 — Performance counter definitions (engine review)
+## D-027 — Performance counter definitions (Phase 2)
 
-**Decision** (approved in the engine review, before the CSR block is built). Spec §10.2 now
-defines:
+**Decision** (made before the CSR block was built, so it implements them directly). Spec
+§10.2 now defines:
 - **`BUF_RD` / `BUF_WR`:** count accesses to the §5 buffers only. Reads are of IMG, ACT0, ACT1,
   WGT and PARAM; writes are to ACT0 and ACT1. The GEMM engine's internal staging banks, the
   LOGIT register file, the descriptor table and memory-port accesses are not counted.
@@ -682,7 +681,7 @@ defines:
 **Reason.** Simple, fully specified ownership that is easy to check in simulation, and units that
 reuse the address generators and the 1-cycle read convention already verified.
 
-**Spec additions (approved in the batch 3 review; spec §5, §8, §9, §10).**
+**Spec additions (spec §5, §8, §9, §10).**
 - **Read-data return select.** The units' source data is selected by the layer's `src` field,
   registered before the layer starts; the memory port registers its buffer select with each read.
   A late or combinational select cannot mix data of two buffers.
@@ -697,12 +696,12 @@ reuse the address generators and the 1-cycle read convention already verified.
   - `src = LOGIT` is a §9 error for CONV, POOL and FC; `dst = LOGIT` is one for CONV and POOL.
     LOGIT is not a byte buffer, so without these checks a unit would read 0 or its writes would be
     dropped, silently.
-  - *(Phase 3 pre-work, approved.)* **FC with `dst ≠ LOGIT`** and **ARGMAX with `src ≠ LOGIT`**
+  - **FC with `dst ≠ LOGIT`** and **ARGMAX with `src ≠ LOGIT`**
     are §9 errors too. Before, FC ignored `dst` (it always writes LOGIT) and ARGMAX ignored `src`
     (it always reads LOGIT), so a descriptor could name a buffer the unit never touched. Now the
     `src`/`dst` fields always describe what the layer really reads and writes. This also covers
     the old FC `dst = IMG` and `src = dst` checks.
-- **Image offset only for buffer-reading layers** *(Phase 3 pre-work, approved)*. The sequencer
+- **Image offset only for buffer-reading layers.** The sequencer
   adds `IMG_SEL · IMG_SIZE` to `src_base` only for a CONV, POOL or FC with `src = IMG`. Before, it
   added the offset for any `src = IMG`, including ARGMAX, whose base indexes the LOGIT registers
   (BUG-011). FC is included on purpose: an FC reading the image directly must follow `IMG_SEL`
@@ -715,8 +714,8 @@ reuse the address generators and the 1-cycle read convention already verified.
   instead of returning 0 (§10.1).
 - **A memory-port read accepted in the same cycle as START** completes normally (§10.3; see
   D-016).
-- **A memory-port write accepted in the same cycle as START** is performed (§10.3; approved
-  2026-11-19, tested by `test_csr_rules`).
+- **A memory-port write accepted in the same cycle as START** is performed (§10.3; tested by
+  `test_csr_rules`).
 - **Address-range policy.** Addresses are taken modulo each buffer's power-of-two depth (high bits
   ignored), as for the memory port. Accesses are never out of range; oversized descriptors wrap
   and are not detected. Checking ranges would need the layer's extent (a multiply per descriptor)
@@ -733,12 +732,12 @@ reuse the address generators and the 1-cycle read convention already verified.
 - **Registered descriptor fields** (spec §8): the four words are read into registers before the
   layer starts and every unit is configured from them.
 
-## D-029 — Mutant runner pulled forward from Phase 3 (batch 3 review)
+## D-029 — Mutant runner pulled forward from Phase 3 (Phase 2)
 
 **Decision.** `scripts/run_mutants.py` runs the bug-injection mutants:
 - **Isolation.** Each patch is applied in its own temporary `git worktree` at HEAD, with the
   current working tree (modified, new and deleted files, ignored files excluded) copied over it,
-  so a run checks exactly the code under review and the main working tree is never modified.
+  so a run checks exactly the current code and the main working tree is never modified.
 - **Kill criterion.** The killing test named in `testbench/mutants/README.md` must fail
   (pytest JUnit file), and a simulation must have run (cocotb results file present), so a build
   error or a mistyped test id is an `ERROR`, not a kill. When the README names a required
@@ -751,7 +750,7 @@ reuse the address generators and the 1-cycle read convention already verified.
   tree (`git apply -R --check` must fail for every patch). `scripts/tests/test_mutant_patches.py`
   checks in CI that every patch applies and that its README row names a collected pytest node.
 
-**Alternatives.** A shell loop applying patches in place (what the review bundle did by hand): a
+**Alternatives.** A shell loop applying patches in place (the earlier manual method): a
 crash or interrupt leaves a mutant in the RTL, and exit codes cannot tell a build error from a
 kill.
 
@@ -759,7 +758,7 @@ kill.
 repeatable regression instead of a one-off check, and the kill criterion is strict enough that a
 mutant cannot be "killed" by an unrelated failure.
 
-## D-030 — One start/busy/done contract for all layer units (batch 3 review)
+## D-030 — One start/busy/done contract for all layer units (Phase 2)
 
 **Decision.** `testbench/sva/unit_if_sva.sv` replaces `gemm_engine_if_sva.sv` and is bound to the
 GEMM engine, the pool unit and the argmax unit (one bind file each). Parameters: the
@@ -789,7 +788,7 @@ place, catches a sequencer bug against any unit, and the WS array work (Phase 7)
 - **LOGIT registers, not RAM.** 16 × 32 bits: the CSR block reads any entry combinationally, the
   argmax unit through a registered port with the buffers' 1-cycle latency, and reset clears them
   (the CSR reset value is 0).
-- **RESULT** *(changed in the Phase 3 pre-work, approved)* is a register in `accel_top`:
+- **RESULT** *(changed in Phase 3)* is a register in `accel_top`:
   cleared by reset and at an accepted START, loaded from the argmax unit's result on its done
   pulse. Before, it was the argmax unit's own result register, which kept the previous run's class
   through a run that stopped with an error before its ARGMAX layer. The spec only promised RESULT
@@ -830,7 +829,7 @@ load, back to back with IMG_SEL, weights from the init files) and writes one JSO
 `testbench/reports/full_run.{md,json}` and `testbench/reports/perf_counters.{md,json}` from those
 lines, so every README number about accuracy and cycles comes from a committed report.
 
-**Traceability** *(Phase 3 review)*. Before simulating, the script records the commit,
+**Traceability.** Before simulating, the script records the commit,
 `git rev-parse HEAD:rtl`, whether the working tree is clean, the sha256 of `wgt.hex`,
 `param.hex`, `desc.hex` and of the vectors, and the Verilator version; both JSON reports carry
 this `provenance`. `checkpoint.sh 3` fails unless the recorded RTL tree equals the current
@@ -838,12 +837,13 @@ this `provenance`. `checkpoint.sh 3` fails unless the recorded RTL tree equals t
 agree. A later RTL change therefore invalidates the report until the full run is repeated.
 
 **Alternatives.** A pytest-parameterized full run (it would run on every `pytest testbench` and
-need the MNIST cache in CI); committing the vectors (a dataset copy, which the project rules
-forbid).
+need the MNIST cache in CI); committing the vectors (an 8 MB copy of the MNIST test set in the
+repository).
 
-**Reason.** The project plan allows the full run to be a locally run regression with a committed
-report (a pre-approved scope cut). A separate script keeps CI free of the dataset, while the
-run uses the same test code as CI.
+**Reason.** The run takes over an hour and needs the MNIST test set, so it does not belong in
+every CI run; a local regression with a committed report gives the same evidence, and the
+provenance check ties the report to the current RTL. A separate script keeps CI free of the
+dataset, while the run uses the same test code as CI.
 
 ## D-033 — Formal proofs: ports-only wrappers, immediate assertions, PDR (Phase 3)
 
@@ -866,11 +866,11 @@ run uses the same test code as CI.
 - `test_formal.py` runs each proof (must PASS) and re-runs it on a mutated copy of the RTL (must
   FAIL on a named property): m31 (MAC ignores clear), m16 and m17 (argmax tie and signedness),
   m24 (postproc drops `i_ready`). CI runs it.
-- **Progress properties and covers** *(Phase 3 review)*. argmax: `p_done_on_time` (o_done exactly
+- **Progress properties and covers.** argmax: `p_done_on_time` (o_done exactly
   `count + 2` cycles after the start; 1 cycle for `count = 0`, which issues no reads) and
   `p_done_not_early`. postproc: `p_latency` (an input accepted 4 cycles ago, with `i_ready` high
   since, is the output now) and `p_drains` (after 4 cycles with `i_ready` high, occupancy is at
-  most the inputs accepted in those cycles: nothing is stuck). The review's first wording, "i_ready
+  most the inputs accepted in those cycles: nothing is stuck). The simpler form, "i_ready
   high for 4 cycles and not empty implies o_valid", is false (an element accepted in the last cycle
   is still in stage 1); PDR gives that counterexample, so `p_drains` states the intent instead.
   Each `.sby` has a `cover` task (smtbmc, depth 30) that must reach its covers: MAC, a clear and
@@ -878,7 +878,7 @@ run uses the same test code as CI.
   postproc, four elements inside after a 3-cycle output stall. Mutants m33 (argmax stuck in its
   last state) and m34 (postproc deadlock once stages 3 and 4 are full) change no value, only
   progress; they fail `p_done_on_time` and `p_drains`.
-- **argmax at full width** *(Phase 3 review)*. `argmax_unit_full_props.sv` uses symbolic
+- **argmax at full width.** `argmax_unit_full_props.sv` uses symbolic
   indices (two free positions with free values; other reads arbitrary) at VAL_W = 32, IDX_W = 8.
   No unbounded engine finished (PDR stopped after 25 minutes, with and without a count limit;
   k-induction at depth 20 fails its induction step, since runs last up to 257 cycles), so it is a
@@ -913,7 +913,7 @@ evidence that each property set is not vacuous.
   needs a written reason in `GAPS` or the report fails, and a documented gap that is hit fails
   too, so the list cannot go stale. Output: `testbench/reports/coverage.{md,json}`.
 
-- **DUT-observed bins** *(Phase 3 review)*. Every bin is sampled from the design, not from
+- **DUT-observed bins.** Every bin is sampled from the design, not from
   what a test intended to drive: postproc's stage registers (rounding ties at stage 2 -> 3,
   saturation and ReLU at stage 3 -> 4); the array's ports between a clear and its drain (K,
   step gaps); the engine's configuration as accepted at `i_start`, its row mask, skipped drain
@@ -926,7 +926,7 @@ evidence that each property set is not vacuous.
 **Alternatives.** `cocotb-coverage` (does not support cocotb 2.x, and is a new dependency);
 SystemVerilog covergroups (not supported by Icarus or Verilator).
 
-**Reason.** No new dependency, goals and gaps in one reviewed file, and a report that is
+**Reason.** No new dependency, goals and gaps in one file next to the tests, and a report that is
 regenerated from the tests rather than written by hand.
 
 ## D-035 — FPGA top: core/board split, register stages, controller, build flow (Phase 4)
