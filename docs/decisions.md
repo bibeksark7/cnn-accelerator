@@ -970,15 +970,19 @@ by inspection plus one board-level test.
   variable with a declaration initializer that is also assigned in a process) is waived inline
   at the declaration, because that combination is the intent. `test_reset_gen.py` checks the
   value at time 0 with nothing deposited (it fails without the initializer).
-- Both stages of `sync_2ff` carry `(* altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION
-  FORCED" *)`, so the Timing Analyzer identifies every switch and key synchronizer as a chain and
-  `sta_reports.tcl` reports its MTBF (`fpga/de10lite/reports/mtbf.rpt`).
+- The first stage of `sync_2ff` (`meta_q`) carries `(* altera_attribute = "-name
+  SYNCHRONIZER_IDENTIFICATION FORCED" *)`. The Timing Analyzer starts a chain there and follows it
+  through `sync_q`, so every switch and key synchronizer is reported as a 2-register chain with
+  its MTBF (`fpga/de10lite/reports/mtbf.rpt`: 6 chains). Marking both stages was tried first: each
+  register then became a chain of its own (12 chains of one register), which misstates the
+  settling time.
 
 **Alternatives.** An `initial` block for the counter (excluded for synthesizable RTL by the
 coding rules); a reset for the counter (there is nothing to reset it with at power-up). A
 Tcl assignment in `build.tcl` for the synchronizers, matched by instance name (works only for
 this project, and breaks silently if a name changes); `FORCED_IF_ASYNCHRONOUS` (the inputs are
-always asynchronous here, so FORCED states the intent directly).
+always asynchronous here, so FORCED states the intent directly); the assignment on every stage
+(see above).
 
 **Reason.** The initializer makes the power-up assumption explicit in the RTL and true in every
 tool. The attribute travels with the module, so any synchronizer instance is analysed.

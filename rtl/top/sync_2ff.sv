@@ -15,9 +15,10 @@
 //
 // Latency: 2 cycles.
 //
-// Both stages carry the Quartus assignment SYNCHRONIZER_IDENTIFICATION FORCED, so the Timing
-// Analyzer treats them as a synchronizer chain and reports its MTBF (report_metastability).
-// Other tools ignore the attribute.
+// The first stage carries the Quartus assignment SYNCHRONIZER_IDENTIFICATION FORCED: the Timing
+// Analyzer starts a synchronizer chain there, follows it through the second stage and reports
+// its MTBF (report_metastability). Marking the second stage too would make it a chain of its own
+// (one register long). Other tools ignore the attribute.
 module sync_2ff #(
     parameter int W     = 1,
     parameter int RESET = 0
@@ -29,7 +30,7 @@ module sync_2ff #(
 );
 
   (* altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED" *) logic [W-1:0] meta_q;
-  (* altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED" *) logic [W-1:0] sync_q;
+  logic [W-1:0] sync_q;
 
   always_ff @(posedge clk) begin
     if (rst) begin
