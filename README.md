@@ -1,8 +1,8 @@
 # int8 CNN inference accelerator
 
 A verified int8 CNN accelerator in SystemVerilog: an 8×8 output-stationary systolic array runs
-an MNIST network bit-exactly against a Python golden model, and closes timing at 50 MHz on an
-Intel MAX 10 (Terasic DE10-Lite).
+an MNIST network bit-exactly against a Python golden model. Built and timing-closed at 50 MHz
+for the DE10-Lite (Intel MAX 10); verified in simulation.
 
 **Stack:** SystemVerilog · cocotb + pytest · Icarus Verilog · Verilator · Yosys · SymbiYosys ·
 Python, NumPy, PyTorch · Quartus Prime Lite · GitHub Actions
@@ -12,9 +12,6 @@ Python, NumPy, PyTorch · Quartus Prime Lite · GitHub Actions
 [![functional coverage](https://img.shields.io/badge/functional%20coverage-107%2F110%20bins%2C%203%20documented%20gaps-brightgreen)](testbench/reports/coverage.md)
 [![mutants killed](https://img.shields.io/badge/mutants%20killed-34%2F34-brightgreen)](testbench/reports/mutation.md)
 <!-- badges:end -->
-
-**Board demo:** the DE10-Lite build is complete and timing-clean; the on-board demo is pending
-confirmation on hardware (a GIF follows once it has been run on the board).
 
 ## Results
 
@@ -76,8 +73,8 @@ flowchart LR
   (`(y·M + 2^(S−1)) >>> S`, saturate, ReLU) in a 4-stage valid/ready pipeline.
 - One owner per buffer port at any time, enforced by registered one-hot owner vectors and checked
   by assertions.
-- DE10-Lite demo: 16 preloaded test images, SW[3:0] selects one, KEY[0] runs it, HEX0 shows the
-  prediction, HEX1 the true label, HEX5..HEX2 the cycle count.
+- DE10-Lite top (simulated at its pins): 16 preloaded test images, SW[3:0] selects one, KEY[0]
+  runs it, HEX0 shows the prediction, HEX1 the true label, HEX5..HEX2 the cycle count.
 
 How and why: [docs/architecture.md](docs/architecture.md). Normative spec:
 [docs/spec.md](docs/spec.md). Decisions and alternatives: [docs/decisions.md](docs/decisions.md).
