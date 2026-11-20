@@ -356,6 +356,7 @@ phase_4() {
   check "ruff format + ruff check clean" check_ruff
   check "DE10-Lite build: positive setup and hold slack at 50 MHz, no unconstrained paths, reports of HEAD:rtl" check_fpga_build
   check "README results table: every row links a committed report" check_readme_results
+  check "README badges match the committed coverage and mutation reports" python scripts/readme_badges.py --check
   run_local_checks "optional local repository checks"
   check "latest CI run on main is green for HEAD" check_ci_green_on_head
   echo "  [HUMAN] the demo works on the board (confirmed by the human before tagging v1.0)"
