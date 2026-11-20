@@ -385,6 +385,7 @@ phase_4() {
   check "DE10-Lite build: positive setup and hold slack at 50 MHz in every corner, no unconstrained paths, synchronizer MTBF, reports of HEAD:rtl" check_fpga_build
   check "DE10-Lite build: every Quartus warning listed in fpga/de10lite/expected_warnings.txt" python scripts/check_quartus_warnings.py
   check "README results table: every row links a committed report" check_readme_results
+  check "README and architecture FPGA numbers (Fmax, slack, LEs, resources) match the committed build reports" python scripts/check_fpga_numbers.py
   check "README badges match the committed coverage and mutation reports" python scripts/readme_badges.py --check
   run_local_checks "optional local repository checks"
   check "latest CI run on main is green for HEAD" check_ci_green_on_head
