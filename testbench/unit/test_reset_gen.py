@@ -8,7 +8,7 @@ from pathlib import Path
 import cocotb
 import pytest
 from cocotb.clock import Clock
-from cocotb.triggers import FallingEdge, ReadOnly
+from cocotb.triggers import FallingEdge, ReadOnly, Timer
 
 from common.runner import RTL_DIR, SIMULATORS, run_cocotb
 from common.sim import CLK_PERIOD_NS
@@ -24,6 +24,22 @@ async def cycles_until(dut, value: int, limit: int) -> int:
         if int(dut.o_rst.value) == value:
             return n + 1
     raise TimeoutError(f"o_rst never became {value}")
+
+
+@cocotb.test()
+async def test_power_up_from_initializer(dut):
+    # Runs first, from time 0, with nothing deposited: por_cnt_q starts at 0 from its
+    # declaration initializer, and the power-on reset lasts POR_CYCLES.
+    # Checked before the clock starts (its first edge would already advance the counter).
+    dut.i_key_rst_n.value = 1
+    await ReadOnly()
+    assert dut.por_cnt_q.value.is_resolvable, f"por_cnt_q is {dut.por_cnt_q.value} at power-up"
+    assert int(dut.por_cnt_q.value) == 0, "por_cnt_q does not start at 0"
+    assert int(dut.o_rst.value) == 1, "reset not active at power-up"
+    await Timer(1, unit="ns")
+    cocotb.start_soon(Clock(dut.clk, CLK_PERIOD_NS, unit="ns").start())
+    n = await cycles_until(dut, 0, 10 * POR_CYCLES)
+    assert POR_CYCLES <= n <= POR_CYCLES + 4, f"power-on reset lasted {n} cycles"
 
 
 @cocotb.test()

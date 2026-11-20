@@ -3,11 +3,13 @@
 //   - while the reset button (i_key_rst_n, active low, asynchronous) is pressed,
 // and is released synchronously to clk.
 //
-// The power-on counter relies on the MAX 10 power-up state of its registers (0, Quartus's
-// default power-up level), so it needs no reset of its own; simulations model power-up by
-// depositing 0 into por_cnt_q. The button goes through a 2-FF synchronizer. o_rst is the request
-// OR'd with the request delayed by two flip-flops: it rises with the request and falls two
-// cycles after it, and every term is a register output.
+// The power-on counter has no reset of its own: it starts from 0, given by its declaration
+// initializer (Quartus turns it into the register's power-up level, which is also the MAX 10
+// default, and simulators start from it). The button goes through a 2-FF synchronizer. o_rst is
+// the request OR'd with the request delayed by two flip-flops: it rises with the request and
+// falls two cycles after it. o_rst is combinational: an OR of rst2_q, the synchronizer output and
+// a compare on por_cnt_q, all registers clocked by clk, so it is synchronous to clk and may only
+// glitch between clock edges, where a synchronous reset does not sample it.
 //
 // Parameters:
 //   POR_CYCLES - cycles of power-on reset (>= 1)
@@ -30,8 +32,11 @@ module reset_gen #(
   localparam int CNT_W = $clog2(POR_CYCLES + 1);
   localparam logic [CNT_W-1:0] POR_LAST = CNT_W'(POR_CYCLES);
 
-  // No reset by design: the counter starts from its power-up value 0.
-  logic [CNT_W-1:0] por_cnt_q;
+  // No reset by design: the counter starts from its power-up value 0. The declaration initializer
+  // is that power-up value, so the procedural writes below are intended (PROCASSINIT waived).
+  /* verilator lint_off PROCASSINIT */
+  logic [CNT_W-1:0] por_cnt_q = '0;
+  /* verilator lint_on PROCASSINIT */
   logic por_done;
   assign por_done = (por_cnt_q == POR_LAST);
   always_ff @(posedge clk) begin

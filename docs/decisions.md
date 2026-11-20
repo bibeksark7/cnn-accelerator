@@ -946,9 +946,9 @@ regenerated from the tests rather than written by hand.
   the host; the host owns the stage whenever the controller is idle and sees `ready` low during
   the two writes, so neither master's request is changed. Status for the display comes from
   `accel_top`'s status outputs, not CSR reads.
-- **Reset.** The power-on counter relies on the MAX 10 power-up value 0 of its registers (no
-  `initial` block in synthesizable RTL); simulations deposit 0. `KEY[1]` is synchronized; the
-  reset falls two cycles after the request.
+- **Reset.** The power-on counter starts from 0 without a reset of its own (D-036: a declaration
+  initializer gives that value). `KEY[1]` is synchronized; the reset falls two cycles after the
+  request.
 - **Init files.** `img.hex` is zero-filled to the IMG depth, so no buffer word is left undefined
   and Quartus has no partial-file warnings. Parameters default to "" in RTL; `build.tcl` passes
   the file names.
@@ -961,3 +961,24 @@ regenerated from the tests rather than written by hand.
 through the host side, demo runs through the controller), and a board top small enough to check
 by inspection plus one board-level test.
 
+## D-036 — Power-on counter initializer and synchronizer identification (Phase 4)
+
+**Decision.**
+- `reset_gen`'s `por_cnt_q` is declared `= '0`. Quartus turns the initializer into the
+  register's power-up level (0, the MAX 10 default it already relied on), and every simulator
+  starts from it, so no test has to deposit the value. Verilator's PROCASSINIT warning (a
+  variable with a declaration initializer that is also assigned in a process) is waived inline
+  at the declaration, because that combination is the intent. `test_reset_gen.py` checks the
+  value at time 0 with nothing deposited (it fails without the initializer).
+- Both stages of `sync_2ff` carry `(* altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION
+  FORCED" *)`, so the Timing Analyzer identifies every switch and key synchronizer as a chain and
+  `sta_reports.tcl` reports its MTBF (`fpga/de10lite/reports/mtbf.rpt`).
+
+**Alternatives.** An `initial` block for the counter (excluded for synthesizable RTL by the
+coding rules); a reset for the counter (there is nothing to reset it with at power-up). A
+Tcl assignment in `build.tcl` for the synchronizers, matched by instance name (works only for
+this project, and breaks silently if a name changes); `FORCED_IF_ASYNCHRONOUS` (the inputs are
+always asynchronous here, so FORCED states the intent directly).
+
+**Reason.** The initializer makes the power-up assumption explicit in the RTL and true in every
+tool. The attribute travels with the module, so any synchronizer instance is analysed.
