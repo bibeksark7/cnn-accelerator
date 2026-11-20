@@ -119,7 +119,10 @@ The full design uses 8,322 logic elements (17 %), 68 of the 288 9-bit multiplier
 memory bits of the MAX 10, and closes timing at 50 MHz in all three timing corners: worst setup
 slack +4.813 ns (slow 85 °C; Fmax 65.85 MHz), worst hold slack +0.095 ns (fast corner)
 (`fpga/de10lite/reports/timing_corners.rpt`). The critical path is the post-processing
-round-and-shift.
+round-and-shift: from the shift amount `S` registered in the multiply stage, through the
+rounding constant, the 49-bit add and the variable arithmetic shift, into the round/shift stage's
+register (`timing_setup_worst.rpt`). Fmax above the 50 MHz constraint moves with
+placement from build to build; D-024 explains the drop between the last two builds.
 
 ## 7. How correctness is established
 

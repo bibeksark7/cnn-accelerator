@@ -109,7 +109,8 @@ requantization, nested-loop convolution, pack/unpack round-trips) in `model/test
     and unary minus on a size cast. It rejects the original `systolic_array.sv`, the bare
     generate-if `sram_1r1w.sv` and the `-R_W'(128)` form; its own tests are in
     `scripts/tests/`.
-  - Phase 4's full Quartus build is the final regression.
+  - The full DE10-Lite build (`fpga/de10lite/build_win.sh`) is the final regression: every
+    warning it reports must be listed in `fpga/de10lite/expected_warnings.txt` (checkpoint 4).
 
 ## BUG-006 — Quartus probe script made the clock a virtual pin (Phase 2)
 

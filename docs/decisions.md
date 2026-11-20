@@ -125,8 +125,11 @@ cache keeps runs fast after the first.
 **Alternatives.** Percentile calibration; quantization-aware training.
 
 **Reason.** Post-training quantization with max calibration already stays well within the 1%
-budget (`model/reports/quantize.json`), so the simpler method wins. A side effect: real MNIST
-data never saturates the requantizer, so saturation coverage comes from directed tests (see
+budget (`model/reports/quantize.json`), so the simpler method wins. Max calibration sets each
+scale from the largest activation on the calibration images, so saturation on real data is rare,
+but it does happen: over the 10,000 test images conv2 saturates low 4 times (images 3081, 5555,
+8619, 9427) and never high (`model/reports/saturation.json`). Those 4 images run in the CI system
+test (`test_saturating_images`, BUG-014); high saturation is covered by directed tests (see
 `docs/verification_plan.md`).
 
 ## D-009 — Buffer bandwidth: staged A, pre-packed wide B words (Phase 1)
@@ -173,8 +176,8 @@ run back to back without reloading.
 - **Generation:** `train.py` → `quantize.py` → `export.py`. Quantize and export are
   deterministic, and `scripts/checkpoint.sh 1` regenerates them and requires byte-identical
   output.
-- **FPGA init files** for the 16 board images (and their labels) are generated in Phase 4, when
-  the board top defines them.
+- **FPGA init files:** `export.py` also writes `mem/img.hex` (the 16 board images),
+  `mem/label.hex` (their labels) and `mem/demo.json` for the board top (spec §12, D-035).
 
 **Reason.**
 - Training is not bit-reproducible across machines. Committing the float weights lets anyone
@@ -322,8 +325,10 @@ and checks that both are accepted, that exactly one `o_mem_rvalid` returns the r
 - Shifting accumulators out of the grid (cheaper than a mux, slower drain).
 
 **Reason.** Valid-tracking makes the flush correct for any step timing, including gaps, which
-§11.2 allows, and makes `o_idle` exact. The row multiplexer keeps drain logic trivial; its cost
-will be measured in the Phase 4 synthesis report.
+§11.2 allows, and makes `o_idle` exact. The row multiplexer keeps drain logic trivial. The fit
+reports do not break its cost out: the whole array (N = 8) uses 4,419 logic elements, 3,100
+registers and 64 9-bit multipliers (`fpga/probe_reports/systolic_array/`), and the multiplexer is
+not on the worst path of any committed fit report (D-024).
 
 **Correction (Phase 2).** An earlier version of this entry called "remove the grid
 valid bits from the flush condition" an *equivalent* mutant. That was wrong. Output rows are
@@ -411,7 +416,7 @@ Area:
 
 **Decision.** Every Quartus project for this design sets
 `INTERNAL_FLASH_UPDATE_MODE "SINGLE IMAGE WITH ERAM"` (single uncompressed image with memory
-initialization). Phase 4's `build.tcl` must include it.
+initialization). `fpga/de10lite/build.tcl` sets it.
 
 **Evidence.** A Quartus Prime Lite 22.1std Analysis & Synthesis probe of `sram_1r1w` (1024 × 64,
 `$readmemh` init file) on the 10M50DAF484C7G:
@@ -438,8 +443,9 @@ for this project.
   with `gi = gi + 1`;
 - no unary minus applied to a size cast (`-N'(x)`); use typed signed localparams for such
   constants;
-- every new module gets a Quartus Analysis & Synthesis probe before it is committed, until the
-  Phase 4 build covers the whole design.
+- every new module got a Quartus Analysis & Synthesis probe before it was committed, until the
+  DE10-Lite build (`fpga/de10lite/build_win.sh`) covered the whole design; that build's
+  warnings are now checked against `fpga/de10lite/expected_warnings.txt` (D-037).
 
 `scripts/check_quartus_compat.py` (run by `scripts/lint.sh`) enforces the first three rules
 (BUG-005); `scripts/quartus_probe.sh` runs the probes.
@@ -510,8 +516,38 @@ register (worst path: `agen_a`'s read enable through the buffer multiplexers' re
 the saturating `BUF_RD` add, data delay 13.970 ns); and, before the §9 LOGIT checks, +6.736 ns
 (the drain's column select into the bias add) and +5.365 ns (the post-processing variable
 shifter). With the counters registered, the worst path is the post-processing shifter, the
-engine's own critical path. The worst path moves between logic cones from fit to fit; every fit
-closed at 50 MHz with more than 5 ns of setup slack.
+engine's own critical path. The worst path moves between logic cones from fit to fit; every
+`accel_top` probe closed at 50 MHz with at least +5.365 ns of setup slack. The whole DE10-Lite
+design has less (below).
+
+**Whole design (Phase 4).** The DE10-Lite build (`fpga/de10lite/build_win.sh`, reports in
+`fpga/de10lite/reports/`, built from commit f90d617) closes timing at 50 MHz in all three
+corners: worst setup slack +4.813 ns (slow 1200 mV 85 °C), worst hold slack +0.095 ns (fast
+1200 mV 0 °C), Fmax 65.85 MHz; 8,322 logic elements (17 %), 5,587 registers, 340,608 memory bits
+(20 %), 68 9-bit multipliers. The worst setup path is still the post-processing variable shifter:
+`u_postproc|s2_q[0]` → `u_postproc|r3_q[33]`, 11 logic levels, data delay 15.009 ns
+(`timing_setup_worst.rpt`). `scripts/check_fpga_numbers.py` (checkpoint 4) checks that the
+README and `docs/architecture.md` quote these numbers.
+
+**Why Fmax fell from 75.06 to 65.85 MHz between the two committed builds.** The previous build
+(reports in commit 04a7a96, built from 96ceb03) had +6.678 ns setup, +0.116 ns hold, 75.06 MHz
+and 8,324 logic elements. It was placement and routing variation, not new logic on the path:
+- **Same path, same logic.** Both worst paths run from `postproc`'s `s2_q` to `r3_q`, through the
+  rounding add and the variable shift (10 logic levels before, 11 now, different bits of the same
+  cone).
+- **The delay moved into the wiring.** Data-path cell delay fell from 6.704 to 5.334 ns, while
+  interconnect delay rose from 6.221 to 9.468 ns; the data delay went from 13.132 to 15.009 ns.
+- **The changes between the builds touch none of that cone.** The RTL changed only in `reset_gen`
+  (the power-on counter's declaration initializer, D-036) and `sync_2ff` (the
+  `SYNCHRONIZER_IDENTIFICATION` attribute on the first stage); `build.tcl`, the SDC, the pin
+  assignments and the init files are unchanged (`build_win.sh` and `sta_reports.tcl` changed only
+  in which reports they write). The register count is identical (5,587) and the logic elements
+  differ by 2.
+- Any netlist change, however small or remote, gives the fitter a different starting point, and
+  the timing-driven fitter works toward the 20 ns constraint, not beyond it, so Fmax above the
+  constraint is not a stable figure. No fitter seed sweep was run; the claim rests on the two
+  committed builds. The figure to compare is the setup slack at 50 MHz, which stays well positive
+  in every corner.
 
 **Performance-counter input register (Phase 3).** `perf_counters` registers
 `{busy, rd, wr, mac_active}` before the saturating adds. Every `accel_top` fit so far had a
@@ -523,8 +559,8 @@ cost is that the four counters lag the events by one more cycle (spec §10.2: fi
 also clears the input register, so the counted events are exactly those before (one cycle later).
 
 **Reading.**
-- Both blocks close timing at 50 MHz with margin on every corner. The whole design will be
-  checked again in Phase 4.
+- Both blocks close timing at 50 MHz with margin on every corner, and so does the whole DE10-Lite
+  design (above).
 - `postproc`'s critical path is the variable shifter: the arithmetic right shift by `S`, a
   barrel shifter over the 49-bit rounding intermediate, together with the rounding add that
   feeds it. It is the longer of the two blocks' paths.
