@@ -1,0 +1,948 @@
+----------------
+; MTBF Summary ;
+----------------
+Worst-Case MTBF of Design is 1e+09 years or 3.15e+16 seconds.
+Typical MTBF of Design is 1e+09 years or 3.15e+16 seconds.
+
+Number of Synchronizer Chains Found: 6
+Shortest Synchronizer Chain: 2 Registers
+Fraction of Chains for which MTBFs Could Not be Calculated: 0.000
+Worst Case Available Settling Time: 32.725 ns
+
+Worst-Case MTBF values are calculated based on the worst-case silicon characteristics, with worst-case operating conditions.
+  - Under worst-case conditions, an increase of 100ps in available settling time will increase MTBF values by a factor of 1.8
+Typical MTBF values are calculated based on the nominal silicon characteristics, at nominal operating conditions.
+  - Under typical conditions, an increase of 100ps in available settling time will increase MTBF values by a factor of 3.7
+
+
++------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+; Synchronizer Summary                                                                                                                                                                           ;
++---------------------------------------------------------+---------------------------------------------------------+-------------------------+------------------------+-------------------------+
+; Source Node                                             ; Synchronization Node                                    ; Worst-Case MTBF (Years) ; Typical MTBF (Years)   ; Included in Design MTBF ;
++---------------------------------------------------------+---------------------------------------------------------+-------------------------+------------------------+-------------------------+
+; reset_gen:u_reset_gen|por_cnt_q[4]                      ; reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|meta_q[0] ; Greater than 1 Billion  ; Greater than 1 Billion ; Yes                     ;
+; reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|sync_q[0] ; sync_2ff:u_sync_2ff_key0|meta_q[0]                      ; Greater than 1 Billion  ; Greater than 1 Billion ; Yes                     ;
+; reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|sync_q[0] ; sync_2ff:u_sync_2ff_sw|meta_q[0]                        ; Greater than 1 Billion  ; Greater than 1 Billion ; Yes                     ;
+; reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|sync_q[0] ; sync_2ff:u_sync_2ff_sw|meta_q[2]                        ; Greater than 1 Billion  ; Greater than 1 Billion ; Yes                     ;
+; reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|sync_q[0] ; sync_2ff:u_sync_2ff_sw|meta_q[1]                        ; Greater than 1 Billion  ; Greater than 1 Billion ; Yes                     ;
+; reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|sync_q[0] ; sync_2ff:u_sync_2ff_sw|meta_q[3]                        ; Greater than 1 Billion  ; Greater than 1 Billion ; Yes                     ;
++---------------------------------------------------------+---------------------------------------------------------+-------------------------+------------------------+-------------------------+
+
+Synchronizer Chain #1: Worst-Case MTBF is Greater than 1 Billion Years
+===============================================================================
++-----------------------------------------------------------------------------------+
+; Chain Summary                                                                     ;
++-------------------------+---------------------------------------------------------+
+; Property                ; Value                                                   ;
++-------------------------+---------------------------------------------------------+
+; Source Node             ; reset_gen:u_reset_gen|por_cnt_q[4]                      ;
+; Synchronization Node    ; reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|meta_q[0] ;
+; Worst-Case MTBF (years) ; Greater than 1 Billion                                  ;
+; Typical MTBF (years)    ; Greater than 1 Billion                                  ;
+; Included in Design MTBF ; Yes                                                     ;
++-------------------------+---------------------------------------------------------+
+
++-----------------------------------------------------------------------------------------------------------------------------------------------------+
+; Statistics                                                                                                                                          ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+; Property                                                                  ; Value                  ; Clock Period ; Active Edge Rate ; Output Slack ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+; Method of Synchronizer Identification                                     ; User Specified         ;              ;                  ;              ;
+; Worst-Case MTBF (years)                                                   ; Greater than 1 Billion ;              ;                  ;              ;
+; Typical MTBF (years)                                                      ; Greater than 1 Billion ;              ;                  ;              ;
+; Number of Synchronization Registers in Chain                              ; 2                      ;              ;                  ;              ;
+; Available Settling Time (ns)                                              ; 32.725                 ;              ;                  ;              ;
+; Data Toggle Rate Used in MTBF Calculation (millions of transitions / sec) ; 6.25                   ;              ;                  ;              ;
+; Source Clock                                                              ;                        ;              ;                  ;              ;
+;  clk50                                                                    ;                        ; 20.000       ; 50.0 MHz         ;              ;
+; Synchronization Clock                                                     ;                        ;              ;                  ;              ;
+;  clk50                                                                    ;                        ; 20.000       ; 50.0 MHz         ;              ;
+; Asynchronous Source                                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[4]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[8]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[1]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[0]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[3]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[2]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[5]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[6]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[7]                                       ;                        ;              ;                  ;              ;
+;  KEY[1]                                                                   ;                        ;              ;                  ;              ;
+; Synchronization Registers                                                 ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|meta_q[0]                  ;                        ;              ;                  ; 19.174       ;
+;  reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|sync_q[0]                  ;                        ;              ;                  ; 13.551       ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+
+
+Synchronizer Chain #2: Worst-Case MTBF is Greater than 1 Billion Years
+===============================================================================
++-----------------------------------------------------------------------------------+
+; Chain Summary                                                                     ;
++-------------------------+---------------------------------------------------------+
+; Property                ; Value                                                   ;
++-------------------------+---------------------------------------------------------+
+; Source Node             ; reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|sync_q[0] ;
+; Synchronization Node    ; sync_2ff:u_sync_2ff_key0|meta_q[0]                      ;
+; Worst-Case MTBF (years) ; Greater than 1 Billion                                  ;
+; Typical MTBF (years)    ; Greater than 1 Billion                                  ;
+; Included in Design MTBF ; Yes                                                     ;
++-------------------------+---------------------------------------------------------+
+
++-----------------------------------------------------------------------------------------------------------------------------------------------------+
+; Statistics                                                                                                                                          ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+; Property                                                                  ; Value                  ; Clock Period ; Active Edge Rate ; Output Slack ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+; Method of Synchronizer Identification                                     ; User Specified         ;              ;                  ;              ;
+; Worst-Case MTBF (years)                                                   ; Greater than 1 Billion ;              ;                  ;              ;
+; Typical MTBF (years)                                                      ; Greater than 1 Billion ;              ;                  ;              ;
+; Number of Synchronization Registers in Chain                              ; 2                      ;              ;                  ;              ;
+; Available Settling Time (ns)                                              ; 36.509                 ;              ;                  ;              ;
+; Data Toggle Rate Used in MTBF Calculation (millions of transitions / sec) ; 6.25                   ;              ;                  ;              ;
+; Source Clock                                                              ;                        ;              ;                  ;              ;
+;  clk50                                                                    ;                        ; 20.000       ; 50.0 MHz         ;              ;
+; Synchronization Clock                                                     ;                        ;              ;                  ;              ;
+;  clk50                                                                    ;                        ; 20.000       ; 50.0 MHz         ;              ;
+; Asynchronous Source                                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|sync_q[0]                  ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[4]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[8]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[1]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[0]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[3]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[2]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[5]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[6]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[7]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|rst2_q                                             ;                        ;              ;                  ;              ;
+;  KEY[0]                                                                   ;                        ;              ;                  ;              ;
+; Synchronization Registers                                                 ;                        ;              ;                  ;              ;
+;  sync_2ff:u_sync_2ff_key0|meta_q[0]                                       ;                        ;              ;                  ; 19.168       ;
+;  sync_2ff:u_sync_2ff_key0|sync_q[0]                                       ;                        ;              ;                  ; 17.341       ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+
+
+Synchronizer Chain #3: Worst-Case MTBF is Greater than 1 Billion Years
+===============================================================================
++-----------------------------------------------------------------------------------+
+; Chain Summary                                                                     ;
++-------------------------+---------------------------------------------------------+
+; Property                ; Value                                                   ;
++-------------------------+---------------------------------------------------------+
+; Source Node             ; reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|sync_q[0] ;
+; Synchronization Node    ; sync_2ff:u_sync_2ff_sw|meta_q[0]                        ;
+; Worst-Case MTBF (years) ; Greater than 1 Billion                                  ;
+; Typical MTBF (years)    ; Greater than 1 Billion                                  ;
+; Included in Design MTBF ; Yes                                                     ;
++-------------------------+---------------------------------------------------------+
+
++-----------------------------------------------------------------------------------------------------------------------------------------------------+
+; Statistics                                                                                                                                          ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+; Property                                                                  ; Value                  ; Clock Period ; Active Edge Rate ; Output Slack ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+; Method of Synchronizer Identification                                     ; User Specified         ;              ;                  ;              ;
+; Worst-Case MTBF (years)                                                   ; Greater than 1 Billion ;              ;                  ;              ;
+; Typical MTBF (years)                                                      ; Greater than 1 Billion ;              ;                  ;              ;
+; Number of Synchronization Registers in Chain                              ; 2                      ;              ;                  ;              ;
+; Available Settling Time (ns)                                              ; 37.206                 ;              ;                  ;              ;
+; Data Toggle Rate Used in MTBF Calculation (millions of transitions / sec) ; 6.25                   ;              ;                  ;              ;
+; Source Clock                                                              ;                        ;              ;                  ;              ;
+;  clk50                                                                    ;                        ; 20.000       ; 50.0 MHz         ;              ;
+; Synchronization Clock                                                     ;                        ;              ;                  ;              ;
+;  clk50                                                                    ;                        ; 20.000       ; 50.0 MHz         ;              ;
+; Asynchronous Source                                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|sync_q[0]                  ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[4]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[8]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[1]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[0]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[3]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[2]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[5]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[6]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[7]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|rst2_q                                             ;                        ;              ;                  ;              ;
+;  SW[0]                                                                    ;                        ;              ;                  ;              ;
+; Synchronization Registers                                                 ;                        ;              ;                  ;              ;
+;  sync_2ff:u_sync_2ff_sw|meta_q[0]                                         ;                        ;              ;                  ; 19.012       ;
+;  sync_2ff:u_sync_2ff_sw|sync_q[0]                                         ;                        ;              ;                  ; 18.194       ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+
+
+Synchronizer Chain #4: Worst-Case MTBF is Greater than 1 Billion Years
+===============================================================================
++-----------------------------------------------------------------------------------+
+; Chain Summary                                                                     ;
++-------------------------+---------------------------------------------------------+
+; Property                ; Value                                                   ;
++-------------------------+---------------------------------------------------------+
+; Source Node             ; reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|sync_q[0] ;
+; Synchronization Node    ; sync_2ff:u_sync_2ff_sw|meta_q[2]                        ;
+; Worst-Case MTBF (years) ; Greater than 1 Billion                                  ;
+; Typical MTBF (years)    ; Greater than 1 Billion                                  ;
+; Included in Design MTBF ; Yes                                                     ;
++-------------------------+---------------------------------------------------------+
+
++-----------------------------------------------------------------------------------------------------------------------------------------------------+
+; Statistics                                                                                                                                          ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+; Property                                                                  ; Value                  ; Clock Period ; Active Edge Rate ; Output Slack ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+; Method of Synchronizer Identification                                     ; User Specified         ;              ;                  ;              ;
+; Worst-Case MTBF (years)                                                   ; Greater than 1 Billion ;              ;                  ;              ;
+; Typical MTBF (years)                                                      ; Greater than 1 Billion ;              ;                  ;              ;
+; Number of Synchronization Registers in Chain                              ; 2                      ;              ;                  ;              ;
+; Available Settling Time (ns)                                              ; 37.418                 ;              ;                  ;              ;
+; Data Toggle Rate Used in MTBF Calculation (millions of transitions / sec) ; 6.25                   ;              ;                  ;              ;
+; Source Clock                                                              ;                        ;              ;                  ;              ;
+;  clk50                                                                    ;                        ; 20.000       ; 50.0 MHz         ;              ;
+; Synchronization Clock                                                     ;                        ;              ;                  ;              ;
+;  clk50                                                                    ;                        ; 20.000       ; 50.0 MHz         ;              ;
+; Asynchronous Source                                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|sync_q[0]                  ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[4]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[8]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[1]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[0]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[3]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[2]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[5]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[6]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[7]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|rst2_q                                             ;                        ;              ;                  ;              ;
+;  SW[2]                                                                    ;                        ;              ;                  ;              ;
+; Synchronization Registers                                                 ;                        ;              ;                  ;              ;
+;  sync_2ff:u_sync_2ff_sw|meta_q[2]                                         ;                        ;              ;                  ; 19.168       ;
+;  sync_2ff:u_sync_2ff_sw|sync_q[2]                                         ;                        ;              ;                  ; 18.250       ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+
+
+Synchronizer Chain #5: Worst-Case MTBF is Greater than 1 Billion Years
+===============================================================================
++-----------------------------------------------------------------------------------+
+; Chain Summary                                                                     ;
++-------------------------+---------------------------------------------------------+
+; Property                ; Value                                                   ;
++-------------------------+---------------------------------------------------------+
+; Source Node             ; reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|sync_q[0] ;
+; Synchronization Node    ; sync_2ff:u_sync_2ff_sw|meta_q[1]                        ;
+; Worst-Case MTBF (years) ; Greater than 1 Billion                                  ;
+; Typical MTBF (years)    ; Greater than 1 Billion                                  ;
+; Included in Design MTBF ; Yes                                                     ;
++-------------------------+---------------------------------------------------------+
+
++-----------------------------------------------------------------------------------------------------------------------------------------------------+
+; Statistics                                                                                                                                          ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+; Property                                                                  ; Value                  ; Clock Period ; Active Edge Rate ; Output Slack ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+; Method of Synchronizer Identification                                     ; User Specified         ;              ;                  ;              ;
+; Worst-Case MTBF (years)                                                   ; Greater than 1 Billion ;              ;                  ;              ;
+; Typical MTBF (years)                                                      ; Greater than 1 Billion ;              ;                  ;              ;
+; Number of Synchronization Registers in Chain                              ; 2                      ;              ;                  ;              ;
+; Available Settling Time (ns)                                              ; 37.603                 ;              ;                  ;              ;
+; Data Toggle Rate Used in MTBF Calculation (millions of transitions / sec) ; 6.25                   ;              ;                  ;              ;
+; Source Clock                                                              ;                        ;              ;                  ;              ;
+;  clk50                                                                    ;                        ; 20.000       ; 50.0 MHz         ;              ;
+; Synchronization Clock                                                     ;                        ;              ;                  ;              ;
+;  clk50                                                                    ;                        ; 20.000       ; 50.0 MHz         ;              ;
+; Asynchronous Source                                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|sync_q[0]                  ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[4]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[8]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[1]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[0]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[3]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[2]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[5]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[6]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[7]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|rst2_q                                             ;                        ;              ;                  ;              ;
+;  SW[1]                                                                    ;                        ;              ;                  ;              ;
+; Synchronization Registers                                                 ;                        ;              ;                  ;              ;
+;  sync_2ff:u_sync_2ff_sw|meta_q[1]                                         ;                        ;              ;                  ; 19.171       ;
+;  sync_2ff:u_sync_2ff_sw|sync_q[1]                                         ;                        ;              ;                  ; 18.432       ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+
+
+Synchronizer Chain #6: Worst-Case MTBF is Greater than 1 Billion Years
+===============================================================================
++-----------------------------------------------------------------------------------+
+; Chain Summary                                                                     ;
++-------------------------+---------------------------------------------------------+
+; Property                ; Value                                                   ;
++-------------------------+---------------------------------------------------------+
+; Source Node             ; reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|sync_q[0] ;
+; Synchronization Node    ; sync_2ff:u_sync_2ff_sw|meta_q[3]                        ;
+; Worst-Case MTBF (years) ; Greater than 1 Billion                                  ;
+; Typical MTBF (years)    ; Greater than 1 Billion                                  ;
+; Included in Design MTBF ; Yes                                                     ;
++-------------------------+---------------------------------------------------------+
+
++-----------------------------------------------------------------------------------------------------------------------------------------------------+
+; Statistics                                                                                                                                          ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+; Property                                                                  ; Value                  ; Clock Period ; Active Edge Rate ; Output Slack ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+; Method of Synchronizer Identification                                     ; User Specified         ;              ;                  ;              ;
+; Worst-Case MTBF (years)                                                   ; Greater than 1 Billion ;              ;                  ;              ;
+; Typical MTBF (years)                                                      ; Greater than 1 Billion ;              ;                  ;              ;
+; Number of Synchronization Registers in Chain                              ; 2                      ;              ;                  ;              ;
+; Available Settling Time (ns)                                              ; 37.615                 ;              ;                  ;              ;
+; Data Toggle Rate Used in MTBF Calculation (millions of transitions / sec) ; 6.25                   ;              ;                  ;              ;
+; Source Clock                                                              ;                        ;              ;                  ;              ;
+;  clk50                                                                    ;                        ; 20.000       ; 50.0 MHz         ;              ;
+; Synchronization Clock                                                     ;                        ;              ;                  ;              ;
+;  clk50                                                                    ;                        ; 20.000       ; 50.0 MHz         ;              ;
+; Asynchronous Source                                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|sync_q[0]                  ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[4]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[8]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[1]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[0]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[3]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[2]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[5]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[6]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[7]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|rst2_q                                             ;                        ;              ;                  ;              ;
+;  SW[3]                                                                    ;                        ;              ;                  ;              ;
+; Synchronization Registers                                                 ;                        ;              ;                  ;              ;
+;  sync_2ff:u_sync_2ff_sw|meta_q[3]                                         ;                        ;              ;                  ; 19.167       ;
+;  sync_2ff:u_sync_2ff_sw|sync_q[3]                                         ;                        ;              ;                  ; 18.448       ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+
+
+----------------
+; MTBF Summary ;
+----------------
+Worst-Case MTBF of Design is 1e+09 years or 3.15e+16 seconds.
+Typical MTBF of Design is 1e+09 years or 3.15e+16 seconds.
+
+Number of Synchronizer Chains Found: 6
+Shortest Synchronizer Chain: 2 Registers
+Fraction of Chains for which MTBFs Could Not be Calculated: 0.000
+Worst Case Available Settling Time: 33.303 ns
+
+Worst-Case MTBF values are calculated based on the worst-case silicon characteristics, with worst-case operating conditions.
+  - Under worst-case conditions, an increase of 100ps in available settling time will increase MTBF values by a factor of 1.8
+Typical MTBF values are calculated based on the nominal silicon characteristics, at nominal operating conditions.
+  - Under typical conditions, an increase of 100ps in available settling time will increase MTBF values by a factor of 3.7
+
+
++------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+; Synchronizer Summary                                                                                                                                                                           ;
++---------------------------------------------------------+---------------------------------------------------------+-------------------------+------------------------+-------------------------+
+; Source Node                                             ; Synchronization Node                                    ; Worst-Case MTBF (Years) ; Typical MTBF (Years)   ; Included in Design MTBF ;
++---------------------------------------------------------+---------------------------------------------------------+-------------------------+------------------------+-------------------------+
+; reset_gen:u_reset_gen|por_cnt_q[4]                      ; reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|meta_q[0] ; Greater than 1 Billion  ; Greater than 1 Billion ; Yes                     ;
+; reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|sync_q[0] ; sync_2ff:u_sync_2ff_key0|meta_q[0]                      ; Greater than 1 Billion  ; Greater than 1 Billion ; Yes                     ;
+; reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|sync_q[0] ; sync_2ff:u_sync_2ff_sw|meta_q[0]                        ; Greater than 1 Billion  ; Greater than 1 Billion ; Yes                     ;
+; reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|sync_q[0] ; sync_2ff:u_sync_2ff_sw|meta_q[2]                        ; Greater than 1 Billion  ; Greater than 1 Billion ; Yes                     ;
+; reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|sync_q[0] ; sync_2ff:u_sync_2ff_sw|meta_q[1]                        ; Greater than 1 Billion  ; Greater than 1 Billion ; Yes                     ;
+; reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|sync_q[0] ; sync_2ff:u_sync_2ff_sw|meta_q[3]                        ; Greater than 1 Billion  ; Greater than 1 Billion ; Yes                     ;
++---------------------------------------------------------+---------------------------------------------------------+-------------------------+------------------------+-------------------------+
+
+Synchronizer Chain #1: Worst-Case MTBF is Greater than 1 Billion Years
+===============================================================================
++-----------------------------------------------------------------------------------+
+; Chain Summary                                                                     ;
++-------------------------+---------------------------------------------------------+
+; Property                ; Value                                                   ;
++-------------------------+---------------------------------------------------------+
+; Source Node             ; reset_gen:u_reset_gen|por_cnt_q[4]                      ;
+; Synchronization Node    ; reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|meta_q[0] ;
+; Worst-Case MTBF (years) ; Greater than 1 Billion                                  ;
+; Typical MTBF (years)    ; Greater than 1 Billion                                  ;
+; Included in Design MTBF ; Yes                                                     ;
++-------------------------+---------------------------------------------------------+
+
++-----------------------------------------------------------------------------------------------------------------------------------------------------+
+; Statistics                                                                                                                                          ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+; Property                                                                  ; Value                  ; Clock Period ; Active Edge Rate ; Output Slack ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+; Method of Synchronizer Identification                                     ; User Specified         ;              ;                  ;              ;
+; Worst-Case MTBF (years)                                                   ; Greater than 1 Billion ;              ;                  ;              ;
+; Typical MTBF (years)                                                      ; Greater than 1 Billion ;              ;                  ;              ;
+; Number of Synchronization Registers in Chain                              ; 2                      ;              ;                  ;              ;
+; Available Settling Time (ns)                                              ; 33.303                 ;              ;                  ;              ;
+; Data Toggle Rate Used in MTBF Calculation (millions of transitions / sec) ; 6.25                   ;              ;                  ;              ;
+; Source Clock                                                              ;                        ;              ;                  ;              ;
+;  clk50                                                                    ;                        ; 20.000       ; 50.0 MHz         ;              ;
+; Synchronization Clock                                                     ;                        ;              ;                  ;              ;
+;  clk50                                                                    ;                        ; 20.000       ; 50.0 MHz         ;              ;
+; Asynchronous Source                                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[4]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[8]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[1]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[0]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[3]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[2]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[5]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[6]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[7]                                       ;                        ;              ;                  ;              ;
+;  KEY[1]                                                                   ;                        ;              ;                  ;              ;
+; Synchronization Registers                                                 ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|meta_q[0]                  ;                        ;              ;                  ; 19.246       ;
+;  reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|sync_q[0]                  ;                        ;              ;                  ; 14.057       ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+
+
+Synchronizer Chain #2: Worst-Case MTBF is Greater than 1 Billion Years
+===============================================================================
++-----------------------------------------------------------------------------------+
+; Chain Summary                                                                     ;
++-------------------------+---------------------------------------------------------+
+; Property                ; Value                                                   ;
++-------------------------+---------------------------------------------------------+
+; Source Node             ; reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|sync_q[0] ;
+; Synchronization Node    ; sync_2ff:u_sync_2ff_key0|meta_q[0]                      ;
+; Worst-Case MTBF (years) ; Greater than 1 Billion                                  ;
+; Typical MTBF (years)    ; Greater than 1 Billion                                  ;
+; Included in Design MTBF ; Yes                                                     ;
++-------------------------+---------------------------------------------------------+
+
++-----------------------------------------------------------------------------------------------------------------------------------------------------+
+; Statistics                                                                                                                                          ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+; Property                                                                  ; Value                  ; Clock Period ; Active Edge Rate ; Output Slack ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+; Method of Synchronizer Identification                                     ; User Specified         ;              ;                  ;              ;
+; Worst-Case MTBF (years)                                                   ; Greater than 1 Billion ;              ;                  ;              ;
+; Typical MTBF (years)                                                      ; Greater than 1 Billion ;              ;                  ;              ;
+; Number of Synchronization Registers in Chain                              ; 2                      ;              ;                  ;              ;
+; Available Settling Time (ns)                                              ; 36.794                 ;              ;                  ;              ;
+; Data Toggle Rate Used in MTBF Calculation (millions of transitions / sec) ; 6.25                   ;              ;                  ;              ;
+; Source Clock                                                              ;                        ;              ;                  ;              ;
+;  clk50                                                                    ;                        ; 20.000       ; 50.0 MHz         ;              ;
+; Synchronization Clock                                                     ;                        ;              ;                  ;              ;
+;  clk50                                                                    ;                        ; 20.000       ; 50.0 MHz         ;              ;
+; Asynchronous Source                                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|sync_q[0]                  ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[4]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[8]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[1]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[0]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[3]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[2]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[5]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[6]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[7]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|rst2_q                                             ;                        ;              ;                  ;              ;
+;  KEY[0]                                                                   ;                        ;              ;                  ;              ;
+; Synchronization Registers                                                 ;                        ;              ;                  ;              ;
+;  sync_2ff:u_sync_2ff_key0|meta_q[0]                                       ;                        ;              ;                  ; 19.243       ;
+;  sync_2ff:u_sync_2ff_key0|sync_q[0]                                       ;                        ;              ;                  ; 17.551       ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+
+
+Synchronizer Chain #3: Worst-Case MTBF is Greater than 1 Billion Years
+===============================================================================
++-----------------------------------------------------------------------------------+
+; Chain Summary                                                                     ;
++-------------------------+---------------------------------------------------------+
+; Property                ; Value                                                   ;
++-------------------------+---------------------------------------------------------+
+; Source Node             ; reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|sync_q[0] ;
+; Synchronization Node    ; sync_2ff:u_sync_2ff_sw|meta_q[0]                        ;
+; Worst-Case MTBF (years) ; Greater than 1 Billion                                  ;
+; Typical MTBF (years)    ; Greater than 1 Billion                                  ;
+; Included in Design MTBF ; Yes                                                     ;
++-------------------------+---------------------------------------------------------+
+
++-----------------------------------------------------------------------------------------------------------------------------------------------------+
+; Statistics                                                                                                                                          ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+; Property                                                                  ; Value                  ; Clock Period ; Active Edge Rate ; Output Slack ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+; Method of Synchronizer Identification                                     ; User Specified         ;              ;                  ;              ;
+; Worst-Case MTBF (years)                                                   ; Greater than 1 Billion ;              ;                  ;              ;
+; Typical MTBF (years)                                                      ; Greater than 1 Billion ;              ;                  ;              ;
+; Number of Synchronization Registers in Chain                              ; 2                      ;              ;                  ;              ;
+; Available Settling Time (ns)                                              ; 37.438                 ;              ;                  ;              ;
+; Data Toggle Rate Used in MTBF Calculation (millions of transitions / sec) ; 6.25                   ;              ;                  ;              ;
+; Source Clock                                                              ;                        ;              ;                  ;              ;
+;  clk50                                                                    ;                        ; 20.000       ; 50.0 MHz         ;              ;
+; Synchronization Clock                                                     ;                        ;              ;                  ;              ;
+;  clk50                                                                    ;                        ; 20.000       ; 50.0 MHz         ;              ;
+; Asynchronous Source                                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|sync_q[0]                  ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[4]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[8]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[1]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[0]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[3]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[2]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[5]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[6]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[7]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|rst2_q                                             ;                        ;              ;                  ;              ;
+;  SW[0]                                                                    ;                        ;              ;                  ;              ;
+; Synchronization Registers                                                 ;                        ;              ;                  ;              ;
+;  sync_2ff:u_sync_2ff_sw|meta_q[0]                                         ;                        ;              ;                  ; 19.089       ;
+;  sync_2ff:u_sync_2ff_sw|sync_q[0]                                         ;                        ;              ;                  ; 18.349       ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+
+
+Synchronizer Chain #4: Worst-Case MTBF is Greater than 1 Billion Years
+===============================================================================
++-----------------------------------------------------------------------------------+
+; Chain Summary                                                                     ;
++-------------------------+---------------------------------------------------------+
+; Property                ; Value                                                   ;
++-------------------------+---------------------------------------------------------+
+; Source Node             ; reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|sync_q[0] ;
+; Synchronization Node    ; sync_2ff:u_sync_2ff_sw|meta_q[2]                        ;
+; Worst-Case MTBF (years) ; Greater than 1 Billion                                  ;
+; Typical MTBF (years)    ; Greater than 1 Billion                                  ;
+; Included in Design MTBF ; Yes                                                     ;
++-------------------------+---------------------------------------------------------+
+
++-----------------------------------------------------------------------------------------------------------------------------------------------------+
+; Statistics                                                                                                                                          ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+; Property                                                                  ; Value                  ; Clock Period ; Active Edge Rate ; Output Slack ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+; Method of Synchronizer Identification                                     ; User Specified         ;              ;                  ;              ;
+; Worst-Case MTBF (years)                                                   ; Greater than 1 Billion ;              ;                  ;              ;
+; Typical MTBF (years)                                                      ; Greater than 1 Billion ;              ;                  ;              ;
+; Number of Synchronization Registers in Chain                              ; 2                      ;              ;                  ;              ;
+; Available Settling Time (ns)                                              ; 37.639                 ;              ;                  ;              ;
+; Data Toggle Rate Used in MTBF Calculation (millions of transitions / sec) ; 6.25                   ;              ;                  ;              ;
+; Source Clock                                                              ;                        ;              ;                  ;              ;
+;  clk50                                                                    ;                        ; 20.000       ; 50.0 MHz         ;              ;
+; Synchronization Clock                                                     ;                        ;              ;                  ;              ;
+;  clk50                                                                    ;                        ; 20.000       ; 50.0 MHz         ;              ;
+; Asynchronous Source                                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|sync_q[0]                  ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[4]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[8]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[1]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[0]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[3]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[2]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[5]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[6]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[7]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|rst2_q                                             ;                        ;              ;                  ;              ;
+;  SW[2]                                                                    ;                        ;              ;                  ;              ;
+; Synchronization Registers                                                 ;                        ;              ;                  ;              ;
+;  sync_2ff:u_sync_2ff_sw|meta_q[2]                                         ;                        ;              ;                  ; 19.243       ;
+;  sync_2ff:u_sync_2ff_sw|sync_q[2]                                         ;                        ;              ;                  ; 18.396       ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+
+
+Synchronizer Chain #5: Worst-Case MTBF is Greater than 1 Billion Years
+===============================================================================
++-----------------------------------------------------------------------------------+
+; Chain Summary                                                                     ;
++-------------------------+---------------------------------------------------------+
+; Property                ; Value                                                   ;
++-------------------------+---------------------------------------------------------+
+; Source Node             ; reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|sync_q[0] ;
+; Synchronization Node    ; sync_2ff:u_sync_2ff_sw|meta_q[1]                        ;
+; Worst-Case MTBF (years) ; Greater than 1 Billion                                  ;
+; Typical MTBF (years)    ; Greater than 1 Billion                                  ;
+; Included in Design MTBF ; Yes                                                     ;
++-------------------------+---------------------------------------------------------+
+
++-----------------------------------------------------------------------------------------------------------------------------------------------------+
+; Statistics                                                                                                                                          ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+; Property                                                                  ; Value                  ; Clock Period ; Active Edge Rate ; Output Slack ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+; Method of Synchronizer Identification                                     ; User Specified         ;              ;                  ;              ;
+; Worst-Case MTBF (years)                                                   ; Greater than 1 Billion ;              ;                  ;              ;
+; Typical MTBF (years)                                                      ; Greater than 1 Billion ;              ;                  ;              ;
+; Number of Synchronization Registers in Chain                              ; 2                      ;              ;                  ;              ;
+; Available Settling Time (ns)                                              ; 37.809                 ;              ;                  ;              ;
+; Data Toggle Rate Used in MTBF Calculation (millions of transitions / sec) ; 6.25                   ;              ;                  ;              ;
+; Source Clock                                                              ;                        ;              ;                  ;              ;
+;  clk50                                                                    ;                        ; 20.000       ; 50.0 MHz         ;              ;
+; Synchronization Clock                                                     ;                        ;              ;                  ;              ;
+;  clk50                                                                    ;                        ; 20.000       ; 50.0 MHz         ;              ;
+; Asynchronous Source                                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|sync_q[0]                  ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[4]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[8]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[1]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[0]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[3]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[2]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[5]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[6]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[7]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|rst2_q                                             ;                        ;              ;                  ;              ;
+;  SW[1]                                                                    ;                        ;              ;                  ;              ;
+; Synchronization Registers                                                 ;                        ;              ;                  ;              ;
+;  sync_2ff:u_sync_2ff_sw|meta_q[1]                                         ;                        ;              ;                  ; 19.245       ;
+;  sync_2ff:u_sync_2ff_sw|sync_q[1]                                         ;                        ;              ;                  ; 18.564       ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+
+
+Synchronizer Chain #6: Worst-Case MTBF is Greater than 1 Billion Years
+===============================================================================
++-----------------------------------------------------------------------------------+
+; Chain Summary                                                                     ;
++-------------------------+---------------------------------------------------------+
+; Property                ; Value                                                   ;
++-------------------------+---------------------------------------------------------+
+; Source Node             ; reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|sync_q[0] ;
+; Synchronization Node    ; sync_2ff:u_sync_2ff_sw|meta_q[3]                        ;
+; Worst-Case MTBF (years) ; Greater than 1 Billion                                  ;
+; Typical MTBF (years)    ; Greater than 1 Billion                                  ;
+; Included in Design MTBF ; Yes                                                     ;
++-------------------------+---------------------------------------------------------+
+
++-----------------------------------------------------------------------------------------------------------------------------------------------------+
+; Statistics                                                                                                                                          ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+; Property                                                                  ; Value                  ; Clock Period ; Active Edge Rate ; Output Slack ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+; Method of Synchronizer Identification                                     ; User Specified         ;              ;                  ;              ;
+; Worst-Case MTBF (years)                                                   ; Greater than 1 Billion ;              ;                  ;              ;
+; Typical MTBF (years)                                                      ; Greater than 1 Billion ;              ;                  ;              ;
+; Number of Synchronization Registers in Chain                              ; 2                      ;              ;                  ;              ;
+; Available Settling Time (ns)                                              ; 37.816                 ;              ;                  ;              ;
+; Data Toggle Rate Used in MTBF Calculation (millions of transitions / sec) ; 6.25                   ;              ;                  ;              ;
+; Source Clock                                                              ;                        ;              ;                  ;              ;
+;  clk50                                                                    ;                        ; 20.000       ; 50.0 MHz         ;              ;
+; Synchronization Clock                                                     ;                        ;              ;                  ;              ;
+;  clk50                                                                    ;                        ; 20.000       ; 50.0 MHz         ;              ;
+; Asynchronous Source                                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|sync_q[0]                  ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[4]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[8]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[1]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[0]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[3]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[2]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[5]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[6]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[7]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|rst2_q                                             ;                        ;              ;                  ;              ;
+;  SW[3]                                                                    ;                        ;              ;                  ;              ;
+; Synchronization Registers                                                 ;                        ;              ;                  ;              ;
+;  sync_2ff:u_sync_2ff_sw|meta_q[3]                                         ;                        ;              ;                  ; 19.243       ;
+;  sync_2ff:u_sync_2ff_sw|sync_q[3]                                         ;                        ;              ;                  ; 18.573       ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+
+
+----------------
+; MTBF Summary ;
+----------------
+Worst-Case MTBF of Design is 1e+09 years or 3.15e+16 seconds.
+Typical MTBF of Design is 1e+09 years or 3.15e+16 seconds.
+
+Number of Synchronizer Chains Found: 6
+Shortest Synchronizer Chain: 2 Registers
+Fraction of Chains for which MTBFs Could Not be Calculated: 0.000
+Worst Case Available Settling Time: 36.692 ns
+
+Worst-Case MTBF values are calculated based on the worst-case silicon characteristics, with worst-case operating conditions.
+  - Under worst-case conditions, an increase of 100ps in available settling time will increase MTBF values by a factor of 1.8
+Typical MTBF values are calculated based on the nominal silicon characteristics, at nominal operating conditions.
+  - Under typical conditions, an increase of 100ps in available settling time will increase MTBF values by a factor of 3.7
+
+
++------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+; Synchronizer Summary                                                                                                                                                                           ;
++---------------------------------------------------------+---------------------------------------------------------+-------------------------+------------------------+-------------------------+
+; Source Node                                             ; Synchronization Node                                    ; Worst-Case MTBF (Years) ; Typical MTBF (Years)   ; Included in Design MTBF ;
++---------------------------------------------------------+---------------------------------------------------------+-------------------------+------------------------+-------------------------+
+; reset_gen:u_reset_gen|por_cnt_q[4]                      ; reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|meta_q[0] ; Greater than 1 Billion  ; Greater than 1 Billion ; Yes                     ;
+; reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|sync_q[0] ; sync_2ff:u_sync_2ff_key0|meta_q[0]                      ; Greater than 1 Billion  ; Greater than 1 Billion ; Yes                     ;
+; reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|sync_q[0] ; sync_2ff:u_sync_2ff_sw|meta_q[0]                        ; Greater than 1 Billion  ; Greater than 1 Billion ; Yes                     ;
+; reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|sync_q[0] ; sync_2ff:u_sync_2ff_sw|meta_q[2]                        ; Greater than 1 Billion  ; Greater than 1 Billion ; Yes                     ;
+; reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|sync_q[0] ; sync_2ff:u_sync_2ff_sw|meta_q[1]                        ; Greater than 1 Billion  ; Greater than 1 Billion ; Yes                     ;
+; reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|sync_q[0] ; sync_2ff:u_sync_2ff_sw|meta_q[3]                        ; Greater than 1 Billion  ; Greater than 1 Billion ; Yes                     ;
++---------------------------------------------------------+---------------------------------------------------------+-------------------------+------------------------+-------------------------+
+
+Synchronizer Chain #1: Worst-Case MTBF is Greater than 1 Billion Years
+===============================================================================
++-----------------------------------------------------------------------------------+
+; Chain Summary                                                                     ;
++-------------------------+---------------------------------------------------------+
+; Property                ; Value                                                   ;
++-------------------------+---------------------------------------------------------+
+; Source Node             ; reset_gen:u_reset_gen|por_cnt_q[4]                      ;
+; Synchronization Node    ; reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|meta_q[0] ;
+; Worst-Case MTBF (years) ; Greater than 1 Billion                                  ;
+; Typical MTBF (years)    ; Greater than 1 Billion                                  ;
+; Included in Design MTBF ; Yes                                                     ;
++-------------------------+---------------------------------------------------------+
+
++-----------------------------------------------------------------------------------------------------------------------------------------------------+
+; Statistics                                                                                                                                          ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+; Property                                                                  ; Value                  ; Clock Period ; Active Edge Rate ; Output Slack ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+; Method of Synchronizer Identification                                     ; User Specified         ;              ;                  ;              ;
+; Worst-Case MTBF (years)                                                   ; Greater than 1 Billion ;              ;                  ;              ;
+; Typical MTBF (years)                                                      ; Greater than 1 Billion ;              ;                  ;              ;
+; Number of Synchronization Registers in Chain                              ; 2                      ;              ;                  ;              ;
+; Available Settling Time (ns)                                              ; 36.692                 ;              ;                  ;              ;
+; Data Toggle Rate Used in MTBF Calculation (millions of transitions / sec) ; 6.25                   ;              ;                  ;              ;
+; Source Clock                                                              ;                        ;              ;                  ;              ;
+;  clk50                                                                    ;                        ; 20.000       ; 50.0 MHz         ;              ;
+; Synchronization Clock                                                     ;                        ;              ;                  ;              ;
+;  clk50                                                                    ;                        ; 20.000       ; 50.0 MHz         ;              ;
+; Asynchronous Source                                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[4]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[8]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[1]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[0]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[3]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[2]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[5]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[6]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[7]                                       ;                        ;              ;                  ;              ;
+;  KEY[1]                                                                   ;                        ;              ;                  ;              ;
+; Synchronization Registers                                                 ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|meta_q[0]                  ;                        ;              ;                  ; 19.638       ;
+;  reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|sync_q[0]                  ;                        ;              ;                  ; 17.054       ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+
+
+Synchronizer Chain #2: Worst-Case MTBF is Greater than 1 Billion Years
+===============================================================================
++-----------------------------------------------------------------------------------+
+; Chain Summary                                                                     ;
++-------------------------+---------------------------------------------------------+
+; Property                ; Value                                                   ;
++-------------------------+---------------------------------------------------------+
+; Source Node             ; reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|sync_q[0] ;
+; Synchronization Node    ; sync_2ff:u_sync_2ff_key0|meta_q[0]                      ;
+; Worst-Case MTBF (years) ; Greater than 1 Billion                                  ;
+; Typical MTBF (years)    ; Greater than 1 Billion                                  ;
+; Included in Design MTBF ; Yes                                                     ;
++-------------------------+---------------------------------------------------------+
+
++-----------------------------------------------------------------------------------------------------------------------------------------------------+
+; Statistics                                                                                                                                          ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+; Property                                                                  ; Value                  ; Clock Period ; Active Edge Rate ; Output Slack ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+; Method of Synchronizer Identification                                     ; User Specified         ;              ;                  ;              ;
+; Worst-Case MTBF (years)                                                   ; Greater than 1 Billion ;              ;                  ;              ;
+; Typical MTBF (years)                                                      ; Greater than 1 Billion ;              ;                  ;              ;
+; Number of Synchronization Registers in Chain                              ; 2                      ;              ;                  ;              ;
+; Available Settling Time (ns)                                              ; 38.469                 ;              ;                  ;              ;
+; Data Toggle Rate Used in MTBF Calculation (millions of transitions / sec) ; 6.25                   ;              ;                  ;              ;
+; Source Clock                                                              ;                        ;              ;                  ;              ;
+;  clk50                                                                    ;                        ; 20.000       ; 50.0 MHz         ;              ;
+; Synchronization Clock                                                     ;                        ;              ;                  ;              ;
+;  clk50                                                                    ;                        ; 20.000       ; 50.0 MHz         ;              ;
+; Asynchronous Source                                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|sync_q[0]                  ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[4]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[8]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[1]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[0]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[3]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[2]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[5]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[6]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[7]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|rst2_q                                             ;                        ;              ;                  ;              ;
+;  KEY[0]                                                                   ;                        ;              ;                  ;              ;
+; Synchronization Registers                                                 ;                        ;              ;                  ;              ;
+;  sync_2ff:u_sync_2ff_key0|meta_q[0]                                       ;                        ;              ;                  ; 19.636       ;
+;  sync_2ff:u_sync_2ff_key0|sync_q[0]                                       ;                        ;              ;                  ; 18.833       ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+
+
+Synchronizer Chain #3: Worst-Case MTBF is Greater than 1 Billion Years
+===============================================================================
++-----------------------------------------------------------------------------------+
+; Chain Summary                                                                     ;
++-------------------------+---------------------------------------------------------+
+; Property                ; Value                                                   ;
++-------------------------+---------------------------------------------------------+
+; Source Node             ; reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|sync_q[0] ;
+; Synchronization Node    ; sync_2ff:u_sync_2ff_sw|meta_q[0]                        ;
+; Worst-Case MTBF (years) ; Greater than 1 Billion                                  ;
+; Typical MTBF (years)    ; Greater than 1 Billion                                  ;
+; Included in Design MTBF ; Yes                                                     ;
++-------------------------+---------------------------------------------------------+
+
++-----------------------------------------------------------------------------------------------------------------------------------------------------+
+; Statistics                                                                                                                                          ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+; Property                                                                  ; Value                  ; Clock Period ; Active Edge Rate ; Output Slack ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+; Method of Synchronizer Identification                                     ; User Specified         ;              ;                  ;              ;
+; Worst-Case MTBF (years)                                                   ; Greater than 1 Billion ;              ;                  ;              ;
+; Typical MTBF (years)                                                      ; Greater than 1 Billion ;              ;                  ;              ;
+; Number of Synchronization Registers in Chain                              ; 2                      ;              ;                  ;              ;
+; Available Settling Time (ns)                                              ; 38.741                 ;              ;                  ;              ;
+; Data Toggle Rate Used in MTBF Calculation (millions of transitions / sec) ; 6.25                   ;              ;                  ;              ;
+; Source Clock                                                              ;                        ;              ;                  ;              ;
+;  clk50                                                                    ;                        ; 20.000       ; 50.0 MHz         ;              ;
+; Synchronization Clock                                                     ;                        ;              ;                  ;              ;
+;  clk50                                                                    ;                        ; 20.000       ; 50.0 MHz         ;              ;
+; Asynchronous Source                                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|sync_q[0]                  ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[4]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[8]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[1]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[0]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[3]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[2]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[5]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[6]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[7]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|rst2_q                                             ;                        ;              ;                  ;              ;
+;  SW[0]                                                                    ;                        ;              ;                  ;              ;
+; Synchronization Registers                                                 ;                        ;              ;                  ;              ;
+;  sync_2ff:u_sync_2ff_sw|meta_q[0]                                         ;                        ;              ;                  ; 19.560       ;
+;  sync_2ff:u_sync_2ff_sw|sync_q[0]                                         ;                        ;              ;                  ; 19.181       ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+
+
+Synchronizer Chain #4: Worst-Case MTBF is Greater than 1 Billion Years
+===============================================================================
++-----------------------------------------------------------------------------------+
+; Chain Summary                                                                     ;
++-------------------------+---------------------------------------------------------+
+; Property                ; Value                                                   ;
++-------------------------+---------------------------------------------------------+
+; Source Node             ; reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|sync_q[0] ;
+; Synchronization Node    ; sync_2ff:u_sync_2ff_sw|meta_q[2]                        ;
+; Worst-Case MTBF (years) ; Greater than 1 Billion                                  ;
+; Typical MTBF (years)    ; Greater than 1 Billion                                  ;
+; Included in Design MTBF ; Yes                                                     ;
++-------------------------+---------------------------------------------------------+
+
++-----------------------------------------------------------------------------------------------------------------------------------------------------+
+; Statistics                                                                                                                                          ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+; Property                                                                  ; Value                  ; Clock Period ; Active Edge Rate ; Output Slack ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+; Method of Synchronizer Identification                                     ; User Specified         ;              ;                  ;              ;
+; Worst-Case MTBF (years)                                                   ; Greater than 1 Billion ;              ;                  ;              ;
+; Typical MTBF (years)                                                      ; Greater than 1 Billion ;              ;                  ;              ;
+; Number of Synchronization Registers in Chain                              ; 2                      ;              ;                  ;              ;
+; Available Settling Time (ns)                                              ; 38.845                 ;              ;                  ;              ;
+; Data Toggle Rate Used in MTBF Calculation (millions of transitions / sec) ; 6.25                   ;              ;                  ;              ;
+; Source Clock                                                              ;                        ;              ;                  ;              ;
+;  clk50                                                                    ;                        ; 20.000       ; 50.0 MHz         ;              ;
+; Synchronization Clock                                                     ;                        ;              ;                  ;              ;
+;  clk50                                                                    ;                        ; 20.000       ; 50.0 MHz         ;              ;
+; Asynchronous Source                                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|sync_q[0]                  ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[4]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[8]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[1]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[0]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[3]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[2]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[5]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[6]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[7]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|rst2_q                                             ;                        ;              ;                  ;              ;
+;  SW[2]                                                                    ;                        ;              ;                  ;              ;
+; Synchronization Registers                                                 ;                        ;              ;                  ;              ;
+;  sync_2ff:u_sync_2ff_sw|meta_q[2]                                         ;                        ;              ;                  ; 19.636       ;
+;  sync_2ff:u_sync_2ff_sw|sync_q[2]                                         ;                        ;              ;                  ; 19.209       ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+
+
+Synchronizer Chain #5: Worst-Case MTBF is Greater than 1 Billion Years
+===============================================================================
++-----------------------------------------------------------------------------------+
+; Chain Summary                                                                     ;
++-------------------------+---------------------------------------------------------+
+; Property                ; Value                                                   ;
++-------------------------+---------------------------------------------------------+
+; Source Node             ; reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|sync_q[0] ;
+; Synchronization Node    ; sync_2ff:u_sync_2ff_sw|meta_q[1]                        ;
+; Worst-Case MTBF (years) ; Greater than 1 Billion                                  ;
+; Typical MTBF (years)    ; Greater than 1 Billion                                  ;
+; Included in Design MTBF ; Yes                                                     ;
++-------------------------+---------------------------------------------------------+
+
++-----------------------------------------------------------------------------------------------------------------------------------------------------+
+; Statistics                                                                                                                                          ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+; Property                                                                  ; Value                  ; Clock Period ; Active Edge Rate ; Output Slack ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+; Method of Synchronizer Identification                                     ; User Specified         ;              ;                  ;              ;
+; Worst-Case MTBF (years)                                                   ; Greater than 1 Billion ;              ;                  ;              ;
+; Typical MTBF (years)                                                      ; Greater than 1 Billion ;              ;                  ;              ;
+; Number of Synchronization Registers in Chain                              ; 2                      ;              ;                  ;              ;
+; Available Settling Time (ns)                                              ; 38.907                 ;              ;                  ;              ;
+; Data Toggle Rate Used in MTBF Calculation (millions of transitions / sec) ; 6.25                   ;              ;                  ;              ;
+; Source Clock                                                              ;                        ;              ;                  ;              ;
+;  clk50                                                                    ;                        ; 20.000       ; 50.0 MHz         ;              ;
+; Synchronization Clock                                                     ;                        ;              ;                  ;              ;
+;  clk50                                                                    ;                        ; 20.000       ; 50.0 MHz         ;              ;
+; Asynchronous Source                                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|sync_q[0]                  ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[4]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[8]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[1]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[0]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[3]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[2]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[5]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[6]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[7]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|rst2_q                                             ;                        ;              ;                  ;              ;
+;  SW[1]                                                                    ;                        ;              ;                  ;              ;
+; Synchronization Registers                                                 ;                        ;              ;                  ;              ;
+;  sync_2ff:u_sync_2ff_sw|meta_q[1]                                         ;                        ;              ;                  ; 19.637       ;
+;  sync_2ff:u_sync_2ff_sw|sync_q[1]                                         ;                        ;              ;                  ; 19.270       ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+
+
+Synchronizer Chain #6: Worst-Case MTBF is Greater than 1 Billion Years
+===============================================================================
++-----------------------------------------------------------------------------------+
+; Chain Summary                                                                     ;
++-------------------------+---------------------------------------------------------+
+; Property                ; Value                                                   ;
++-------------------------+---------------------------------------------------------+
+; Source Node             ; reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|sync_q[0] ;
+; Synchronization Node    ; sync_2ff:u_sync_2ff_sw|meta_q[3]                        ;
+; Worst-Case MTBF (years) ; Greater than 1 Billion                                  ;
+; Typical MTBF (years)    ; Greater than 1 Billion                                  ;
+; Included in Design MTBF ; Yes                                                     ;
++-------------------------+---------------------------------------------------------+
+
++-----------------------------------------------------------------------------------------------------------------------------------------------------+
+; Statistics                                                                                                                                          ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+; Property                                                                  ; Value                  ; Clock Period ; Active Edge Rate ; Output Slack ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+; Method of Synchronizer Identification                                     ; User Specified         ;              ;                  ;              ;
+; Worst-Case MTBF (years)                                                   ; Greater than 1 Billion ;              ;                  ;              ;
+; Typical MTBF (years)                                                      ; Greater than 1 Billion ;              ;                  ;              ;
+; Number of Synchronization Registers in Chain                              ; 2                      ;              ;                  ;              ;
+; Available Settling Time (ns)                                              ; 38.916                 ;              ;                  ;              ;
+; Data Toggle Rate Used in MTBF Calculation (millions of transitions / sec) ; 6.25                   ;              ;                  ;              ;
+; Source Clock                                                              ;                        ;              ;                  ;              ;
+;  clk50                                                                    ;                        ; 20.000       ; 50.0 MHz         ;              ;
+; Synchronization Clock                                                     ;                        ;              ;                  ;              ;
+;  clk50                                                                    ;                        ; 20.000       ; 50.0 MHz         ;              ;
+; Asynchronous Source                                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|sync_2ff:u_sync_2ff_key|sync_q[0]                  ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[4]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[8]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[1]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[0]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[3]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[2]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[5]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[6]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|por_cnt_q[7]                                       ;                        ;              ;                  ;              ;
+;  reset_gen:u_reset_gen|rst2_q                                             ;                        ;              ;                  ;              ;
+;  SW[3]                                                                    ;                        ;              ;                  ;              ;
+; Synchronization Registers                                                 ;                        ;              ;                  ;              ;
+;  sync_2ff:u_sync_2ff_sw|meta_q[3]                                         ;                        ;              ;                  ; 19.635       ;
+;  sync_2ff:u_sync_2ff_sw|sync_q[3]                                         ;                        ;              ;                  ; 19.281       ;
++---------------------------------------------------------------------------+------------------------+--------------+------------------+--------------+
+
+

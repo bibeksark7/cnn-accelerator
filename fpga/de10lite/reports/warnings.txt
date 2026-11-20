@@ -1,0 +1,35 @@
+Warning (14284): Synthesized away the following node(s):
+Warning (14285): Synthesized away the following RAM node(s):
+Warning (14320): Synthesized away node "fpga_core:u_fpga_core|accel_top:u_accel_top|sram_1r1w:u_sram_1r1w_prm|altsyncram:mem_rtl_0|altsyncram_2391:auto_generated|ram_block1a54"
+Warning (14320): Synthesized away node "fpga_core:u_fpga_core|accel_top:u_accel_top|sram_1r1w:u_sram_1r1w_prm|altsyncram:mem_rtl_0|altsyncram_2391:auto_generated|ram_block1a55"
+Warning (14320): Synthesized away node "fpga_core:u_fpga_core|accel_top:u_accel_top|sram_1r1w:u_sram_1r1w_prm|altsyncram:mem_rtl_0|altsyncram_2391:auto_generated|ram_block1a56"
+Warning (14320): Synthesized away node "fpga_core:u_fpga_core|accel_top:u_accel_top|sram_1r1w:u_sram_1r1w_prm|altsyncram:mem_rtl_0|altsyncram_2391:auto_generated|ram_block1a57"
+Warning (14320): Synthesized away node "fpga_core:u_fpga_core|accel_top:u_accel_top|sram_1r1w:u_sram_1r1w_prm|altsyncram:mem_rtl_0|altsyncram_2391:auto_generated|ram_block1a58"
+Warning (14320): Synthesized away node "fpga_core:u_fpga_core|accel_top:u_accel_top|sram_1r1w:u_sram_1r1w_prm|altsyncram:mem_rtl_0|altsyncram_2391:auto_generated|ram_block1a59"
+Warning (14320): Synthesized away node "fpga_core:u_fpga_core|accel_top:u_accel_top|sram_1r1w:u_sram_1r1w_prm|altsyncram:mem_rtl_0|altsyncram_2391:auto_generated|ram_block1a60"
+Warning (14320): Synthesized away node "fpga_core:u_fpga_core|accel_top:u_accel_top|sram_1r1w:u_sram_1r1w_prm|altsyncram:mem_rtl_0|altsyncram_2391:auto_generated|ram_block1a61"
+Warning (14320): Synthesized away node "fpga_core:u_fpga_core|accel_top:u_accel_top|sram_1r1w:u_sram_1r1w_prm|altsyncram:mem_rtl_0|altsyncram_2391:auto_generated|ram_block1a62"
+Warning (14320): Synthesized away node "fpga_core:u_fpga_core|accel_top:u_accel_top|sram_1r1w:u_sram_1r1w_prm|altsyncram:mem_rtl_0|altsyncram_2391:auto_generated|ram_block1a63"
+Warning (13024): Output pins are stuck at VCC or GND
+Warning (13410): Pin "HEX0[7]" is stuck at VCC
+Warning (13410): Pin "HEX1[7]" is stuck at VCC
+Warning (13410): Pin "HEX2[7]" is stuck at VCC
+Warning (13410): Pin "HEX3[7]" is stuck at VCC
+Warning (13410): Pin "HEX4[7]" is stuck at VCC
+Warning (13410): Pin "HEX5[7]" is stuck at VCC
+Warning (13410): Pin "LEDR[3]" is stuck at GND
+Warning (13410): Pin "LEDR[4]" is stuck at GND
+Warning (13410): Pin "LEDR[5]" is stuck at GND
+Warning (13410): Pin "LEDR[6]" is stuck at GND
+Warning (13410): Pin "LEDR[7]" is stuck at GND
+Warning (13410): Pin "LEDR[8]" is stuck at GND
+Warning (21074): Design contains 6 input pin(s) that do not drive logic
+Warning (15610): No output dependent on input pin "SW[4]"
+Warning (15610): No output dependent on input pin "SW[5]"
+Warning (15610): No output dependent on input pin "SW[6]"
+Warning (15610): No output dependent on input pin "SW[7]"
+Warning (15610): No output dependent on input pin "SW[8]"
+Warning (15610): No output dependent on input pin "SW[9]"
+Warning (292013): Feature LogicLock is only available with a valid subscription license. You can purchase a software subscription to gain full access to this feature.
+Warning (15714): Some pins have incomplete I/O assignments. Refer to the I/O Assignment Warnings report for details
+Warning (169177): 13 pins must meet Intel FPGA requirements for 3.3-, 3.0-, and 2.5-V interfaces. For more information, refer to AN 447: Interfacing MAX 10 Devices with 3.3/3.0/2.5-V LVTTL/LVCMOS I/O Systems.

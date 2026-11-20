@@ -1,7 +1,7 @@
 {
   "script": "fpga/de10lite/build_win.sh",
-  "commit": "96ceb0364fcd241921324d3235cc6ef3a18cff90",
-  "rtl_tree": "e5cdce507d2d23ea3a0bfe550665b8c236cff236",
+  "commit": "f90d61715135713dc7bfd06f7f5b113df0b91596",
+  "rtl_tree": "4beb0d98b83968e5421871b2346fa1dcdeadcf4b",
   "tree_clean": true,
   "init_files_sha256": {
     "img.hex": "a8fa0fa89b786d89ce6e7eb2a92d9fcbe802f611054dc35a26b1584da7af216c",
