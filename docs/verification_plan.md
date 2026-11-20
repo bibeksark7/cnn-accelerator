@@ -88,7 +88,7 @@ Status values: **done** (test exists and passes in CI), **planned** (phase in br
 | Layer types | `layers started` CONV/POOL/FC/ARGMAX (`accel_top`); `unit started` (`layer_seq`); `layer type` (`gemm_engine`) | met |
 | Edge tiles in M and Ncols | `row tiles (M)`, `column tiles (Ncols)`, `column tile count` (`gemm_engine`) | met |
 | K chunk count 1 and > 1; K = 1; K ranges | `K chunks`, `K` (`gemm_engine`); `K` 0, 1, 2..N−1, N, N+1..127, 128 (`systolic_array`) | met |
-| Saturation high/low; ReLU clamp; rounding ties | `saturation`, `ReLU`, `rounding` (`postproc`); real-data saturation (`accel_top`) | met in `postproc`; real data: documented gap |
+| Saturation high/low; ReLU clamp; rounding ties | `saturation`, `ReLU`, `rounding` (`postproc`); real-data saturation (`accel_top`) | met in `postproc`; real data: low met, high a documented gap (never occurs on MNIST) |
 | Back-to-back inferences | `inferences` (`accel_top`) | met |
 | Reset mid-operation | `reset during a layer` 0..5 (`accel_top`); `reset mid-run` (`layer_seq`); engine resets: FSM transition coverage (`test_gemm_engine.py`) | met |
 | Backpressure on every valid/ready interface | handshake monitors: `postproc` input and output, array `result rows`, engine-internal links (Verilator); bus wait states: `CSR bus`, `memory port` (`accel_top`, `csr_block`) | met, except the two engine-internal postproc stalls, which cannot occur (documented gaps) |

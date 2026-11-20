@@ -1,8 +1,8 @@
 {
  "script": "scripts/coverage_report.py",
  "bins": 110,
- "met": 106,
- "documented_gaps": 4,
+ "met": 107,
+ "documented_gaps": 3,
  "missed": 0,
  "rows": [
   {
@@ -711,7 +711,7 @@
    "scope": "accel_top",
    "point": "layers started",
    "bin": "CONV",
-   "hits": 222,
+   "hits": 230,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -720,7 +720,7 @@
    "scope": "accel_top",
    "point": "layers started",
    "bin": "POOL",
-   "hits": 208,
+   "hits": 216,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -729,7 +729,7 @@
    "scope": "accel_top",
    "point": "layers started",
    "bin": "FC",
-   "hits": 83,
+   "hits": 87,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -738,7 +738,7 @@
    "scope": "accel_top",
    "point": "layers started",
    "bin": "ARGMAX",
-   "hits": 122,
+   "hits": 126,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -747,7 +747,7 @@
    "scope": "accel_top",
    "point": "inferences",
    "bin": "after loading images",
-   "hits": 13,
+   "hits": 14,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -756,7 +756,7 @@
    "scope": "accel_top",
    "point": "inferences",
    "bin": "back to back, no reload",
-   "hits": 142,
+   "hits": 145,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -927,7 +927,7 @@
    "scope": "accel_top",
    "point": "CSR bus",
    "bin": "accepted at once",
-   "hits": 4598,
+   "hits": 4654,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -945,7 +945,7 @@
    "scope": "accel_top",
    "point": "memory port",
    "bin": "accepted at once",
-   "hits": 61388,
+   "hits": 64524,
    "goal": 1,
    "status": "met",
    "gap": null
@@ -990,10 +990,10 @@
    "scope": "accel_top",
    "point": "network data: post-processing saturation",
    "bin": "low",
-   "hits": 0,
+   "hits": 4,
    "goal": 1,
-   "status": "GAP",
-   "gap": "not in the quick subset: over all 10,000 test images conv2 saturates low only 4 times (images 3081, 5555, 8619, 9427; model/reports/saturation.json), and those images are bit-exact in the full run (testbench/reports/full_run.md). Covered in the postproc unit test."
+   "status": "met",
+   "gap": null
   }
  ],
  "simulations": [
