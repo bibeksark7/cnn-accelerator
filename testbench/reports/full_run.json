@@ -14,10 +14,10 @@
   "golden_integer_accuracy_full_test_set": 0.9865,
   "float_accuracy_full_test_set": 0.9867,
   "mismatches": [],
-  "simulation_seconds": 5218.8123643398285,
+  "simulation_seconds": 4226.341215848923,
   "provenance": {
-    "commit": "2eab3f9ebe29ce5bb07fb1c94aa89d76e0bad68c",
-    "rtl_tree": "e5cdce507d2d23ea3a0bfe550665b8c236cff236",
+    "commit": "e47650b61554ff162998363b9a366ab6533f4393",
+    "rtl_tree": "4beb0d98b83968e5421871b2346fa1dcdeadcf4b",
     "tree_clean": true,
     "init_files_sha256": {
       "wgt.hex": "ebf6d93a3cdfeff48031a9697445c9d00483d65afe1fbd12ade2d6b2ce104e29",
