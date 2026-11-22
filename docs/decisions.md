@@ -1054,3 +1054,195 @@ project's flash mode).
 **Reason.** Sign-off covers every corner the device is specified for. A new warning is either a
 design change to look at or a new expected entry with its reason, never silently accepted. The
 checkpoint output says plainly when the hardware result is still missing.
+
+## D-038 — RISC-V toolchain: Ubuntu's `gcc-riscv64-unknown-elf`, freestanding firmware (Phase 5)
+
+**Decision.**
+- **Compiler.** The distribution package `gcc-riscv64-unknown-elf` (14.2.0 on the development
+  machine, Ubuntu 26.04; it pulls `binutils-riscv64-unknown-elf`). It is a multilib build: with
+  `-march=rv32im_zicsr -mabi=ilp32` it selects its `rv32im/ilp32` libraries
+  (`-print-multi-directory`). `_zicsr` is needed because GCC 12 and later no longer imply the CSR
+  instructions that `rdcycle` uses. Checked before installing: an unpacked copy compiled a test
+  program (`div`, `rem`, a 64-bit product, `rdcycle`) to ELF32 with no compressed instructions,
+  using native `mul`, `mulh`, `div`, `rem` and `rdcycle`.
+- **CI.** The `ubuntu-24.04` runner installs the same package with apt (version 13.2 there).
+  Firmware is always built from source, never committed as a binary; reports that depend on
+  code generation (the speedup report) record the compiler version that produced them.
+- **No C library.** Firmware is freestanding (`-ffreestanding -nostdlib`), links only `libgcc`,
+  and provides its own `memset`/`memcpy` and start-up code. It needs no `printf` or heap.
+
+**Alternatives.** The xPack `riscv-none-elf-gcc` prebuilt tarball (no `sudo`, but a third-party
+binary download in every CI run); building `riscv-gnu-toolchain` from source (an hour or more,
+cached in CI); picolibc (`picolibc-riscv64-unknown-elf`, not needed without stdio).
+
+**Reason.** A signed distribution package with the needed multilib, installed the same way
+locally and in CI. A freestanding build keeps the firmware small and every instruction in it
+our own or GCC's.
+
+## D-039 — PicoRV32 as the CPU: pinned submodule, RV32IM, no interrupts (Phase 5)
+
+**Decision.**
+- **Source.** `third_party/picorv32`, a git submodule of `YosysHQ/picorv32` pinned to
+  `ef203c2b0a3fb793280f5114941416c425c5b461` (ISC licence). The upstream repository was archived
+  in September 2026; the pinned commit is used as it is and never modified.
+- **Configuration** (spec §13.2): `picorv32_axi` with fast multiplier, divider, barrel shifter
+  and 32-bit cycle/instret counters; no compressed instructions; no interrupt logic; misaligned
+  accesses and illegal instructions halt the CPU with `trap`.
+  - The fast multiplier and barrel shifter make the software baseline as fast as this core can
+    reasonably be, so the speedup is not inflated by a handicapped baseline.
+  - The divider completes RV32M; neither the network nor the driver divides on the hot path.
+  - Interrupts are off: the firmware polls `STATUS` (approved by the project owner). One run takes
+    47,259 cycles (`testbench/reports/perf_counters.md`), and polling keeps the firmware a single
+    loop.
+  - `ENABLE_COUNTERS64 = 0`: every timed interval is far below 2^32 cycles (86 s at 50 MHz),
+    and firmware subtracts counter values as unsigned 32-bit numbers, which is correct across a
+    wrap.
+- **Checks on third-party code.** `third_party/` is excluded from the project's lint rules
+  (naming, `-Wall`); Verilator builds `picorv32.v` with warnings for that file only switched off
+  (listed in the build helper), and Quartus warnings from it are listed in the SoC build's
+  expected-warnings file with their reasons.
+- **Fit.** Checked before committing to the core: a Quartus probe of `picorv32_axi` in this
+  configuration fits easily on the MAX 10 next to the accelerator and closes timing at 50 MHz on
+  its own. The SoC build reports (`fpga/de10lite_soc/reports/`) give the committed numbers.
+
+**Alternatives.** VexRiscv (SpinalHDL/Scala generator, a toolchain of its own); SERV (bit-serial,
+far too slow for a fair software baseline); an own RV32I core (a project of its own, and an
+unverified CPU would make every SoC result questionable).
+
+**Reason.** A small, widely used core with a native AXI4-Lite master, plain Verilog that all four
+tools accept, and configuration parameters that map directly onto the ISA we compile for.
+
+## D-040 — AXI4-Lite bus: own one-master interconnect, exact address decode (Phase 5)
+
+**Decision.**
+- **Interconnect.** An own `axil_interconnect`: one master, three slaves (RAM, accelerator, GPIO)
+  and an internal decode-error responder. It routes each channel by address, allows one
+  outstanding write and one outstanding read, and accepts no new address on a channel until that
+  channel's response has been taken (spec §13.3). Approved by the project owner over
+  `alexforencich/verilog-axi`.
+- **Address map** (spec §13.3). Regions on 256 MB boundaries by type (`0x0` memory, `0x1`
+  accelerator, `0x2` peripherals), each decoded exactly: anything outside a region, including
+  RAM aliases above 64 KB, is `DECERR`. The accelerator's CSR and buffer windows are both served
+  by one slave, at `0x1000_0000` and `0x1040_0000`.
+- **Write strobes.** RAM honours byte strobes (C code stores bytes); the accelerator and GPIO
+  take full words only and answer partial writes with `SLVERR`, since their registers have no
+  byte meaning.
+- **Error visibility.** PicoRV32 ignores `BRESP`/`RRESP`, so an error response would pass
+  silently on the board. The SoC simulation tests monitor both response channels and fail on any
+  `SLVERR` or `DECERR` that the test did not provoke on purpose.
+
+**Alternatives.** `verilog-axi`'s `axil_interconnect` or `axil_crossbar` (MIT; more general than
+one in-order master needs, a dependency to pin, and code we could not explain line by line);
+a native PicoRV32 memory bus instead of AXI (the milestone is about AXI4-Lite, and Phase 6's UVM
+agent needs it); partial decoding with aliases (smaller, but a stray pointer would then hit a
+real device instead of a reported error).
+
+**Reason.** With one master issuing one transaction at a time, a decoder plus per-channel routing
+is the whole job: small, fully testable, and explainable in an interview.
+
+## D-041 — Accelerator AXI4-Lite slave: CSR window, buffer window with a high-half register (Phase 5)
+
+**Decision.**
+- **No change below the slave.** `accel_axil_slave` wraps the existing CSR bus and memory port
+  (spec §10) of an unchanged `accel_top`; every Milestone 1 result stays valid.
+- **CSR window.** One AXI access is one CSR access at the same byte offset.
+- **Buffer window** (spec §13.4). The offset encodes buffer select, word address and the 32-bit
+  half. A high-half write only loads a staging register `WHI`; a low-half write commits
+  `{WHI, WDATA}` and clears `WHI`. Byte buffers (most of the traffic: images) take one write per
+  byte, and a 64-bit word is always written whole, as §10.3 requires. Reads are stateless: each
+  half is one memory-port read.
+- **Register accesses during a run are never held** (spec §13.4): they keep the latency of
+  §10.1 (registers in the arrival cycle; a descriptor read at most the sequencer's 4-word fetch),
+  and the slave has no wait of its own on `BUSY`. The SoC tests read `STATUS` (and other
+  registers) throughout a run and require each read to complete within a bound far below the run
+  length, so a slave that held register reads until `DONE` fails.
+- **Buffer accesses while busy.** A buffer-window access during a run waits for the run to end
+  instead of being answered with `SLVERR`. Every run terminates (§9: `last`, an error, or
+  `DESC_DEPTH` layers), and the CPU would ignore an error response anyway, so waiting is the only
+  choice that never loses or invents data. Firmware avoids the case by polling `STATUS` first.
+- **One transaction at a time** inside the slave, so a memory-port read is never pending when a
+  CSR write arrives: a `START` from firmware is never dropped for that reason (§9).
+
+**Alternatives.** A 64-bit data bus or AXI4 bursts (PicoRV32 is a 32-bit AXI4-Lite master);
+committing on the high-half write (then byte buffers would need two writes per byte, or a
+different rule per buffer); latching the high half on a low-half read (saves a memory-port read
+per 64-bit word, adds state that a stray read could disturb, and 64-bit reads are only for
+debugging); packing four image bytes per AXI word (4× fewer writes for uploads, at the cost of a
+read-modify-write rule for byte buffers; a later optimization if the upload time matters).
+
+**Reason.** The smallest set of rules that gives the CPU every buffer word with full-word writes
+only, keeps the memory port's handshake rule by construction, and leaves the core untouched.
+
+## D-042 — RAM and firmware boot: 64 KB, `.data` copied from its load image at every reset (Phase 5)
+
+**Decision.**
+- **RAM.** 64 KB (approved by the project owner), one block for code, data and stack, preloaded
+  with the firmware image by `$readmemh`. Sized for the largest firmware: the quick-subset test
+  carries its 50 images (39,200 bytes) to upload through the buffer window. At 32 bits wide an M9K
+  block holds 8 Kbit, so the RAM needs 64 of the MAX 10's 182 blocks; the SoC build reports give
+  the measured total.
+- **Boot.** `crt0.S` sets `sp` and `gp`, copies `.data` from its load image (placed after
+  `.rodata` by the linker script) to its run address, zeroes `.bss`, and calls `main`. The load
+  image itself is never written.
+- **Firmware image.** `objcopy` to a flat binary, then a script converts it to 32-bit little-endian
+  words for `$readmemh`. Built by `firmware/Makefile`; nothing generated is committed.
+
+**Alternatives.** 32 KB (too small for the quick-subset images plus code); separate instruction
+and data memories (a Harvard split that PicoRV32's single bus does not need); relying on the
+preloaded `.data` values (correct only for the first run after configuration: a `KEY[1]` reset
+would restart the firmware with whatever the previous run left in its variables).
+
+**Reason.** A reset must restart the firmware from a known state without reconfiguring the FPGA,
+exactly as it restarts the accelerator without reloading its buffers.
+
+## D-043 — GPIO and the SoC board build (Phase 5)
+
+**Decision.**
+- **GPIO registers** (spec §13.6). The `HEX` register holds six `hex7seg` codes, so the board top
+  reuses the verified decoder and firmware writes digits, not segment patterns. `KEY_EVT` is a
+  sticky press flag (set by the debounced press pulse, cleared by writing 1, set wins), so a press
+  is never missed while the firmware is busy. `MAILBOX` is the simulation tests' observation
+  point (progress and pass/fail codes defined by the test firmware); the board leaves it
+  unconnected.
+- **Trap LED.** `LEDR[9]` is wired to the CPU's `trap`, not to GPIO, so a firmware fault is
+  visible even when firmware can no longer run.
+- **Separate build** (approved by the project owner). `fpga/de10lite_soc/` with its own `build.tcl`,
+  pins, SDC, expected-warnings list and reports; the Milestone 1 build in `fpga/de10lite/` is not
+  changed. The board blocks (`reset_gen`, `sync_2ff`, `debounce`, `hex7seg`) are reused.
+
+**Alternatives.** Raw segment patterns in GPIO (more flexible, but a second font table to get
+wrong); an edge-detected key read by polling the level (misses presses shorter than a polling
+interval); one build with a top-level switch between the demo and the SoC (one build's reports
+would then describe two designs).
+
+**Reason.** Firmware-visible registers that match what the board blocks already produce, and a
+Milestone 1 build whose committed reports keep describing exactly what they describe today.
+
+## D-044 — Firmware applications and the speedup measurement (Phase 5)
+
+**Decision.**
+- **Applications** (each a separate firmware image):
+  - `quick`: uploads each of the 50 quick-subset images through the buffer window, runs the
+    accelerator, and stores the predicted class and logits in a RAM results table. The cocotb
+    test reads that table from the RAM model after the firmware signals completion in `MAILBOX`
+    and compares every logit with the committed expected logits, so the check does not rely on
+    the firmware's own comparison.
+  - `bench`: the software CNN and the accelerator on the same images, timed as spec §13.9
+    defines; the software CNN's logits must equal the golden model's bit for bit. Its results
+    table produces the committed speedup report.
+  - `demo`: the board behaviour of spec §13.8.
+- **Software CNN.** Plain C over the same int8 weights and integer parameters, generated at
+  build time from the committed `model/artifacts/` into a header; requantization written to match
+  `model/golden.py` exactly. Compiled with `-O2`, the same flags as everything else.
+- **Where the numbers come from.** The speedup report is measured in cycle-accurate RTL simulation
+  of the whole SoC, with the compiler version recorded. It is reported as a simulation result
+  until the board run confirms it.
+
+**Alternatives.** One firmware with modes selected at run time (the quick-subset images and the
+software CNN's data would not fit in 64 KB together); comparing against a host-side NumPy timing
+(not the same machine, so not a speedup); timing the software CNN with `-O0` or without the fast
+multiplier (an inflated speedup).
+
+**Reason.** Each image does one job and fits the RAM; correctness is checked outside the
+firmware; and the speedup compares the same network on the same CPU, with and without the
+accelerator.

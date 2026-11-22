@@ -1,6 +1,7 @@
 # Accelerator specification
 
-Authoritative hardware specification for the int8 MNIST CNN accelerator (Milestone 1).
+Authoritative hardware specification for the int8 MNIST CNN accelerator (Milestone 1) and the
+RISC-V SoC around it (Milestone 2, §13).
 Changes to this document, or to any interface it defines, are recorded in `docs/decisions.md`.
 
 **Normative scope.** Binding requirements are:
@@ -8,7 +9,9 @@ Changes to this document, or to any interface it defines, are recorded in `docs/
 - the data layouts and memory formats (§4–§7);
 - the descriptor format and execution semantics (§8–§9);
 - the host interface (§10);
-- the `accel_top` and `systolic_array` interfaces (§11).
+- the `accel_top` and `systolic_array` interfaces (§11);
+- the SoC: its CPU configuration, address map, bus behaviour, peripheral registers and board
+  top (§13.1–§13.7), and the speedup definitions (§13.9).
 
 Internal module partitioning and internal interfaces are implementation choices. They are
 documented in each module's header and summarized in `docs/architecture.md`.
@@ -521,3 +524,195 @@ later with a one-cycle `rvalid` pulse.
 **Constraints.** One clock (`MAX10_CLK1_50`, 20 ns). The `SW` and `KEY` inputs are false paths
 (they are synchronized); the `HEX` and `LEDR` outputs are false paths (human-visible, static).
 The Timing Analyzer's unconstrained-paths report must be empty.
+
+## 13. RISC-V SoC (Milestone 2)
+
+The SoC runs the accelerator under firmware control: a PicoRV32 RISC-V core, on-chip RAM, an
+AXI4-Lite interconnect, the accelerator behind an AXI4-Lite slave, and a GPIO block for the board.
+Everything from §1 to §12 is unchanged: `accel_top` is instantiated as it is, and the Milestone 1
+DE10-Lite build (§12) remains a separate build.
+
+```mermaid
+flowchart LR
+  cpu["PicoRV32<br/>RV32IM, picorv32_axi"] -- "AXI4-Lite" --> xbar["Interconnect<br/>1 master, address decode"]
+  xbar --> ram["RAM<br/>64 KB, firmware + data"]
+  xbar --> aslv["Accelerator slave<br/>CSR window + buffer window"]
+  xbar --> gpio["GPIO<br/>HEX, LEDR, SW, KEY, mailbox"]
+  xbar --> dec["Decode error<br/>(DECERR)"]
+  aslv -- "CSR bus (§10.1)" --> acc["accel_top"]
+  aslv -- "memory port (§10.3)" --> acc
+```
+
+### 13.1 `soc_top`
+
+One clock (`clk`) and one synchronous active-high reset (`rst`) for the whole SoC.
+
+Parameters: `RAM_BYTES` (default 65536), `RAM_INIT` (firmware image for `$readmemh`, 32-bit words
+from address 0; empty = no preload), and `accel_top`'s init-file parameters (§11.1), passed
+through.
+
+| Signal | Dir | Width | Meaning |
+|---|---|---|---|
+| `i_sw` | in | 10 | switch levels, already synchronized (GPIO `SW`) |
+| `i_key_level` | in | 1 | debounced `KEY[0]`, 1 while pressed (GPIO `KEY`) |
+| `i_key_press` | in | 1 | one-cycle pulse per debounced press of `KEY[0]` (GPIO `KEY_EVT`) |
+| `o_ledr` | out | 9 | GPIO `LEDR` |
+| `o_hex_code` | out | 30 | GPIO `HEX`: six 5-bit display codes |
+| `o_mailbox` | out | 32 | GPIO `MAILBOX` |
+| `o_trap` | out | 1 | the CPU has trapped and halted (stays high until reset) |
+
+**Reset.** `rst` resets the CPU, the interconnect, every slave's state and every register in this
+section to its Reset value, and `accel_top` as in §10.2. It does not clear the RAM or the
+accelerator's buffers and descriptor table: they keep their preloaded or last-written contents.
+
+### 13.2 CPU
+
+`picorv32_axi` from PicoRV32 (`third_party/picorv32`, pinned commit), with these parameters:
+
+| Parameter | Value | Effect |
+|---|---|---|
+| `ENABLE_COUNTERS` / `ENABLE_COUNTERS64` | 1 / 0 | `rdcycle`, `rdinstret` (32-bit); `rdcycleh` and `rdinstreth` are illegal |
+| `ENABLE_FAST_MUL`, `ENABLE_DIV` | 1, 1 | RV32M: single-instruction `mul*`, multi-cycle `div*`/`rem*` |
+| `BARREL_SHIFTER` | 1 | shifts in one cycle regardless of the amount |
+| `COMPRESSED_ISA` | 0 | no RVC: the ISA is RV32IM (`-march=rv32im_zicsr -mabi=ilp32`) |
+| `ENABLE_IRQ` | 0 | no interrupts: firmware polls `STATUS` for `DONE` |
+| `CATCH_MISALIGN`, `CATCH_ILLINSN` | 1, 1 | a misaligned access, illegal instruction, `ecall` or `ebreak` halts the CPU with `o_trap = 1` |
+| `PROGADDR_RESET` | `0x0000_0000` | first instruction fetched after reset |
+| `STACKADDR` | `RAM_BYTES` | initial `sp` (top of RAM) |
+
+All other parameters keep PicoRV32's defaults. The CPU issues one bus transaction at a time.
+
+### 13.3 Bus and address map
+
+AXI4-Lite, 32-bit address and data, one master (the CPU). `AWPROT` and `ARPROT` are ignored.
+
+| Region | Base | Size | Slave |
+|---|---|---|---|
+| RAM | `0x0000_0000` | `RAM_BYTES` (64 KB) | RAM (§13.5) |
+| Accelerator CSRs | `0x1000_0000` | 4 KB | accelerator slave (§13.4) |
+| Accelerator buffers | `0x1040_0000` | 4 MB | accelerator slave (§13.4) |
+| GPIO | `0x2000_0000` | 4 KB | GPIO (§13.6) |
+
+- **Decode errors.** An access to any other address (including RAM addresses at or above
+  `RAM_BYTES`) gets a `DECERR` response; a write changes nothing, a read returns 0.
+- **Channel rules (every slave).** AW and W may arrive in either order or in the same cycle;
+  the write is performed once both have been accepted, then B is sent. `BVALID` and `RVALID` stay
+  high, with their response and data stable, until `BREADY` / `RREADY`. A slave serves one
+  transaction at a time. When a read and a write are outstanding together, their order is not
+  specified (the CPU never issues both).
+- **Interconnect.** At most one write and one read are outstanding through the interconnect;
+  it accepts no new address on a channel until that channel's response has been accepted.
+- **Write strobes.** The RAM honours `WSTRB` byte by byte. The accelerator slave and GPIO
+  accept only full-word writes: a write with `WSTRB ≠ 4'b1111` is not performed and gets
+  `SLVERR`. Reads always return the whole word; the CPU extracts bytes and halfwords itself.
+- **Responses.** Every other access gets `OKAY`. PicoRV32 ignores `BRESP` and `RRESP`, so
+  firmware must use only full-word accesses outside RAM; the system tests check that no error
+  response occurs.
+- **Latency** from address to response is not fixed (one cycle or more); masters use the
+  handshakes.
+
+### 13.4 Accelerator slave
+
+**CSR window** (`0x1000_0000 + a`, `a < 0x1000`). One AXI access is one CSR bus access (§10.1)
+at byte address `a[11:0]`: a write with `CSR_WDATA = WDATA`, or a read returning `o_csr_rdata`.
+The CSR map, reset values and the rule for unmapped offsets are those of §10.2.
+
+**Buffer window** (`0x1040_0000 + o`, `o < 0x40_0000`). The offset selects a memory-port word
+(§10.3) and one 32-bit half of it:
+
+| Offset bits | Field |
+|---|---|
+| `o[21:19]` | buffer select (`i_mem_sel`): 0 IMG, 1 ACT0, 2 ACT1, 3 WGT, 4 PARAM, 5–7 reserved |
+| `o[18:3]` | word address (`i_mem_addr`) |
+| `o[2]` | half: 0 low (bits [31:0]), 1 high (bits [63:32]) |
+| `o[1:0]` | ignored |
+
+So word `w` of buffer `s` starts at `0x1040_0000 + s · 0x8_0000 + w · 8`; IMG is at
+`0x1040_0000`, ACT0 `0x1048_0000`, ACT1 `0x1050_0000`, WGT `0x1058_0000`, PARAM `0x1060_0000`.
+
+- **Writes.** A write to a high half stores `WDATA` in the high-half staging register `WHI`
+  (reset 0; the address's select and word fields are ignored) and does no memory-port access.
+  A write to a low half performs one memory-port write of `{WHI, WDATA}` to the addressed word,
+  then clears `WHI` to 0. Byte buffers therefore take one low-half write per byte (`WDATA[7:0]`);
+  WGT and PARAM words take a high-half write and then a low-half write.
+- **Reads.** A read of either half performs one memory-port read of the addressed word and
+  returns that half (byte buffers: the byte zero-extended in the low half; the high half reads 0).
+  Reads do not change `WHI`.
+- **Reserved selects** behave as §10.3: writes are ignored, reads return 0, the response is `OKAY`.
+
+**During a run.** Only buffer-window accesses wait for a run to end:
+- **CSR accesses are never held for a run.** Every CSR read and write, `STATUS` included, is
+  answered while `BUSY` with the latency of §10.1, which does not depend on the run: `accel_top`
+  accepts every register in the cycle the request arrives, except that a descriptor-table read
+  (`DESC`, offsets `0x100` and above) can wait for the sequencer's 4-word descriptor fetch. The
+  slave adds no wait of its own that depends on `BUSY`. Firmware therefore polls `STATUS` for
+  `DONE` throughout a run.
+- **Buffer-window accesses wait.** One that arrives while `BUSY` is held until the run ends and
+  then completes; firmware must not touch the buffer window during a run. Because the slave serves one transaction at a time, a
+memory-port read is never pending when a CSR write arrives, so a `START` written through this
+slave while idle is never ignored for that reason (§9).
+
+### 13.5 RAM
+
+`RAM_BYTES` of single-cycle synchronous RAM (on the MAX 10: M9K blocks), preloaded from
+`RAM_INIT`. It holds the firmware's code, read-only data, the load image of its initialized data,
+the data itself, the stack and the heap. Byte, halfword and word writes are honoured through
+`WSTRB`; a write with `WSTRB = 0` changes nothing.
+
+### 13.6 GPIO
+
+32-bit registers at `0x2000_0000 + offset`. Unmapped offsets read 0 and ignore writes (`OKAY`).
+
+| Offset | Name | Access | Reset | Bits |
+|---|---|---|---|---|
+| 0x000 | `LEDR` | RW | 0 | [8:0] drive `LEDR[8:0]` (1 = on); `LEDR[9]` is the CPU trap (§13.7) |
+| 0x004 | `HEX` | RW | `0x2108_4210` (all blank) | [5d+4 : 5d] the display code of `HEX`d, d = 0…5 (0–15 hex digit, 16 blank, 17 dash, 18 `E`, others blank) |
+| 0x008 | `SW` | RO | — | [9:0] `i_sw` |
+| 0x00C | `KEY` | RO | — | [0] `i_key_level` (1 while `KEY[0]` is held) |
+| 0x010 | `KEY_EVT` | RW1C | 0 | [0] set by `i_key_press`; writing 1 clears it. A press in the same cycle as the clear keeps it set |
+| 0x014 | `MAILBOX` | RW | 0 | firmware-defined word, driven on `o_mailbox` (observed by simulation tests; not connected on the board) |
+
+### 13.7 Board top (`de10lite_soc_top`)
+
+A separate DE10-Lite build (`fpga/de10lite_soc/`) of `soc_top`. It reuses §12's board blocks
+and rules:
+- **Clock, reset, constraints:** as §12 (`MAX10_CLK1_50`; power-on reset OR'd with `KEY[1]`;
+  2-FF synchronizers on every `SW` and `KEY`; `KEY[0]` debounced, its debounced falling edge the
+  press pulse; inputs and display outputs are false paths; no unconstrained paths). Timing must
+  close at 50 MHz.
+- **RAM:** preloaded with the board demo firmware. The accelerator's IMG, WGT, PARAM and
+  descriptor table are preloaded as in §12 (the same 16 images).
+- **Outputs:** `HEX`d from `hex7seg` of its `HEX` code (segments active low, decimal points
+  off); `LEDR[8:0]` from GPIO `LEDR`; `LEDR[9]` = `o_trap`.
+
+### 13.8 Board demo firmware (informative)
+
+The behaviour the board test checks. It is defined by the demo firmware, not by the hardware,
+and this section is updated with the firmware.
+
+- After reset: every LED off, `HEX1` shows the label of image `SW[3:0]` (following the
+  switches), the other digits blank.
+- On a `KEY[0]` press: `LEDR[0]` lights while working. The firmware runs the accelerator on image
+  `SW[3:0]`, copies that image from IMG into RAM through the buffer window (not timed), runs the
+  same network in software on the copy, and compares the two sets of logits. Then `HEX0` shows
+  the predicted digit, `HEX1` the true label, and `HEX5..HEX2`:
+  - `SW[9] = 0`: the speedup, software cycles divided by the accelerator's end-to-end cycles
+    (§13.9), as a decimal integer (saturated at 9999);
+  - `SW[9] = 1`: `min(CYC_TOTAL >> 4, 0xFFFF)` in hex, as §12.
+
+  `LEDR[1]` lights when done; `LEDR[2]` lights if the accelerator reported `ERROR` or the two sets
+  of logits differ.
+- `LEDR[9]` lit means the CPU trapped (a firmware fault).
+
+### 13.9 Speedup measurement (definitions)
+
+All times are CPU cycles read with `rdcycle` at the same clock:
+- **software:** the software CNN on one image already in RAM, from the first instruction of
+  conv1 to the argmax result;
+- **accelerator, end to end:** writing `IMG_SEL` and `START`, polling `STATUS` until `DONE`, and
+  reading `RESULT` and the 10 logits (the image already in IMG);
+- **accelerator, with upload:** the same, plus writing the 784 image bytes through the buffer
+  window first;
+- **accelerator core:** `CYC_TOTAL` (§10.2), for reference.
+
+Speedup = software / end to end (and software / with upload, reported next to it).
