@@ -87,8 +87,8 @@ How and why: [docs/architecture.md](docs/architecture.md). Normative spec:
 
 The accelerator, unchanged, also runs as a peripheral of a small RISC-V system: C firmware on a
 PicoRV32 core uploads each image over AXI4-Lite, starts the accelerator, polls it and reads back
-the logits. The whole SoC, firmware included, is simulated on Verilator; the board build is
-timing-closed, not yet run on the board.
+the logits. Built and timing-closed for the DE10-Lite; verified in simulation (the whole SoC,
+firmware included, on Verilator).
 
 ```mermaid
 flowchart LR
