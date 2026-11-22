@@ -1298,3 +1298,33 @@ already visible to the test).
 
 **Reason.** The comparison is independent of the firmware, every bus error is caught where it
 happens, and long firmware runs stay practical in simulation.
+
+## D-047 — Mutation testing of the SoC blocks; SoC figures in the README (Phase 5)
+
+**Decision.**
+- **18 SoC mutants (m35–m52)**, each a single realistic bug in one block: the AXI4-Lite slave
+  front end (response not held, write started without W, same-cycle response lost, AR buffer
+  freed by B), the interconnect (W routed before its AW, select not latched, OKAY for unmapped
+  addresses, two reads outstanding), the RAM (partial write not merged, byte lanes reversed, read
+  answered a cycle early), GPIO (partial write performed, clear wins over a press), the
+  accelerator slave (WHI kept, halves swapped, CSR hole aliased, memory-port ready ignored) and
+  the SoC address map (accelerator region 4 MB instead of 8 MB). The killing test is the block's
+  unit test on Icarus where one exists, so a kill shows a functional difference rather than an
+  assertion; the accelerator slave's are killed by `test_accel_axil.py` (Verilator) and the
+  address map's by the firmware-driven `test_soc.py::test_soc[quick]`.
+- **Submodules in mutant worktrees.** A new git worktree has an empty `third_party/picorv32`;
+  `scripts/run_mutants.py` links the main checkout's submodule into it (mutants never patch
+  third-party code), so SoC-level killing tests can build the CPU.
+- **SoC FPGA figures in the README.** `scripts/check_fpga_numbers.py` checks figures inside an
+  HTML-comment region (`fpga-numbers: de10lite_soc`) against `fpga/de10lite_soc/reports/` and
+  everything else against the Milestone 1 build, as before; checkpoint 5 runs it, and also checks
+  that every speedup figure in the README is one of the two in `testbench/reports/soc_speedup.json`.
+
+**Alternatives.** Killing every SoC mutant with the full SoC test (slow: each run builds the CPU
+and firmware, and a CPU-level failure says less about which block broke); a second checker
+script for SoC numbers (duplicates the parsing); putting the SoC figures in a separate document
+(the README is where a reader looks).
+
+**Reason.** Same standard as Milestone 1: every new block has bugs injected that its tests must
+catch, and every public figure is tied to a committed report by a check that fails when they
+drift.
