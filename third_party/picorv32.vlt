@@ -1,0 +1,4 @@
+`verilator_config
+// PicoRV32 is third-party code used unmodified (docs/decisions.md D-039): the project's lint rules
+// (-Wall, naming) do not apply to it, so every Verilator warning is switched off for its file only.
+lint_off -file "*third_party/picorv32/*"

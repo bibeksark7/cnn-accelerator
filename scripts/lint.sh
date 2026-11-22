@@ -7,6 +7,7 @@
 #                          with the file's module as top: conflicting drivers between cells,
 #                          combinational loops and used-but-undriven wires fail (a plain
 #                          double `assign` alias is caught by Verilator's MULTIDRIVEN instead)
+# Third-party RTL (third_party/, D-039) is read so the SoC's instances resolve, never linted.
 # Usage: scripts/lint.sh [file.sv ...]   (default: all of rtl/**/*.sv)
 set -euo pipefail
 
@@ -33,6 +34,10 @@ for d in "${rtl_dirs[@]}"; do
 done
 waivers=()
 [ -f rtl/lint_waivers.vlt ] && waivers=(rtl/lint_waivers.vlt)
+# Third-party RTL instantiated by the SoC (D-039): read with every file so its modules resolve,
+# never linted itself; its Verilator warnings are off for its own file only.
+third_party=(third_party/picorv32/picorv32.v)
+third_party_vlt=(third_party/picorv32.vlt)
 
 fail=0
 for f in "${files[@]}"; do
@@ -41,15 +46,18 @@ for f in "${files[@]}"; do
   if ! out=$(python scripts/check_quartus_compat.py "$f" 2>&1); then
     echo "FAIL (quartus compat)"; echo "$out"; fail=1; continue
   fi
-  if ! out=$(verilator --lint-only -Wall --top-module "$top" "${lib[@]}" "${waivers[@]}" "$f" 2>&1); then
+  # --timescale: the simulation default (testbench/common/runner.py); PicoRV32 sets its own, and
+  # without a default Verilator flags every other module as missing one (TIMESCALEMOD).
+  if ! out=$(verilator --lint-only -Wall --timescale 1ns/1ps --top-module "$top" "${lib[@]}" "${waivers[@]}" \
+    "${third_party_vlt[@]}" "$f" "${third_party[@]}" 2>&1); then
     echo "FAIL (verilator)"; echo "$out"; fail=1; continue
   fi
-  out=$(iverilog -g2012 -Y .sv "${lib[@]}" -s "$top" -o /dev/null "$f" 2>&1) || true
+  out=$(iverilog -g2012 -Y .sv "${lib[@]}" -s "$top" -o /dev/null "$f" "${third_party[@]}" 2>&1) || true
   if [ -n "$out" ]; then
     echo "FAIL (iverilog output)"; echo "$out"; fail=1; continue
   fi
   # Read the file under test plus every RTL file (for submodules), without duplicates.
-  mapfile -t ys_src < <(printf '%s\n' "$f" "${all_rtl[@]}" | awk '!seen[$0]++')
+  mapfile -t ys_src < <(printf '%s\n' "$f" "${all_rtl[@]}" "${third_party[@]}" | awk '!seen[$0]++')
   if ! out=$(yosys -q -p "read_verilog -sv ${ys_src[*]}; hierarchy -check -top $top; proc; opt; memory -nomap; check -assert" 2>&1); then
     echo "FAIL (yosys check)"; echo "$out"; fail=1; continue
   fi
