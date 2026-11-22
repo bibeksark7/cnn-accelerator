@@ -436,6 +436,14 @@ for k, env in (("rtl_tree", "RTL"), ("firmware_tree", "FW"), ("picorv32_commit",
 if not prov.get("tree_clean"): problems.append("measured from a dirty tree")
 m = s["mean_cycles"]
 if abs(s["speedup_end_to_end"] - m["software"] / m["end_to_end"]) > 1e-9: problems.append("speedup inconsistent")
+# README: every speedup figure ("375.0×") is one of the report's two, and both are stated.
+import re
+readme = open("README.md").read()
+allowed = {f"{s['speedup_end_to_end']:.1f}", f"{s['speedup_with_upload']:.1f}"}
+quoted = re.findall(r"\b(\d+(?:\.\d+)?)\s?[×x](?=\W)", readme)
+quoted = [q for q in quoted if "." in q]  # "8×8" is the array size, not a speedup
+problems += [f"README speedup {q}x not in the report ({sorted(allowed)})" for q in quoted if q not in allowed]
+problems += [f"README does not state the {a}x speedup" for a in sorted(allowed) if a not in quoted]
 print(f"{s['images']} images: software {m['software']:,.0f} cycles, end to end {m['end_to_end']:,.0f}, "
       f"speedup {s['speedup_end_to_end']:.1f}x ({s['speedup_with_upload']:.1f}x with upload); "
       f"{r['firmware_compiler']}")
@@ -488,7 +496,10 @@ phase_5() {
   check "script and golden model tests (incl. the software CNN against the golden model)" check_pytest scripts_model 30 scripts/tests model/tests
   check "RTL lint (Quartus compat, Verilator -Wall, Icarus, Yosys check)" scripts/lint.sh
   check "ruff format + ruff check clean" check_ruff
-  check "speedup report (testbench/reports/soc_speedup.json) measured on HEAD's RTL, firmware and CPU" check_speedup_report
+  check "speedup report (testbench/reports/soc_speedup.json) measured on HEAD's RTL, firmware and CPU; README speedups match it" check_speedup_report
+  check "every mutant killed, accelerator and SoC blocks (scripts/run_mutants.py; committed report complete)" check_mutants
+  check "README and architecture FPGA numbers match the committed build reports (M1, and the marked SoC region)" python scripts/check_fpga_numbers.py
+  check "README badges match the committed coverage and mutation reports" python scripts/readme_badges.py --check
   check "SoC build: positive setup and hold slack at 50 MHz in every corner, no unconstrained paths, synchronizer MTBF, reports of HEAD's RTL and PicoRV32" check_fpga_build fpga/de10lite_soc de10lite_soc 12 "{\"rtl_tree\": \"$(git rev-parse HEAD:rtl)\", \"picorv32_commit\": \"$(git rev-parse HEAD:third_party/picorv32)\"}"
   check "SoC build: its RAM image is HEAD's demo firmware (rebuilt, same compiler, same sha256)" check_soc_firmware_image
   check "SoC build: the 64 KB RAM is block RAM (BUG-015)" check_soc_ram_in_block_ram

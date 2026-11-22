@@ -1,16 +1,19 @@
 # int8 CNN inference accelerator
 
 A verified int8 CNN accelerator in SystemVerilog: an 8×8 output-stationary systolic array runs
-an MNIST network bit-exactly against a Python golden model. Built and timing-closed at 50 MHz
-for the DE10-Lite (Intel MAX 10); verified in simulation.
+an MNIST network bit-exactly against a Python golden model. As a peripheral of a RISC-V SoC
+(PicoRV32, AXI4-Lite, C firmware) it gives a 375.0× speedup over the same integer CNN on
+PicoRV32. Built and timing-closed at 50 MHz for the DE10-Lite (Intel MAX 10); verified in
+simulation.
 
 **Stack:** SystemVerilog · cocotb + pytest · Icarus Verilog · Verilator · Yosys · SymbiYosys ·
-Python, NumPy, PyTorch · Quartus Prime Lite · GitHub Actions
+Python, NumPy, PyTorch · RISC-V (PicoRV32, GCC, C) · AXI4-Lite · Quartus Prime Lite ·
+GitHub Actions
 
 <!-- badges:start -->
 [![CI](https://github.com/bibeksark7/cnn-accelerator/actions/workflows/ci.yml/badge.svg)](https://github.com/bibeksark7/cnn-accelerator/actions/workflows/ci.yml)
 [![functional coverage](https://img.shields.io/badge/functional%20coverage-107%2F110%20bins%2C%203%20documented%20gaps-brightgreen)](testbench/reports/coverage.md)
-[![mutants killed](https://img.shields.io/badge/mutants%20killed-34%2F34-brightgreen)](testbench/reports/mutation.md)
+[![mutants killed](https://img.shields.io/badge/mutants%20killed-52%2F52-brightgreen)](testbench/reports/mutation.md)
 <!-- badges:end -->
 
 ## Results
@@ -23,7 +26,8 @@ Python, NumPy, PyTorch · Quartus Prime Lite · GitHub Actions
 | MAC array busy | 3,869 cycles per inference (8.2 %) | [counters](testbench/reports/perf_counters.md) |
 | Timing on MAX 10 (10M50DAF484C7G) | 65.85 MHz Fmax; worst slack at 50 MHz over all three corners: +4.813 ns setup, +0.095 ns hold | [Fmax](fpga/de10lite/reports/fmax.rpt), [timing per corner](fpga/de10lite/reports/timing_corners.rpt), [summary](fpga/de10lite/reports/de10lite.sta.summary) |
 | Resources (whole demo) | 8,322 LEs (17 %), 5,587 registers, 340,608 memory bits (20 %), 68 9-bit multipliers | [fit summary](fpga/de10lite/reports/de10lite.fit.summary) |
-| Mutation testing | 34 / 34 injected bugs caught | [mutation report](testbench/reports/mutation.md) |
+| SoC speedup | 375.0× end to end over the same integer CNN on PicoRV32 (217.9× counting the image upload) | [speedup report](testbench/reports/soc_speedup.md), [SoC](#risc-v-soc) |
+| Mutation testing | 52 / 52 injected bugs caught (accelerator and SoC) | [mutation report](testbench/reports/mutation.md) |
 | Functional coverage | every goal met or documented as a gap (bins sampled from the design) | [coverage report](testbench/reports/coverage.md) |
 
 The array is busy only 8.2 % of the cycles because its im2col operands are staged one byte per
@@ -79,6 +83,50 @@ flowchart LR
 How and why: [docs/architecture.md](docs/architecture.md). Normative spec:
 [docs/spec.md](docs/spec.md). Decisions and alternatives: [docs/decisions.md](docs/decisions.md).
 
+## RISC-V SoC
+
+The accelerator, unchanged, also runs as a peripheral of a small RISC-V system: C firmware on a
+PicoRV32 core uploads each image over AXI4-Lite, starts the accelerator, polls it and reads back
+the logits. The whole SoC, firmware included, is simulated on Verilator; the board build is
+timing-closed, not yet run on the board.
+
+```mermaid
+flowchart LR
+  cpu["PicoRV32<br/>RV32IM, C firmware"] --> xbar["AXI4-Lite interconnect<br/>1 master, 3 slaves, DECERR"]
+  xbar --> ram["RAM, 64 KB<br/>block RAM"]
+  xbar --> axil["Accelerator slave<br/>CSR window + buffer window"]
+  xbar --> gpio["GPIO<br/>LEDs, HEX, SW, KEY"]
+  axil --> acc["int8 CNN accelerator<br/>CSR bus + memory port"]
+```
+
+<!-- fpga-numbers: de10lite_soc -->
+| Metric | Value | Source |
+|---|---|---|
+| Speedup | 375.0× end to end over the same integer CNN on PicoRV32; 217.9× counting the 784-byte image upload (mean of 4 images) | [speedup report](testbench/reports/soc_speedup.md) |
+| Cycles per image | software CNN 17,987,202 (359.74 ms at 50 MHz); accelerator end to end 47,972 (0.959 ms), of which the accelerator core 47,259; image upload 34,591 | [speedup report](testbench/reports/soc_speedup.md) |
+| Correctness | firmware runs the 50 quick-subset images through the accelerator in CI: RESULT and every logit equal the golden model's; the software CNN's logits equal it too | [`test_soc.py`](testbench/system/test_soc.py) |
+| Timing on MAX 10 (10M50DAF484C7G) | 69.04 MHz Fmax; worst slack at 50 MHz over all three corners: +5.515 ns setup, +0.090 ns hold | [Fmax](fpga/de10lite_soc/reports/fmax.rpt), [timing per corner](fpga/de10lite_soc/reports/timing_corners.rpt), [summary](fpga/de10lite_soc/reports/de10lite_soc.sta.summary) |
+| Resources (whole SoC) | 12,475 LEs (25 %), 7,297 registers, 867,520 memory bits (52 %), 76 9-bit multipliers | [fit summary](fpga/de10lite_soc/reports/de10lite_soc.fit.summary) |
+<!-- fpga-numbers: end -->
+
+The speedup compares this SoC with and without its accelerator. PicoRV32 is a multi-cycle core
+without caches, and every instruction fetch is an AXI4-Lite access to the RAM (7.55 cycles per
+instruction on the software CNN), so a faster CPU would narrow the gap.
+
+- Own AXI4-Lite blocks: one slave front end shared by every slave, an interconnect that answers
+  unmapped addresses with DECERR, a RAM whose byte and halfword stores are read-modify-writes so
+  it maps to block RAM (BUG-015), and GPIO registers.
+- The accelerator's CSR bus and memory port are unchanged; a thin slave maps them to a CSR window
+  and a buffer window (64-bit buffer words as two 32-bit halves). CSR reads are never held during
+  a run, so firmware can poll STATUS while the accelerator works.
+- Every SoC test fails on any SLVERR or DECERR response and on a CPU trap (PicoRV32 ignores bus
+  responses, so an error would otherwise pass silently).
+- Firmware: `crt0.S`, linker script, driver API, the inference app, the software CNN (checked
+  against the golden model) and a board demo that shows the prediction and the measured speedup
+  on the HEX displays.
+
+Spec: [docs/spec.md §13](docs/spec.md).
+
 ## Verification
 
 - **Golden model** in NumPy (`model/golden.py`), every primitive checked against a naive
@@ -91,8 +139,13 @@ How and why: [docs/architecture.md](docs/architecture.md). Normative spec:
 - **Formal proofs** (SymbiYosys): the MAC cell, argmax (unbounded at reduced width, bounded at
   full width) and the post-processing pipeline's handshake, including progress properties.
 - **Functional coverage** sampled from DUT signals, with goals and written reasons for gaps.
-- **Mutation testing**: 34 single-bug patches (rounding, saturation, ReLU, skew, ping-pong,
-  handshakes, control path), each caught by its named test.
+- **Mutation testing**: 52 single-bug patches, each caught by its named test: in the accelerator
+  (rounding, saturation, ReLU, skew, ping-pong, handshakes, control path) and in the SoC (AXI4-Lite
+  handshakes and buffering, interconnect routing and DECERR, byte-write merging, register rules,
+  the address map).
+- **SoC tests**: unit tests for each AXI4-Lite block, the accelerator behind its AXI4-Lite slave
+  with every accelerator assertion bound, and firmware-driven runs of the whole SoC with AXI4-Lite
+  channel assertions on every slave.
 - **Full run**: all 10,000 MNIST test images, with the commit and RTL tree recorded in the report.
 
 Plan and status per feature: [docs/verification_plan.md](docs/verification_plan.md).
@@ -110,6 +163,12 @@ scripts/run_mutants.py                   # mutation testing
 scripts/coverage_report.py --run         # functional coverage report
 scripts/full_run.py                      # 10,000-image run (needs the MNIST cache in data/)
 fpga/de10lite/build_win.sh               # Quartus build (Windows Quartus Prime Lite from WSL)
+
+git submodule update --init              # PicoRV32, for the SoC
+make -C firmware APP=quick               # firmware (riscv64-unknown-elf-gcc, RV32IM)
+pytest testbench/system/test_soc.py      # the SoC running firmware (Verilator)
+scripts/soc_speedup.py --images 4        # speedup report (minutes of simulation per image)
+fpga/de10lite_soc/build_win.sh           # Quartus build of the SoC
 ```
 
 Training and quantization (`pip install -r requirements-dev.txt`): `python -m model.train`,
@@ -131,10 +190,12 @@ time into the git-ignored `data/` directory and is never committed.
 
 | Path | Contents |
 |---|---|
-| `rtl/` | `core/` array and GEMM engine, `addr/` address generators, `post/` post-processing, pool, argmax, `mem/` buffers and ports, `ctrl/` CSR, sequencer, counters, `top/` accelerator and FPGA tops |
+| `rtl/` | `core/` array and GEMM engine, `addr/` address generators, `post/` post-processing, pool, argmax, `mem/` buffers and ports, `ctrl/` CSR, sequencer, counters, `top/` accelerator and FPGA tops, `axi/` AXI4-Lite blocks, `soc/` SoC and its board top |
+| `firmware/` | `common/` startup, linker script, accelerator driver, software CNN; `apps/` smoke, quick subset, bench, board demo |
+| `third_party/` | PicoRV32 (git submodule) |
 | `testbench/` | `unit/`, `system/` (cocotb), `sva/` assertions, `formal/` proofs, `mutants/` bug patches, `reports/` |
 | `model/` | training, quantization, golden model, export; `artifacts/` committed weights and test vectors; `reports/` |
-| `fpga/de10lite/` | build scripts, pins, constraints, build reports |
+| `fpga/de10lite/`, `fpga/de10lite_soc/` | build scripts, pins, constraints, build reports (accelerator demo, SoC) |
 | `scripts/` | lint, checkpoints, mutation runner, coverage and full-run reports |
 | `docs/` | spec, architecture, verification plan, decisions, bug log |
 

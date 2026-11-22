@@ -1,6 +1,7 @@
 """Tests for scripts/check_fpga_numbers.py: the committed docs match the committed reports; a stale
 Fmax, slack or resource figure, a slack in an unrecognized form, or a missing figure fails; a
-changed report fails the unchanged docs."""
+changed report fails the unchanged docs; figures in a marked region are checked against that
+region's build (the SoC), and malformed regions fail."""
 
 from __future__ import annotations
 
@@ -18,6 +19,7 @@ sys.modules["fn"] = fn
 _spec.loader.exec_module(fn)
 
 REPORTS = ROOT / "fpga" / "de10lite" / "reports"
+SOC_REPORTS = ROOT / "fpga" / "de10lite_soc" / "reports"
 WANT = {
     "fmax": "65.85",
     "setup": "+4.813",
@@ -43,10 +45,19 @@ def problems(text: str) -> list[str]:
     return fn.check_text("doc.md", text, WANT)
 
 
+def _want_for(build: str) -> dict[str, str]:
+    return fn.report_values(REPORTS if not build else ROOT / "fpga" / build / "reports")
+
+
 def test_committed_docs_match_committed_reports() -> None:
-    want = fn.report_values(REPORTS)
     for doc in fn.DOCS:
-        assert fn.check_text(doc.name, doc.read_text(), want) == []
+        assert fn.check_document(doc.name, doc.read_text(), _want_for) == []
+
+
+def test_readme_states_soc_figures() -> None:
+    spans, problems = fn.split_regions((ROOT / "README.md").read_text())
+    assert problems == []
+    assert "de10lite_soc" in spans
 
 
 def test_report_values() -> None:
@@ -103,3 +114,81 @@ def test_changed_report_fails_unchanged_docs(tmp_path: Path) -> None:
     found = fn.check_text("README.md", (ROOT / "README.md").read_text(), want)
     assert any(": fmax 65.85" in p for p in found)
     assert any(": hold +0.095" in p for p in found)
+
+
+SOC_WANT = {
+    "fmax": "69.04",
+    "setup": "+5.515",
+    "hold": "+0.090",
+    "les": "12475",
+    "les_pct": "25",
+    "registers": "7297",
+    "mem_bits": "867520",
+    "mem_pct": "52",
+    "mults": "76",
+    "mults_total": "288",
+}
+SOC_GOOD = (
+    "<!-- fpga-numbers: de10lite_soc -->\n"
+    "| SoC timing | 69.04 MHz Fmax; +5.515 ns setup, +0.090 ns hold |\n"
+    "| SoC resources | 12,475 LEs (25 %), 76 9-bit multipliers |\n"
+    "<!-- fpga-numbers: end -->\n"
+)
+
+
+def doc_problems(text: str) -> list[str]:
+    return fn.check_document("doc.md", text, lambda b: SOC_WANT if b == "de10lite_soc" else WANT)
+
+
+def test_soc_report_values() -> None:
+    assert fn.report_values(SOC_REPORTS) == SOC_WANT
+
+
+def test_region_checked_against_its_build() -> None:
+    assert doc_problems(GOOD + SOC_GOOD) == []
+    assert doc_problems(SOC_GOOD + GOOD) == []
+
+
+def test_m1_figure_in_soc_region_fails() -> None:
+    found = doc_problems(GOOD + SOC_GOOD.replace("12,475 LEs", "8,322 LEs"))
+    assert any("[de10lite_soc]" in p and ": les 8,322" in p for p in found), found
+
+
+def test_soc_figure_outside_region_fails() -> None:
+    found = doc_problems(GOOD + "The SoC runs at 69.04 MHz.\n" + SOC_GOOD)
+    assert any(p.startswith("doc.md:") and ": fmax 69.04" in p for p in found), found
+
+
+def test_line_numbers_are_the_documents() -> None:
+    text = GOOD + SOC_GOOD.replace("+0.090 ns hold", "+0.247 ns hold")
+    found = doc_problems(text)
+    line = text.splitlines().index(next(ln for ln in text.splitlines() if "+0.247" in ln)) + 1
+    assert found == [f"doc.md [de10lite_soc]:{line}: hold +0.247 != report +0.090"], found
+
+
+def test_region_missing_figure_fails() -> None:
+    found = doc_problems(GOOD + SOC_GOOD.replace("69.04 MHz Fmax", "an Fmax above 50 MHz"))
+    assert "doc.md [de10lite_soc]: states no fmax figure" in found, found
+
+
+@pytest.mark.parametrize(
+    ("text", "msg"),
+    [
+        (GOOD + SOC_GOOD.replace("<!-- fpga-numbers: end -->\n", ""), "is not closed"),
+        (GOOD + "<!-- fpga-numbers: end -->\n" + SOC_GOOD, "'end' marker outside a region"),
+        (
+            GOOD + SOC_GOOD.replace("| SoC resources", "<!-- fpga-numbers: other -->\n| x"),
+            "inside region",
+        ),
+    ],
+)
+def test_malformed_region_fails(text: str, msg: str) -> None:
+    assert any(msg in p for p in doc_problems(text))
+
+
+def test_unknown_build_fails() -> None:
+    def want_for(build: str) -> dict[str, str]:
+        return fn.report_values(ROOT / "fpga" / build / "reports") if build else WANT
+
+    found = fn.check_document("doc.md", GOOD + SOC_GOOD.replace("de10lite_soc", "nosuch"), want_for)
+    assert any("no reports for build 'nosuch'" in p for p in found), found
