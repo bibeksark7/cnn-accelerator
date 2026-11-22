@@ -255,3 +255,58 @@ requantization, nested-loop convolution, pack/unpack round-trips) in `model/test
   logits while the quick subset still passes; the coverage bin for real-data low saturation is
   now met instead of a documented gap.
 
+
+## Phase 5 — RISC-V SoC
+
+The AXI4-Lite blocks, the accelerator slave and the SoC passed their tests without an RTL logic
+defect being found. Tool-compatibility fixes made while writing them (an enum ternary that Icarus
+needs cast, constant part-selects inside `always_comb` that Icarus does not support, `return` in
+a function that Yosys rejects, names that clash with Verilator's built-in `mailbox` class) were
+caught by `scripts/lint.sh` before any commit and are not listed.
+
+## BUG-015 — The SoC RAM was not inferred as block RAM (Phase 5)
+
+- **Symptom.** The first Quartus compile of the SoC stayed in Analysis & Synthesis many times
+  longer than the whole Milestone 1 synthesis, with `quartus_map`'s memory growing steadily. A
+  synthesis-only probe of the RAM module alone did not finish either; both were stopped.
+- **How found.** The trial SoC build in `fpga/de10lite_soc/`, then a Quartus probe of the RAM
+  primitive on its own (`scripts/quartus_probe.sh`).
+- **Root cause.** The first RAM (`sram_be`) held packed byte lanes (`logic [3:0][7:0] mem[]`) and
+  wrote them in a `for` loop under per-byte enables, with a read enable. Quartus Prime Lite 22.1
+  did not recognise that as a byte-enabled block RAM and started building 64 KB (524,288 bits)
+  out of registers. Verilator, Icarus and Yosys simulate and parse it correctly, so lint and every
+  simulation passed.
+- **Fix.** `axil_ram` now uses a 32-bit `sram_1r1w`, the template every accelerator buffer
+  already maps to M9K, and performs a write with only some strobes set as a read-modify-write
+  (read the word, merge the strobed bytes, write one cycle later). A probe then maps the 64 KB RAM
+  to block RAM, and the SoC build completes (`fpga/de10lite_soc/reports/`). D-042 records the
+  change.
+- **Regression test.** `test_axil_ram.py` (every WSTRB value, against a model) covers the
+  read-modify-write; checkpoint 5 requires the SoC build to complete and close timing.
+
+## BUG-016 — `make APP=quick` succeeded without building the firmware (Phase 5)
+
+- **Symptom.** `make APP=quick` printed `'…/images.c' is up to date.` and exited 0; no ELF or
+  RAM image was produced.
+- **How found.** The first build of the quick-subset app by hand.
+- **Root cause.** The Makefile includes the app's `app.mk` before its own `all:` rule, and GNU make
+  takes the first rule it reads as the default goal: the app's generator rule for `images.c`.
+- **Fix.** `.DEFAULT_GOAL := all` in `firmware/Makefile`.
+- **Regression test.** `testbench/common/firmware.py::build` now fails unless the ELF, the RAM
+  image and `toolchain.txt` exist after `make`, so every SoC test would catch a build that does
+  nothing.
+
+## BUG-017 — A test compared against stale data and corrupted the next test's weights (Phase 5)
+
+- **Symptom.** In `test_accel_axil.py`, `test_buffer_window` failed with "a high-half write
+  touched a buffer", and the next test in the same simulation, `test_poll_during_run`, then
+  failed with every logit wrong.
+- **How found.** The first run of the accelerator-slave system test.
+- **Root cause.** Test bug, twice over. The check compared WGT word 7 with its init-file value,
+  but the random writes just before it could have written word 7. Because the failure came before
+  the test restored WGT and PARAM, the network weights stayed overwritten for the following test,
+  which runs in the same simulation.
+- **Fix.** The test keeps a model of every word it writes and compares with the model; it checks
+  the untouched word at an index it has modelled.
+- **Regression test.** The corrected test itself. Lesson recorded for later tests: a test that
+  changes shared buffers checks against a model of its own writes, never against the init files.

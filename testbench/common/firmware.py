@@ -52,4 +52,9 @@ def build(app: str, extra: dict[str, str] | None = None) -> Firmware:
     proc = subprocess.run(args, capture_output=True, text=True)
     if proc.returncode != 0:
         raise RuntimeError(f"firmware build failed for {app}:\n{proc.stdout}\n{proc.stderr}")
-    return Firmware(app, out)
+    fw = Firmware(app, out)
+    # A make run can succeed without building the image (BUG-016): require every output.
+    for f in (fw.elf, fw.hex, out / "toolchain.txt"):
+        if not f.exists():
+            raise RuntimeError(f"firmware build for {app} did not produce {f.name}:\n{proc.stdout}")
+    return fw
