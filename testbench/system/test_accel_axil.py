@@ -16,8 +16,11 @@ AXI4-Lite port assertions bound (the slave is accel_top's CSR and memory-port ma
                          counters, RESULT, IMG_SEL, a LOGIT, a LAYER_CYC and a DESC word) and an
                          IMG_SEL write keep completing within POLL_BOUND cycles (never held for
                          the run), the polls see BUSY, and the run lasts far longer than the bound
-  test_buffer_waits      a buffer-window read and a write issued during a run complete only after
-                         BUSY falls, the write is then performed, and both get OKAY
+  test_buffer_waits      a buffer-window read and a low-half write issued during a run complete
+                         only after BUSY falls, the write is then performed, and both get OKAY;
+                         a high-half (WHI) write during a run completes within POLL_BOUND cycles
+                         while BUSY is still high, and the next low-half write after the run
+                         commits it (WGT word {WHI, low})
 """
 
 from __future__ import annotations
@@ -270,6 +273,25 @@ async def test_buffer_waits(dut):
     await m.write_ok(buf_offset(ab.SEL_IMG, 15 * IMG_SIZE + 3, 0), 0x77)
     assert len(falls) == n + 1, "the buffer write completed before the run ended"
     assert await m.read_ok(buf_offset(ab.SEL_IMG, 15 * IMG_SIZE + 3, 0)) == 0x77
+    # A high-half write during a run: answered at once (no memory-port access), and committed
+    # by the next low-half write.
+    await RisingEdge(dut.clk)
+    await FallingEdge(dut.clk)
+    await bus.csr_write(ab.CTRL, 1)
+    await ReadOnly()
+    assert int(dut.o_busy.value) == 1
+    n = len(falls)
+    word, hi, lo = 5, 0x89AB_CDEF, 0x0123_4567
+    t0 = get_sim_time(unit="ns")
+    await m.write_ok(buf_offset(ab.SEL_WGT, word, 1), hi)
+    waited = round((get_sim_time(unit="ns") - t0) / CLK_PERIOD_NS)
+    await ReadOnly()
+    assert len(falls) == n and int(dut.o_busy.value) == 1, "WHI write held until the run ended"
+    assert waited <= POLL_BOUND, f"WHI write took {waited} cycles during a run"
+    await m.write_ok(buf_offset(ab.SEL_WGT, word, 0), lo)  # waits for the run, then commits
+    assert len(falls) == n + 1
+    assert await bus.buf_read(ab.SEL_WGT, word) == hi << 32 | lo
+    await bus.buf_write(ab.SEL_WGT, word, wgt[word])  # restore the network's weights
 
 
 def test_accel_axil() -> None:

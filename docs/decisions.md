@@ -1157,10 +1157,12 @@ every AW/W arrival order, backpressure on every channel), and its mutants are ki
   and the slave has no wait of its own on `BUSY`. The SoC tests read `STATUS` (and other
   registers) throughout a run and require each read to complete within a bound far below the run
   length, so a slave that held register reads until `DONE` fails.
-- **Buffer accesses while busy.** A buffer-window access during a run waits for the run to end
-  instead of being answered with `SLVERR`. Every run terminates (§9: `last`, an error, or
-  `DESC_DEPTH` layers), and the CPU would ignore an error response anyway, so waiting is the only
-  choice that never loses or invents data. Firmware avoids the case by polling `STATUS` first.
+- **Buffer accesses while busy.** A buffer-window access that uses the memory port (a read, or a
+  low-half write) during a run waits for the run to end instead of being answered with `SLVERR`.
+  Every run terminates (§9: `last`, an error, or `DESC_DEPTH` layers), and the CPU would ignore
+  an error response anyway, so waiting is the only choice that never loses or invents data.
+  Firmware avoids the case by polling `STATUS` first. A high-half write only loads `WHI` and
+  needs no memory port, so it is answered at once even during a run.
 - **One transaction at a time** inside the slave, so a memory-port read is never pending when a
   CSR write arrives: a `START` from firmware is never dropped for that reason (§9).
 

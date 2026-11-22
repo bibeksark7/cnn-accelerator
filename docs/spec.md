@@ -640,7 +640,7 @@ So word `w` of buffer `s` starts at `0x1040_0000 + s · 0x8_0000 + w · 8`; IMG 
   Reads do not change `WHI`.
 - **Reserved selects** behave as §10.3: writes are ignored, reads return 0, the response is `OKAY`.
 
-**During a run.** Only buffer-window accesses wait for a run to end:
+**During a run.** Only accesses that use the memory port wait for a run to end:
 - **CSR accesses are never held for a run.** Every CSR read and write, `STATUS` included, is
   answered while `BUSY` with the latency of §10.1, which does not depend on the run: `accel_top`
   accepts every register in the cycle the request arrives, except that a descriptor-table read
@@ -649,10 +649,15 @@ So word `w` of buffer `s` starts at `0x1040_0000 + s · 0x8_0000 + w · 8`; IMG 
   `DONE` throughout a run. (The slave serves one transaction at a time, so a CSR access that
   arrives while the slave is holding a buffer-window access waits behind it. The CPU never
   issues an access before its previous one has completed, so this does not arise in the SoC.)
-- **Buffer-window accesses wait.** One that arrives while `BUSY` is held until the run ends and
-  then completes; firmware must not touch the buffer window during a run. Because the slave serves one transaction at a time, a
-memory-port read is never pending when a CSR write arrives, so a `START` written through this
-slave while idle is never ignored for that reason (§9).
+- **High-half (`WHI`) writes are answered at once,** during a run as at any other time: they
+  only load the staging register and do no memory-port access.
+- **Memory-port accesses wait.** A buffer-window read, or a low-half write, that arrives while
+  `BUSY` is held until the run ends and then completes. Firmware does not use the buffer window
+  during a run.
+
+Because the slave serves one transaction at a time, a memory-port read is never pending when a
+CSR write arrives, so a `START` written through this slave while idle is never ignored for that
+reason (§9).
 
 ### 13.5 RAM
 

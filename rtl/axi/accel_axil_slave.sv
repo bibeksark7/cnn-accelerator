@@ -15,8 +15,9 @@
 //
 // During a run: CSR accesses pass straight to accel_top, which answers them with the §10.1
 // latency (registers at once; a descriptor read can wait for the sequencer's descriptor fetch);
-// this module adds no wait that depends on BUSY. A buffer-window access waits for o_mem_ready,
-// which accel_top holds low while BUSY, so it completes after the run.
+// this module adds no wait that depends on BUSY. A WHI write is answered at once. A buffer-window
+// read or low-half write waits for i_mem_ready, which accel_top holds low while BUSY, so it
+// completes after the run.
 //
 // Ports:
 //   clk, rst                                      - clock, synchronous active-high reset
