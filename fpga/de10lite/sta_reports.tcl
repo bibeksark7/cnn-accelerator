@@ -1,5 +1,7 @@
 # Timing reports for the DE10-Lite demo (run by build_win.sh after build.tcl):
-#   quartus_sta -t sta_reports.tcl
+#   quartus_sta -t sta_reports.tcl [project]
+# The project defaults to de10lite; the SoC build (fpga/de10lite_soc/build_win.sh) passes
+# de10lite_soc. Both have the one clock clk50.
 #
 # Every operating condition (corner) the device offers is analysed in turn:
 #   timing_corners.rpt          worst setup and hold slack per corner (one line each)
@@ -11,7 +13,8 @@
 # and once:
 #   fmax.rpt                    Fmax (slow corner, the default)
 #   unconstrained_paths.rpt     must list no unconstrained paths
-project_open de10lite
+set proj [expr {[llength $quartus(args)] ? [lindex $quartus(args) 0] : "de10lite"}]
+project_open $proj
 create_timing_netlist
 read_sdc
 update_timing_netlist
