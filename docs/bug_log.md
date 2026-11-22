@@ -310,3 +310,18 @@ caught by `scripts/lint.sh` before any commit and are not listed.
   the untouched word at an index it has modelled.
 - **Regression test.** The corrected test itself. Lesson recorded for later tests: a test that
   changes shared buffers checks against a model of its own writes, never against the init files.
+
+## BUG-018 — A firmware rebuild with another image count kept the old images (Phase 5)
+
+- **Symptom.** `scripts/soc_speedup.py --images 4` timed out: the bench firmware reported done
+  after 1 image (`MAILBOX` = `0x600D_0001`) while the test waited for 4.
+- **How found.** The first four-image speedup run, after one-image bench runs in the same build
+  directory.
+- **Root cause.** `images.c` depended only on the generator and the subset file, not on
+  `BENCH_IMAGES`, so make considered the one-image `images.c` up to date. The test then waited for
+  a done code that could never come instead of failing at once.
+- **Fix.** `firmware/apps/bench/app.mk` writes `BENCH_IMAGES` to a stamp file that changes only
+  when the count does, and `images.c` depends on it. The bench test now accepts any done code and
+  then fails with "the firmware ran N images, the test expects …" if the count differs.
+- **Regression test.** The bench test's image-count check; checked by hand: a rebuild with 4 then 1
+  images regenerates `images.c` each time, and a rebuild with the same count does not.

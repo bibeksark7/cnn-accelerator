@@ -102,9 +102,10 @@ async def start(dut) -> BusMonitor:
     return BusMonitor(dut)
 
 
-async def wait_mailbox(dut, mon: BusMonitor, done: int, guard: int, what: str) -> int:
-    """Wait until MAILBOX == done (woken only by MAILBOX changes); fails on a FAIL code. Bus
-    error responses and traps fail the run through soc_bus_sva. Returns the cycles waited."""
+async def wait_mailbox(dut, mon: BusMonitor | None, done: int | None, guard: int, what: str) -> int:
+    """Wait until MAILBOX == done, or any done code (0x600D_xxxx) if done is None (woken only by
+    MAILBOX changes); fails on a FAIL code. Bus error responses and traps fail the run through
+    soc_bus_sva. Returns the cycles waited."""
     del mon
     t0 = get_sim_time(unit="ns")
     deadline = t0 + guard * CLK_PERIOD_NS
@@ -113,7 +114,7 @@ async def wait_mailbox(dut, mon: BusMonitor, done: int, guard: int, what: str) -
         await ReadOnly()
         mb = int(dut.o_mailbox.value)
         assert mb & MB_FAIL_MASK != MB_FAIL, f"firmware check failed ({what}): {mb:#010x}"
-        if mb == done:
+        if mb == done or (done is None and mb & 0xFFFF_0000 == MB_PASS):
             return round((get_sim_time(unit="ns") - t0) / CLK_PERIOD_NS)
         left = deadline - get_sim_time(unit="ns")
         if left <= 0:
@@ -209,8 +210,10 @@ async def bench(dut):
     mon = await start(dut)
     qs = quick_subset()
     n = BENCH_IMAGES
-    cycles = await wait_mailbox(dut, mon, MB_PASS | n, 200_000_000, "bench")
+    cycles = await wait_mailbox(dut, mon, None, 200_000_000, "bench")
     base = symbols()["results"]
+    count = ram_words(dut, base, 2)[1]
+    assert count == n, f"the firmware ran {count} images, the test expects BENCH_IMAGES = {n}"
     assert ram_words(dut, base, 2) == [MB_PASS | n, n]
     rows = []
     for i in range(n):
