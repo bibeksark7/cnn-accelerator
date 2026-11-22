@@ -64,4 +64,11 @@ static inline uint32_t rdcycle(void) {
   return c;
 }
 
+/* Instructions retired (32 bits, spec 13.2). */
+static inline uint32_t rdinstret(void) {
+  uint32_t n;
+  __asm__ volatile("rdinstret %0" : "=r"(n));
+  return n;
+}
+
 #endif

@@ -7,6 +7,8 @@
 # Generated sources (weights, images) are written to OUT by the app's generator rule, never into
 # the source tree.
 
+.DEFAULT_GOAL := all
+
 APP        ?= smoke
 OUT        ?= ../sim_build/firmware/$(APP)
 RAM_BYTES  ?= 65536
