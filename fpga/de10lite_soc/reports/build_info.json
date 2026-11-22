@@ -1,8 +1,8 @@
 {
   "script": "fpga/de10lite_soc/build_win.sh",
-  "commit": "9a763c7a19de15ebc86640f149b9762c19817f5f",
-  "rtl_tree": "df1c43495d928c09f99ab7871eada0e943df9408",
-  "firmware_tree": "52483aa06faef6ec00c7fed5d91b8a88aebbd15f",
+  "commit": "25267bebca7d96f13c368aa222628ab1ddfb93a8",
+  "rtl_tree": "848fb3db43b22fa5a1932c92a26d1433537256f3",
+  "firmware_tree": "ddec2a8d13ba27679b5a6d337ffe72715923a748",
   "picorv32_commit": "ef203c2b0a3fb793280f5114941416c425c5b461",
   "tree_clean": true,
   "init_files_sha256": {
@@ -11,7 +11,7 @@
     "param.hex": "e317a2d710e81970d1c84cc6c05f04432c6b4596e0edd6875cfeb73734678693",
     "desc.hex": "ce7ef2a01bb91ca783132d848f192e9404b92e23ecc7aae54fb9cf3d8db5a551"
   },
-  "firmware_hex_sha256": "5456f93b3cce35cb70ae3aff503bfde2875c056bab4bfde978008f3b6ee29e17",
+  "firmware_hex_sha256": "ad4c09db959245e3f1b91add02430b219e2f6618e8c8c6fd1af12cf1c5e3e90d",
   "firmware_compiler": "riscv64-unknown-elf-gcc (14.2.0+19) 14.2.0",
   "quartus": "Version 22.1std.0 Build 915 10/25/2022 SC Lite Edition"
 }
