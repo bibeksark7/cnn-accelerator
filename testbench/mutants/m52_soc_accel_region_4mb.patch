@@ -1,0 +1,11 @@
+--- a/rtl/soc/soc_top.sv
++++ b/rtl/soc/soc_top.sv
+@@ -50,7 +50,7 @@
+   localparam int RAM_AW = $clog2(RAM_BYTES);
+   localparam logic [31:0] RAM_MASK = ~(32'(RAM_BYTES) - 32'd1);
+   localparam logic [NS*32-1:0] BASE = {32'h2000_0000, 32'h1000_0000, 32'h0000_0000};
+-  localparam logic [NS*32-1:0] MASK = {32'hFFFF_F000, 32'hFF80_0000, RAM_MASK};
++  localparam logic [NS*32-1:0] MASK = {32'hFFFF_F000, 32'hFFC0_0000, RAM_MASK};
+ 
+   // ---------------------------------------------------------------- CPU
+   logic cpu_awvalid, cpu_awready, cpu_wvalid, cpu_wready, cpu_bvalid, cpu_bready;

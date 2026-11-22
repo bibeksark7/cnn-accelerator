@@ -1,0 +1,11 @@
+--- a/rtl/axi/axil_interconnect.sv
++++ b/rtl/axi/axil_interconnect.sv
+@@ -99,7 +99,7 @@
+   logic aw_hs, w_hs, b_hs, aw_ready_sel, w_ready_sel, b_valid_sel;
+   logic [1:0] b_resp_sel;
+ 
+-  assign wsel = aw_done_q ? wsel_q : aw_dec;
++  assign wsel = aw_dec;
+ 
+   always_comb begin
+     aw_ready_sel = 1'b1;  // the decode-error responder accepts at once

@@ -1,0 +1,11 @@
+--- a/rtl/axi/axil_slave_port.sv
++++ b/rtl/axi/axil_slave_port.sv
+@@ -130,7 +130,7 @@
+         aw_full_q <= aw_full_d;
+         w_full_q  <= w_full_d;
+       end
+-      ar_full_q <= r_hs ? 1'b0 : ar_full_d;
++      ar_full_q <= b_hs ? 1'b0 : ar_full_d;
+     end
+   end
+ 

@@ -1,0 +1,11 @@
+--- a/rtl/axi/axil_interconnect.sv
++++ b/rtl/axi/axil_interconnect.sv
+@@ -79,7 +79,7 @@
+ 
+   localparam int SEL_W = $clog2(NS + 1);
+   localparam logic [SEL_W-1:0] SEL_NONE = SEL_W'(NS);  // decode error
+-  localparam logic [1:0] RESP_DECERR = 2'b11;
++  localparam logic [1:0] RESP_DECERR = 2'b00;
+ 
+   // Slave index owning AWADDR / ARADDR, or SEL_NONE (the last matching region wins; regions
+   // do not overlap).

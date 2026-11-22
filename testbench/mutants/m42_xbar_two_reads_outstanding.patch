@@ -1,0 +1,11 @@
+--- a/rtl/axi/axil_interconnect.sv
++++ b/rtl/axi/axil_interconnect.sv
+@@ -181,7 +181,7 @@
+     end
+   end
+ 
+-  assign o_s_arready = !ar_done_q && ar_ready_sel;
++  assign o_s_arready = ar_ready_sel;
+   assign o_s_rvalid  = ar_done_q && r_valid_sel;
+   assign o_s_rdata   = r_data_sel;
+   assign o_s_rresp   = r_resp_sel;

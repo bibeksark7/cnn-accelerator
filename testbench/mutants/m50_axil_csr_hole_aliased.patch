@@ -1,0 +1,11 @@
+--- a/rtl/axi/accel_axil_slave.sv
++++ b/rtl/axi/accel_axil_slave.sv
+@@ -107,7 +107,7 @@
+   // ---------------------------------------------------------------- request decode
+   logic is_buf, is_hole, partial, half;
+   assign is_buf  = req_addr[22];
+-  assign is_hole = !req_addr[22] && req_addr[21:12] != '0;
++  assign is_hole = 1'b0;
+   assign partial = req_we && req_wstrb != 4'b1111;
+   assign half    = req_addr[2];
+ 

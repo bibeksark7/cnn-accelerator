@@ -1,0 +1,11 @@
+--- a/rtl/axi/axil_slave_port.sv
++++ b/rtl/axi/axil_slave_port.sv
+@@ -89,7 +89,7 @@
+   assign r_hs      = o_rvalid && i_rready;
+   assign req_hs    = o_req_valid && i_req_ready;
+   // A response counts when it arrives with the acceptance or while waiting for it.
+-  assign rsp_take  = i_rsp_valid && (req_hs || state_q == S_WAIT);
++  assign rsp_take  = i_rsp_valid && state_q == S_WAIT;
+ 
+   // Buffer occupancy after this cycle's AXI handshakes (used to start a transaction without an
+   // extra idle cycle).

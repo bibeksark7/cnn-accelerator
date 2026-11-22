@@ -1,0 +1,10 @@
+--- a/rtl/axi/axil_ram.sv
++++ b/rtl/axi/axil_ram.sv
+@@ -143,6 +143,6 @@
+ 
+   // A partial write waits one cycle for its read; everything else is accepted at once.
+   assign req_ready = !(part_wr && !rmw_q);
+-  assign rsp_valid = full_wr || no_wr || (part_wr && rmw_q) || rd_pend_q;
++  assign rsp_valid = full_wr || no_wr || (part_wr && rmw_q) || rd;
+ 
+ endmodule

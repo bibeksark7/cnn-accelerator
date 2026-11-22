@@ -1,0 +1,11 @@
+--- a/rtl/axi/axil_ram.sv
++++ b/rtl/axi/axil_ram.sv
+@@ -107,7 +107,7 @@
+   logic [31:0] merged;
+   always_comb begin
+     for (int b = 0; b < 4; b++) begin
+-      merged[8*b+:8] = req_wstrb[b] ? req_wdata[8*b+:8] : rdata[8*b+:8];
++      merged[8*b+:8] = req_wstrb[3-b] ? req_wdata[8*b+:8] : rdata[8*b+:8];
+     end
+   end
+ 

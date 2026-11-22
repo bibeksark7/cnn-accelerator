@@ -1,0 +1,13 @@
+--- a/rtl/axi/accel_axil_slave.sv
++++ b/rtl/axi/accel_axil_slave.sv
+@@ -152,8 +152,8 @@
+       end else if (do_whi) begin
+         rsp_valid = 1'b1;
+       end else begin  // do_mem
+-        req_ready = i_mem_ready;
+-        rsp_valid = i_mem_ready && req_we;  // a read is answered when its data returns
++        req_ready = 1'b1;
++        rsp_valid = req_we;  // a read is answered when its data returns
+       end
+     end
+     if (rd_wait_q && i_mem_rvalid) begin

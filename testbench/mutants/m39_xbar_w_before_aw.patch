@@ -1,0 +1,11 @@
+--- a/rtl/axi/axil_interconnect.sv
++++ b/rtl/axi/axil_interconnect.sv
+@@ -118,7 +118,7 @@
+ 
+   logic aw_open, w_open, b_open;
+   assign aw_open     = !aw_done_q;
+-  assign w_open      = !w_done_q && (aw_done_q || i_s_awvalid);
++  assign w_open      = !w_done_q;
+   assign b_open      = aw_done_q && w_done_q;
+ 
+   assign o_s_awready = aw_open && aw_ready_sel;

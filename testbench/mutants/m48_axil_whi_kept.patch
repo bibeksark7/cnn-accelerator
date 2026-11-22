@@ -1,0 +1,10 @@
+--- a/rtl/axi/accel_axil_slave.sv
++++ b/rtl/axi/accel_axil_slave.sv
+@@ -168,7 +168,6 @@
+       rd_wait_q <= 1'b0;
+     end else begin
+       if (do_whi) whi_q <= req_wdata;
+-      else if (do_mem && req_we && i_mem_ready) whi_q <= 32'd0;
+       if (do_mem && !req_we && i_mem_ready) rd_wait_q <= 1'b1;
+       else if (i_mem_rvalid) rd_wait_q <= 1'b0;
+     end

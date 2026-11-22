@@ -5,7 +5,7 @@ applied in a temporary git worktree and its killing test from
 `testbench/mutants/README.md` is run; every killing test also passes on the unmutated
 design (baseline).
 
-**34 / 34 mutants killed.**
+**52 / 52 mutants killed.**
 
 | Mutant | Verdict | Killing test | First failure |
 |---|---|---|---|
@@ -43,3 +43,21 @@ design (baseline).
 | `m32_mem_ready_while_busy` | KILLED | `testbench/unit/test_mem_port.py::test_mem_port[icarus-64]` | test_random_traffic: cycle 5: ready 1, want 0 |
 | `m33_argmax_last_hangs` | KILLED | `testbench/unit/test_argmax_unit.py::test_argmax_unit[icarus]` | test_directed: o_done never pulsed |
 | `m34_postproc_deadlock` | KILLED | `testbench/unit/test_postproc.py::test_postproc[icarus]` | test_directed: source sent 4/36 items before the guard expired |
+| `m35_port_resp_not_held` | KILLED | `testbench/unit/test_axil_slave_port.py::test_axil_slave_port[icarus]` | test_random_sequential: BVALID dropped before BREADY |
+| `m36_port_write_without_w` | KILLED | `testbench/unit/test_axil_slave_port.py::test_axil_slave_port[icarus]` | test_random_sequential: no AXI B response |
+| `m37_port_same_cycle_rsp_lost` | KILLED | `testbench/unit/test_axil_slave_port.py::test_axil_slave_port[icarus]` | test_random_sequential: no AXI R response |
+| `m38_port_ar_freed_on_b` | KILLED | `testbench/unit/test_axil_slave_port.py::test_axil_slave_port[icarus]` | test_random_sequential: AXI AR never accepted |
+| `m39_xbar_w_before_aw` | KILLED | `testbench/unit/test_axil_interconnect.py::test_axil_interconnect[icarus]` | test_random_traffic: no AXI B response |
+| `m40_xbar_wsel_not_latched` | KILLED | `testbench/unit/test_axil_interconnect.py::test_axil_interconnect[icarus]` | test_one_outstanding: B not forwarded |
+| `m41_xbar_decerr_okay` | KILLED | `testbench/unit/test_axil_interconnect.py::test_axil_interconnect[icarus]` | test_random_traffic: write 0x20001000: resp 0, want DECERR |
+| `m42_xbar_two_reads_outstanding` | KILLED | `testbench/unit/test_axil_interconnect.py::test_axil_interconnect[icarus]` | test_one_outstanding: AR accepted |
+| `m43_ram_partial_not_merged` | KILLED | `testbench/unit/test_axil_ram.py::test_axil_ram[icarus]` | test_random_access: word 511: 0xc57c4f6d, want 0x397b4fb7 |
+| `m44_ram_strobe_lanes_reversed` | KILLED | `testbench/unit/test_axil_ram.py::test_axil_ram[icarus]` | test_random_access: word 511: 0x9b7c9b25, want 0x397b4fb7 |
+| `m45_ram_read_rsp_early` | KILLED | `testbench/unit/test_axil_ram.py::test_axil_ram[icarus]` | test_init_image: Can't convert LogicArray to int: it contains non-0/1 values |
+| `m46_gpio_partial_write_done` | KILLED | `testbench/unit/test_axil_gpio.py::test_axil_gpio[icarus]` | test_partial_write: a partial write changed a register: {0: 165, 4: 305419896, 16: 1, 20: 3735928559} -> {0: 511, 4: 1073741823, 16: 0, 20: 4294967295} |
+| `m47_gpio_clear_beats_press` | KILLED | `testbench/unit/test_axil_gpio.py::test_axil_gpio[icarus]` | test_key_event: a press in the clearing cycle was lost |
+| `m48_axil_whi_kept` | KILLED | `testbench/system/test_accel_axil.py::test_accel_axil` | test_buffer_window: WHI not cleared by the low write |
+| `m49_axil_read_half_swapped` | KILLED | `testbench/system/test_accel_axil.py::test_accel_axil` | test_buffer_window: sel 0 word 6671 |
+| `m50_axil_csr_hole_aliased` | KILLED | `testbench/system/test_accel_axil.py::test_accel_axil` | test_csr_window: hole 0x1000: 0x434e4e31 0 |
+| `m51_axil_buf_ignores_mem_ready` | KILLED | `testbench/system/test_accel_axil.py::test_accel_axil` | test_buffer_waits: cocotb expected it would shut down the simulation, but the simulation ended prematurely. This could be due to an assertion failure or a call to an exit routine in the HDL, or due to the simulator running out of events to process (is your clock running?). |
+| `m52_soc_accel_region_4mb` | KILLED | `testbench/system/test_soc.py::test_soc[quick]` | quick: cocotb expected it would shut down the simulation, but the simulation ended prematurely. This could be due to an assertion failure or a call to an exit routine in the HDL, or due to the simulator running out of events to process (is your clock running?). |

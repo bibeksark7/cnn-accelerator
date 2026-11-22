@@ -1,0 +1,11 @@
+--- a/rtl/axi/axil_ram.sv
++++ b/rtl/axi/axil_ram.sv
+@@ -114,7 +114,7 @@
+   logic ram_we, ram_re;
+   logic [31:0] ram_wdata;
+   assign ram_we    = full_wr || (part_wr && rmw_q);
+-  assign ram_wdata = full_wr ? req_wdata : merged;
++  assign ram_wdata = req_wdata;
+   assign ram_re    = rd || (part_wr && !rmw_q);
+ 
+   sram_1r1w #(

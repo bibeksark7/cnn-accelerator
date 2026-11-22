@@ -1,0 +1,11 @@
+--- a/rtl/axi/accel_axil_slave.sv
++++ b/rtl/axi/accel_axil_slave.sv
+@@ -131,7 +131,7 @@
+   // ---------------------------------------------------------------- acceptance and response
+   logic rd_wait_q, rd_half_q;  // a buffer read is waiting for its data / which half
+   logic [31:0] mem_half;
+-  assign mem_half = rd_half_q ? i_mem_rdata[63:32] : i_mem_rdata[31:0];
++  assign mem_half = rd_half_q ? i_mem_rdata[31:0] : i_mem_rdata[63:32];
+ 
+   always_comb begin
+     req_ready = 1'b1;

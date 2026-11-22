@@ -4,7 +4,7 @@
 For each patch:
   1. create a temporary git worktree at HEAD and overlay the current working tree on it
      (modified, new and deleted files; ignored files are not copied), so the run sees exactly
-     the RTL and tests being reviewed;
+     the RTL and tests being reviewed; submodules (PicoRV32) are linked from the main checkout;
   2. apply the patch there (the main working tree is never modified);
   3. run the killing test named in testbench/mutants/README.md with pytest;
   4. parse pytest's JUnit file and cocotb's results files (<node>.result.xml).
@@ -101,7 +101,34 @@ def make_worktree(parent: Path, tag: str) -> Path:
     for rel in git("ls-files", "-z", "-d").split("\0"):
         if rel:
             (wt / rel).unlink(missing_ok=True)
+    link_submodules(wt)
     return wt
+
+
+def submodule_paths() -> list[str]:
+    """Paths of the submodules listed in .gitmodules."""
+    if not (ROOT / ".gitmodules").exists():
+        return []
+    out = subprocess.run(
+        ["git", "config", "--file", ".gitmodules", "--get-regexp", r"\.path$"],
+        cwd=ROOT, capture_output=True, text=True,
+    ).stdout  # fmt: skip
+    return [line.split(maxsplit=1)[1] for line in out.splitlines() if " " in line]
+
+
+def link_submodules(wt: Path) -> None:
+    """A new worktree has empty submodule directories; link the main tree's checkouts instead
+    (mutants never patch third-party code), so tests that build the SoC find PicoRV32."""
+    for rel in submodule_paths():
+        src, dst = ROOT / rel, wt / rel
+        if not src.is_dir() or not any(src.iterdir()):
+            continue  # not checked out in the main tree either
+        if dst.is_dir() and not dst.is_symlink():
+            if any(dst.iterdir()):
+                continue
+            dst.rmdir()
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.symlink_to(src, target_is_directory=True)
 
 
 def remove_worktree(wt: Path) -> None:

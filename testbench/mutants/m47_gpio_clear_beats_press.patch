@@ -1,0 +1,13 @@
+--- a/rtl/axi/axil_gpio.sv
++++ b/rtl/axi/axil_gpio.sv
+@@ -116,8 +116,8 @@
+       if (wr && reg_idx == A_LEDR) ledr_q <= req_wdata[8:0];
+       if (wr && reg_idx == A_HEX) hex_q <= req_wdata[29:0];
+       if (wr && reg_idx == A_MAILBOX) mailbox_q <= req_wdata;
+-      if (i_key_press) key_evt_q <= 1'b1;
+-      else if (wr && reg_idx == A_KEY_EVT && req_wdata[0]) key_evt_q <= 1'b0;
++      if (wr && reg_idx == A_KEY_EVT && req_wdata[0]) key_evt_q <= 1'b0;
++      else if (i_key_press) key_evt_q <= 1'b1;
+     end
+   end
+ 

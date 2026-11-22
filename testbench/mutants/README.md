@@ -2,13 +2,17 @@
 
 Each `*.patch` is a single realistic bug, as a unified diff against the committed RTL. Patches are
 never applied to the working tree. `scripts/run_mutants.py` applies each one in a temporary git
-worktree (a copy of the current working tree), runs its killing test from the table below and
-parses the test results:
+worktree (a copy of the current working tree, with the PicoRV32 submodule linked from the main
+checkout), runs its killing test from the table below and parses the test results:
 
 - a mutant is **killed** when its killing test fails;
 - when the table names a required assertion, the simulator log must also report that assertion
   failing (an SVA kill; the mutant changes no output, see `docs/decisions.md` D-026);
 - every killing test must first pass on the unmutated design (baseline).
+
+m01–m34 cover the accelerator (Milestone 1); m35–m52 cover the SoC blocks: the AXI4-Lite slave
+port, the interconnect, the RAM, the GPIO block, the accelerator's AXI4-Lite slave and the SoC
+address map.
 
 ```sh
 scripts/run_mutants.py                 # all mutants, report to stdout
@@ -56,3 +60,21 @@ applied to the working tree.
 | `m32_mem_ready_while_busy` | memory port ready while BUSY (requests accepted during a run) | `testbench/unit/test_mem_port.py::test_mem_port[icarus-64]` | — |
 | `m33_argmax_last_hangs` | argmax stays in its last-compare state: `o_done` never comes (a hang, no wrong value) | `testbench/unit/test_argmax_unit.py::test_argmax_unit[icarus]` | — |
 | `m34_postproc_deadlock` | output withheld while stage 3 is full and stage 4 waits for its own output: the pipeline deadlocks once both are full (a stall that never drains) | `testbench/unit/test_postproc.py::test_postproc[icarus]` | — |
+| `m35_port_resp_not_held` | AXI slave port drops B / R after one cycle instead of holding them until BREADY / RREADY | `testbench/unit/test_axil_slave_port.py::test_axil_slave_port[icarus]` | — |
+| `m36_port_write_without_w` | AXI slave port starts a write once AW is buffered, without waiting for W | `testbench/unit/test_axil_slave_port.py::test_axil_slave_port[icarus]` | — |
+| `m37_port_same_cycle_rsp_lost` | AXI slave port ignores a local response given in the request's acceptance cycle | `testbench/unit/test_axil_slave_port.py::test_axil_slave_port[icarus]` | — |
+| `m38_port_ar_freed_on_b` | AXI slave port frees the AR buffer on the B handshake instead of R (reads hang) | `testbench/unit/test_axil_slave_port.py::test_axil_slave_port[icarus]` | — |
+| `m39_xbar_w_before_aw` | interconnect forwards W before its AW is valid (routed by a stale address) | `testbench/unit/test_axil_interconnect.py::test_axil_interconnect[icarus]` | — |
+| `m40_xbar_wsel_not_latched` | interconnect routes W and B by the current AWADDR, not the one latched with AW | `testbench/unit/test_axil_interconnect.py::test_axil_interconnect[icarus]` | — |
+| `m41_xbar_decerr_okay` | interconnect answers unmapped addresses with OKAY instead of DECERR | `testbench/unit/test_axil_interconnect.py::test_axil_interconnect[icarus]` | — |
+| `m42_xbar_two_reads_outstanding` | interconnect accepts a new AR while the previous read's R is outstanding | `testbench/unit/test_axil_interconnect.py::test_axil_interconnect[icarus]` | — |
+| `m43_ram_partial_not_merged` | RAM byte / halfword write stores the whole WDATA word (strobes ignored on the write-back) | `testbench/unit/test_axil_ram.py::test_axil_ram[icarus]` | — |
+| `m44_ram_strobe_lanes_reversed` | RAM read-modify-write applies WSTRB to the byte lanes in reverse order | `testbench/unit/test_axil_ram.py::test_axil_ram[icarus]` | — |
+| `m45_ram_read_rsp_early` | RAM read answered in the acceptance cycle, one cycle before its data is out of the block RAM | `testbench/unit/test_axil_ram.py::test_axil_ram[icarus]` | — |
+| `m46_gpio_partial_write_done` | GPIO performs a write with WSTRB ≠ 4'b1111 (still answered SLVERR) | `testbench/unit/test_axil_gpio.py::test_axil_gpio[icarus]` | — |
+| `m47_gpio_clear_beats_press` | GPIO KEY_EVT: a clearing write wins over a press in the same cycle (the press is lost) | `testbench/unit/test_axil_gpio.py::test_axil_gpio[icarus]` | — |
+| `m48_axil_whi_kept` | accelerator slave: WHI not cleared after a low-half buffer write (stale high half in the next word) | `testbench/system/test_accel_axil.py::test_accel_axil` | — |
+| `m49_axil_read_half_swapped` | accelerator slave: buffer-window read returns the other half of the 64-bit word | `testbench/system/test_accel_axil.py::test_accel_axil` | — |
+| `m50_axil_csr_hole_aliased` | accelerator slave: CSR-window addresses above 4 KB alias the CSRs instead of DECERR | `testbench/system/test_accel_axil.py::test_accel_axil` | — |
+| `m51_axil_buf_ignores_mem_ready` | accelerator slave: buffer-window access completes without waiting for the memory port's ready | `testbench/system/test_accel_axil.py::test_accel_axil` | — |
+| `m52_soc_accel_region_4mb` | SoC address map gives the accelerator 4 MB instead of 8 MB: the buffer window decodes as unmapped | `testbench/system/test_soc.py::test_soc[quick]` | — |

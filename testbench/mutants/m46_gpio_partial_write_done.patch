@@ -1,0 +1,11 @@
+--- a/rtl/axi/axil_gpio.sv
++++ b/rtl/axi/axil_gpio.sv
+@@ -98,7 +98,7 @@
+   logic wr;
+   assign addr    = req_addr;
+   assign reg_idx = addr[11:2];
+-  assign wr      = req_valid && req_we && req_wstrb == 4'b1111;
++  assign wr      = req_valid && req_we;
+   assign resp    = (req_we && req_wstrb != 4'b1111) ? RESP_SLVERR : RESP_OKAY;
+ 
+   logic [8:0] ledr_q;

@@ -1,0 +1,11 @@
+--- a/rtl/axi/axil_slave_port.sv
++++ b/rtl/axi/axil_slave_port.sv
+@@ -100,7 +100,7 @@
+   always_comb begin
+     state_d = state_q;
+     case (state_q)
+-      S_IDLE:  if ((aw_full_d && w_full_d) || ar_full_d) state_d = S_REQ;
++      S_IDLE:  if (aw_full_d || ar_full_d) state_d = S_REQ;
+       S_REQ: begin
+         if (req_hs && rsp_take) state_d = S_RESP;
+         else if (req_hs) state_d = S_WAIT;

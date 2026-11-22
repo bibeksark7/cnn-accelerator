@@ -1,0 +1,11 @@
+--- a/rtl/axi/axil_slave_port.sv
++++ b/rtl/axi/axil_slave_port.sv
+@@ -106,7 +106,7 @@
+         else if (req_hs) state_d = S_WAIT;
+       end
+       S_WAIT:  if (rsp_take) state_d = S_RESP;
+-      S_RESP:  if (b_hs || r_hs) state_d = S_IDLE;
++      S_RESP:  state_d = S_IDLE;
+       default: state_d = S_IDLE;
+     endcase
+   end
