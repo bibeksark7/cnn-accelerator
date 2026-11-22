@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Write the README badges from the committed reports.
 
-Between the markers <!-- badges:start --> and <!-- badges:end --> in README.md: the CI status
-badge, a functional-coverage badge (testbench/reports/coverage.json) and a mutation badge
+Between the markers <!-- badges:start --> and <!-- badges:end --> in README.md: the status
+badges of both CI workflows (fast on every push, full regression nightly), a functional-coverage
+badge (testbench/reports/coverage.json) and a mutation badge
 (testbench/reports/mutation.md). The coverage and mutation badges are static shields.io images
 whose numbers come only from those reports.
 
@@ -22,7 +23,9 @@ from urllib.parse import quote
 ROOT = Path(__file__).resolve().parents[1]
 README = ROOT / "README.md"
 START, END = "<!-- badges:start -->", "<!-- badges:end -->"
-CI = "https://github.com/bibeksark7/cnn-accelerator/actions/workflows/ci.yml"
+ACTIONS = "https://github.com/bibeksark7/cnn-accelerator/actions/workflows"
+CI = f"{ACTIONS}/ci.yml"
+FULL = f"{ACTIONS}/full.yml"
 
 
 def shield(label: str, message: str, color: str) -> str:
@@ -41,6 +44,7 @@ def badges() -> str:
         [
             START,
             f"[![CI]({CI}/badge.svg)]({CI})",
+            f"[![full regression]({FULL}/badge.svg)]({FULL})",
             f"[![functional coverage]({shield('functional coverage', cov_msg, cov_color)})]"
             "(testbench/reports/coverage.md)",
             f"[![mutants killed]({shield('mutants killed', f'{killed}/{total}', mut_color)})]"

@@ -2,8 +2,8 @@
 
 A verified int8 CNN accelerator in SystemVerilog: an 8×8 output-stationary systolic array runs
 an MNIST network bit-exactly against a Python golden model. As a peripheral of a RISC-V SoC
-(PicoRV32, AXI4-Lite, C firmware) it gives a 375.0× speedup over the same integer CNN on
-PicoRV32. Built and timing-closed at 50 MHz for the DE10-Lite (Intel MAX 10); verified in
+(PicoRV32, AXI4-Lite, C firmware) it gives a 374.9× speedup over the same integer CNN on
+PicoRV32 (49.7× against an ideal one-instruction-per-cycle core at the same clock). Built and timing-closed at 50 MHz for the DE10-Lite (Intel MAX 10); verified in
 simulation.
 
 **Stack:** SystemVerilog · cocotb + pytest · Icarus Verilog · Verilator · Yosys · SymbiYosys ·
@@ -12,8 +12,9 @@ GitHub Actions
 
 <!-- badges:start -->
 [![CI](https://github.com/bibeksark7/cnn-accelerator/actions/workflows/ci.yml/badge.svg)](https://github.com/bibeksark7/cnn-accelerator/actions/workflows/ci.yml)
+[![full regression](https://github.com/bibeksark7/cnn-accelerator/actions/workflows/full.yml/badge.svg)](https://github.com/bibeksark7/cnn-accelerator/actions/workflows/full.yml)
 [![functional coverage](https://img.shields.io/badge/functional%20coverage-107%2F110%20bins%2C%203%20documented%20gaps-brightgreen)](testbench/reports/coverage.md)
-[![mutants killed](https://img.shields.io/badge/mutants%20killed-52%2F52-brightgreen)](testbench/reports/mutation.md)
+[![mutants killed](https://img.shields.io/badge/mutants%20killed-54%2F54-brightgreen)](testbench/reports/mutation.md)
 <!-- badges:end -->
 
 ## Results
@@ -26,8 +27,8 @@ GitHub Actions
 | MAC array busy | 3,869 cycles per inference (8.2 %) | [counters](testbench/reports/perf_counters.md) |
 | Timing on MAX 10 (10M50DAF484C7G) | 65.85 MHz Fmax; worst slack at 50 MHz over all three corners: +4.813 ns setup, +0.095 ns hold | [Fmax](fpga/de10lite/reports/fmax.rpt), [timing per corner](fpga/de10lite/reports/timing_corners.rpt), [summary](fpga/de10lite/reports/de10lite.sta.summary) |
 | Resources (whole demo) | 8,322 LEs (17 %), 5,587 registers, 340,608 memory bits (20 %), 68 9-bit multipliers | [fit summary](fpga/de10lite/reports/de10lite.fit.summary) |
-| SoC speedup | 375.0× end to end over the same integer CNN on PicoRV32 (217.9× counting the image upload) | [speedup report](testbench/reports/soc_speedup.md), [SoC](#risc-v-soc) |
-| Mutation testing | 52 / 52 injected bugs caught (accelerator and SoC) | [mutation report](testbench/reports/mutation.md) |
+| SoC speedup | 374.9× end to end over the same integer CNN on PicoRV32 (217.8× counting the image upload); against an ideal one-instruction-per-cycle core at the same clock, 49.7× (28.9× with the upload) | [speedup report](testbench/reports/soc_speedup.md), [SoC](#risc-v-soc) |
+| Mutation testing | 54 / 54 injected bugs caught (accelerator and SoC) | [mutation report](testbench/reports/mutation.md) |
 | Functional coverage | every goal met or documented as a gap (bins sampled from the design) | [coverage report](testbench/reports/coverage.md) |
 
 The array is busy only 8.2 % of the cycles because its im2col operands are staged one byte per
@@ -102,8 +103,9 @@ flowchart LR
 <!-- fpga-numbers: de10lite_soc -->
 | Metric | Value | Source |
 |---|---|---|
-| Speedup | 375.0× end to end over the same integer CNN on PicoRV32; 217.9× counting the 784-byte image upload (mean of 4 images) | [speedup report](testbench/reports/soc_speedup.md) |
-| Cycles per image | software CNN 17,987,202 (359.74 ms at 50 MHz); accelerator end to end 47,972 (0.959 ms), of which the accelerator core 47,259; image upload 34,591 | [speedup report](testbench/reports/soc_speedup.md) |
+| Speedup | 374.9× end to end over the same integer CNN on PicoRV32; 217.8× counting the 784-byte image upload (mean of 4 images) |
+| Speedup against an ideal core | 49.7× end to end, 28.9× with the upload: the software CNN's 2,383,369 instructions divided by the accelerator's cycles, i.e. against a core at the same clock that retires one instruction per cycle | [speedup report](testbench/reports/soc_speedup.md) |
+| Cycles per image | software CNN 17,987,202 (359.74 ms at 50 MHz); accelerator end to end 47,984 (0.960 ms), of which the accelerator core 47,259; image upload 34,591 | [speedup report](testbench/reports/soc_speedup.md) |
 | Correctness | firmware runs the 50 quick-subset images through the accelerator in CI: RESULT and every logit equal the golden model's; the software CNN's logits equal it too | [`test_soc.py`](testbench/system/test_soc.py) |
 | Timing on MAX 10 (10M50DAF484C7G) | 69.04 MHz Fmax; worst slack at 50 MHz over all three corners: +5.515 ns setup, +0.090 ns hold | [Fmax](fpga/de10lite_soc/reports/fmax.rpt), [timing per corner](fpga/de10lite_soc/reports/timing_corners.rpt), [summary](fpga/de10lite_soc/reports/de10lite_soc.sta.summary) |
 | Resources (whole SoC) | 12,475 LEs (25 %), 7,297 registers, 867,520 memory bits (52 %), 76 9-bit multipliers | [fit summary](fpga/de10lite_soc/reports/de10lite_soc.fit.summary) |
@@ -111,7 +113,9 @@ flowchart LR
 
 The speedup compares this SoC with and without its accelerator. PicoRV32 is a multi-cycle core
 without caches, and every instruction fetch is an AXI4-Lite access to the RAM (7.55 cycles per
-instruction on the software CNN), so a faster CPU would narrow the gap.
+instruction on the software CNN), so a faster CPU would narrow the gap. The instruction-count
+bound shows by how much: even a core that ran the same instructions at one per cycle would be
+49.7× slower than the accelerator, end to end.
 
 - Own AXI4-Lite blocks: one slave front end shared by every slave, an interconnect that answers
   unmapped addresses with DECERR, a RAM whose byte and halfword stores are read-modify-writes so
@@ -139,7 +143,7 @@ Spec: [docs/spec.md §13](docs/spec.md).
 - **Formal proofs** (SymbiYosys): the MAC cell, argmax (unbounded at reduced width, bounded at
   full width) and the post-processing pipeline's handshake, including progress properties.
 - **Functional coverage** sampled from DUT signals, with goals and written reasons for gaps.
-- **Mutation testing**: 52 single-bug patches, each caught by its named test: in the accelerator
+- **Mutation testing**: 54 single-bug patches, each caught by its named test: in the accelerator
   (rounding, saturation, ReLU, skew, ping-pong, handshakes, control path) and in the SoC (AXI4-Lite
   handshakes and buffering, interconnect routing and DECERR, byte-write merging, register rules,
   the address map).
@@ -147,6 +151,8 @@ Spec: [docs/spec.md §13](docs/spec.md).
   with every accelerator assertion bound, and firmware-driven runs of the whole SoC with AXI4-Lite
   channel assertions on every slave.
 - **Full run**: all 10,000 MNIST test images, with the commit and RTL tree recorded in the report.
+- **CI** (GitHub Actions): a fast job on every push (lint, every unit test, the quick-subset system
+  tests) and the full regression, formal proofs and slow tests included, nightly and on demand.
 
 Plan and status per feature: [docs/verification_plan.md](docs/verification_plan.md).
 

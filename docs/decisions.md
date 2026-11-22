@@ -1240,12 +1240,27 @@ Milestone 1 build whose committed reports keep describing exactly what they desc
     defines; the software CNN's logits must equal the golden model's bit for bit. Its results
     table produces the committed speedup report.
   - `demo`: the board behaviour of spec §13.8.
+- **Bounded wait.** `accel_wait` polls `STATUS` for at most `ACCEL_WAIT_CYCLES` CPU cycles
+  (1,000,000 by default: 20 ms at 50 MHz, about 21 times one run) and returns the last `STATUS`
+  read, so a caller sees a timeout as `DONE` clear. Every run ends (spec §9), so a timeout means
+  broken hardware; on the board, a firmware that spins forever would look exactly like a CPU
+  hang, while the demo instead shows `E` on `HEX0` and lights `LEDR[2]` (spec §13.8). After a
+  timeout the demo reads nothing else from the accelerator: a buffer-window access would wait for
+  the run (§13.4) and hang the firmware after all. The limit is a build-time define, so the test
+  builds the demo with a limit below one run and checks the timeout display against the real
+  accelerator.
 - **Software CNN.** Plain C over the same int8 weights and integer parameters, generated at
   build time from the committed `model/artifacts/` into a header; requantization written to match
   `model/golden.py` exactly. Compiled with `-O2`, the same flags as everything else.
 - **Where the numbers come from.** The speedup report is measured in cycle-accurate RTL simulation
   of the whole SoC, with the compiler version recorded. It is reported as a simulation result
   until the board run confirms it.
+- **Instruction-count bound.** Next to the measured speedups, the report gives the software CNN's
+  retired instructions divided by the accelerator's cycles (end to end, and with the upload): the
+  speedup against an ideal core that retires one instruction per cycle at the same clock. PicoRV32
+  takes about 7.5 cycles per instruction (multi-cycle, every fetch a bus transaction), so the
+  measured figure mixes the accelerator's gain with the slow baseline; the bound shows the gain
+  that remains against a much faster core. The README states both.
 
 **Alternatives.** One firmware with modes selected at run time (the quick-subset images and the
 software CNN's data would not fit in 64 KB together); comparing against a host-side NumPy timing
@@ -1305,23 +1320,31 @@ happens, and long firmware runs stay practical in simulation.
 ## D-047 — Mutation testing of the SoC blocks; SoC figures in the README (Phase 5)
 
 **Decision.**
-- **18 SoC mutants (m35–m52)**, each a single realistic bug in one block: the AXI4-Lite slave
+- **20 SoC mutants (m35–m54)**, each a single realistic bug in one block: the AXI4-Lite slave
   front end (response not held, write started without W, same-cycle response lost, AR buffer
   freed by B), the interconnect (W routed before its AW, select not latched, OKAY for unmapped
   addresses, two reads outstanding), the RAM (partial write not merged, byte lanes reversed, read
   answered a cycle early), GPIO (partial write performed, clear wins over a press), the
-  accelerator slave (WHI kept, halves swapped, CSR hole aliased, memory-port ready ignored) and
-  the SoC address map (accelerator region 4 MB instead of 8 MB). The killing test is the block's
+  accelerator slave (WHI kept, halves swapped, CSR hole aliased, memory-port ready ignored, CSR
+  accesses held until the run ends, WHI writes held until the run ends) and the SoC address map
+  (accelerator region 4 MB instead of 8 MB). The killing test is the block's
   unit test on Icarus where one exists, so a kill shows a functional difference rather than an
   assertion; the accelerator slave's are killed by `test_accel_axil.py` (Verilator) and the
   address map's by the firmware-driven `test_soc.py::test_soc[quick]`.
+- **Required assertions for assertion kills.** m51 (memory-port ready ignored) and m52 (region
+  4 MB) stop the simulation through an assertion before any value is compared
+  (`a_mem_req_stable`, `a_no_write_error`). Their table rows name that assertion, so
+  `run_mutants.py` counts the kill only if the log shows it failing; any other way of failing is
+  reported as WRONG.
 - **Submodules in mutant worktrees.** A new git worktree has an empty `third_party/picorv32`;
   `scripts/run_mutants.py` links the main checkout's submodule into it (mutants never patch
   third-party code), so SoC-level killing tests can build the CPU.
 - **SoC FPGA figures in the README.** `scripts/check_fpga_numbers.py` checks figures inside an
   HTML-comment region (`fpga-numbers: de10lite_soc`) against `fpga/de10lite_soc/reports/` and
   everything else against the Milestone 1 build, as before; checkpoint 5 runs it, and also checks
-  that every speedup figure in the README is one of the two in `testbench/reports/soc_speedup.json`.
+  that every speedup figure in the README is one of the four in `testbench/reports/soc_speedup.json`
+  (measured and instruction-count bound, each end to end and with the upload), and all four are
+  stated.
 
 **Alternatives.** Killing every SoC mutant with the full SoC test (slow: each run builds the CPU
 and firmware, and a CPU-level failure says less about which block broke); a second checker
@@ -1331,3 +1354,49 @@ script for SoC numbers (duplicates the parsing); putting the SoC figures in a se
 **Reason.** Same standard as Milestone 1: every new block has bugs injected that its tests must
 catch, and every public figure is tied to a committed report by a check that fails when they
 drift.
+
+## D-048 — CI: a fast job on every push, the full regression nightly and on demand (Phase 5)
+
+**Decision.**
+- **Fast** (`.github/workflows/ci.yml`, every push and pull request): ruff, RTL lint, every unit
+  test, the system tests not marked `full` (the 50-image quick subset on `accel_top` and through
+  the SoC firmware, the saturating images, the accelerator slave, the FPGA tops, the SoC smoke,
+  demo-timeout and bus-check tests, every assertion-fires test), and the script and golden-model
+  tests. Target: under 10 minutes.
+- **Full** (`.github/workflows/full.yml`, nightly on `main` and `workflow_dispatch`): every test,
+  including those marked `full` (the Icarus `accel_top` runs with the 4-state X check, the SoC
+  board demo with the software CNN, the bench image) and the formal proofs. A nightly run is
+  skipped when the commit already has a green full run.
+- **Checkpoints** require the full job to be green for HEAD (`scripts/checkpoint.sh`,
+  `check_ci_green_on_head`); a green fast run is not enough.
+- **One setup.** Both workflows use `.github/actions/setup` (Python, Icarus, RISC-V GCC, the
+  pinned OSS CAD Suite), so they always run the same tools.
+- **Marking.** `pytest.mark.full` (registered in `pyproject.toml`) marks slow tests or parameter
+  sets; nothing is skipped by it, the fast job deselects them with `-m "not full"`.
+
+**Alternatives.** One job for everything on every push (35 minutes per push); running the slow
+tests only locally (then nothing checks them between checkpoints); a time-based split of the
+whole suite across parallel jobs (every push still pays for the slowest tests).
+
+**Reason.** Every push gets lint, every unit test and the end-to-end quick subset within minutes,
+and the slow tests still run on every commit that reaches a checkpoint and every night.
+
+## D-049 — AXI4-Lite AW/W order coverage by arrival, required by the tests (Phase 5)
+
+**Decision.**
+- `axil_resp_order_sva`'s covers `c_aw_before_w`, `c_w_before_aw` and `c_aw_with_w` are defined
+  on arrival: a transfer arrives in the first cycle its VALID is high, and the k-th AW pairs with
+  the k-th W. With equal arrival counts, whichever of the next write's AW and W arrives first
+  (or both in one cycle) gives the order. The monitor counts each order over the simulation.
+- `test_axil_slave_port.py` and `test_axil_interconnect.py` end with `test_zz_aw_w_order_cover`
+  (Verilator), which fails unless each order was seen at least once.
+
+**Alternatives.** Covers on acceptance order (the first version). The interconnect holds W
+until its AW has been routed (spec §13.3), so at its CPU-side port a W is never accepted first:
+the acceptance-order `c_w_before_aw` can never fire there, although a W that arrives first is
+exactly the case the interconnect must handle. Python-side counting in `AxilMaster` (would count
+what the master sent, not what the bound port saw).
+
+**Reason.** Arrival order is what a master controls and what a slave must cope with; counting it
+where the assertions are bound makes "every order was exercised" a pass/fail condition of the
+tests that claim it.
