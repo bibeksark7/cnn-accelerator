@@ -646,7 +646,9 @@ So word `w` of buffer `s` starts at `0x1040_0000 + s · 0x8_0000 + w · 8`; IMG 
   accepts every register in the cycle the request arrives, except that a descriptor-table read
   (`DESC`, offsets `0x100` and above) can wait for the sequencer's 4-word descriptor fetch. The
   slave adds no wait of its own that depends on `BUSY`. Firmware therefore polls `STATUS` for
-  `DONE` throughout a run.
+  `DONE` throughout a run. (The slave serves one transaction at a time, so a CSR access that
+  arrives while the slave is holding a buffer-window access waits behind it. The CPU never
+  issues an access before its previous one has completed, so this does not arise in the SoC.)
 - **Buffer-window accesses wait.** One that arrives while `BUSY` is held until the run ends and
   then completes; firmware must not touch the buffer window during a run. Because the slave serves one transaction at a time, a
 memory-port read is never pending when a CSR write arrives, so a `START` written through this
