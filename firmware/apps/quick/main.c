@@ -48,7 +48,7 @@ int main(void) {
     accel_upload_image(slot, images[i]);
     uint32_t t1 = rdcycle();
     accel_start(slot);
-    e->status = accel_wait();
+    e->status = accel_wait(ACCEL_WAIT_CYCLES);
     e->result = accel_result();
     accel_read_logits(e->logits);
     uint32_t t2 = rdcycle();

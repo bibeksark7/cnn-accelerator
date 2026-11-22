@@ -56,12 +56,12 @@ int main(void) {
   results.sw = GPIO(GPIO_SW);
   uint32_t t0 = rdcycle();
   accel_start(0);
-  results.status = accel_wait();
+  results.status = accel_wait(ACCEL_WAIT_CYCLES);
   results.result = accel_result();
   accel_read_logits(results.logits);
   results.cycles_e2e = rdcycle() - t0;
   results.cyc_total = accel_cycles();
-  if (results.status & STATUS_ERROR) fail(4);
+  if (!(results.status & STATUS_DONE) || (results.status & STATUS_ERROR)) fail(4); /* timeout, error */
 
   GPIO(GPIO_HEX) = (HEX_BLANK << 25) | (HEX_BLANK << 20) | (HEX_BLANK << 15) | (HEX_BLANK << 10) |
                    (HEX_BLANK << 5) | (results.result & 0xFu);

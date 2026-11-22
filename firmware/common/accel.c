@@ -23,11 +23,12 @@ void accel_start(uint32_t slot) {
   ACCEL_CSR(ACCEL_CTRL) = 1u;
 }
 
-uint32_t accel_wait(void) {
+uint32_t accel_wait(uint32_t max_cycles) {
+  uint32_t t0 = rdcycle();
   uint32_t status;
   do {
     status = ACCEL_CSR(ACCEL_STATUS);
-  } while (!(status & STATUS_DONE));
+  } while (!(status & STATUS_DONE) && rdcycle() - t0 < max_cycles);
   return status;
 }
 

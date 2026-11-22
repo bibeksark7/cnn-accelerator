@@ -43,9 +43,13 @@ class Firmware:
         return (self.out / "toolchain.txt").read_text().strip()
 
 
-def build(app: str, extra: dict[str, str] | None = None) -> Firmware:
-    """Run `make APP=<app>`; raises with the compiler output if the build fails."""
-    out = SIM_BUILD_DIR / "firmware" / app
+def build(app: str, extra: dict[str, str] | None = None, variant: str = "") -> Firmware:
+    """Run `make APP=<app>`; raises with the compiler output if the build fails.
+
+    `variant` names a build with other make variables (`extra`) in its own output directory
+    (firmware/<app>_<variant>), so it never shares object files or images with the default build.
+    """
+    out = SIM_BUILD_DIR / "firmware" / (f"{app}_{variant}" if variant else app)
     # PYTHON: the generators need NumPy, so they run with this interpreter (the venv's).
     args = ["make", "-C", str(FIRMWARE_DIR), f"APP={app}", f"OUT={out}", f"PYTHON={sys.executable}"]
     args += [f"{k}={v}" for k, v in (extra or {}).items()]

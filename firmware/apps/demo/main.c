@@ -7,6 +7,10 @@
  *             accelerator reported ERROR or the logits differ), HEX0 = the predicted digit, HEX1 =
  *             the image's label, HEX5..HEX2 = the speedup in decimal (SW[9] = 0) or
  *             min(CYC_TOTAL >> 4, 0xFFFF) in hex (SW[9] = 1). Presses during a run are ignored.
+ *   timeout   if DONE does not come within ACCEL_WAIT_CYCLES of START: HEX0 = E, HEX1 = the
+ *             label, HEX5..HEX2 blank, LEDR[2] only; nothing else is read and the software CNN
+ *             does not run (the buffer window would wait for the run, spec 13.4). A later
+ *             press tries again.
  *   MAILBOX   number of completed runs (for the simulation test)
  */
 #include <stdint.h>
@@ -30,6 +34,7 @@ struct demo_state {
   uint32_t e2e_cycles;
   uint32_t cyc_total;
   uint32_t speedup;
+  uint32_t timeout; /* the last run's accel_wait timed out */
 };
 
 struct demo_state demo; /* read by the simulation test */
@@ -50,9 +55,11 @@ static void show_idle(uint32_t sw) {
 
 static void show_result(uint32_t sw) {
   uint32_t d[6];
-  d[0] = (demo.status & STATUS_ERROR) ? HEX_E : (demo.result & 0xFu);
+  d[0] = (demo.timeout || (demo.status & STATUS_ERROR)) ? HEX_E : (demo.result & 0xFu);
   d[1] = slot_label[demo.slot];
-  if (sw & 0x200u) { /* SW[9]: CYC_TOTAL >> 4 in hex, as in the Milestone 1 demo */
+  if (demo.timeout) {
+    for (uint32_t i = 2; i < 6; i++) d[i] = HEX_BLANK;
+  } else if (sw & 0x200u) { /* SW[9]: CYC_TOTAL >> 4 in hex, as in the Milestone 1 demo */
     uint32_t c = demo.cyc_total >> 4;
     if (c > 0xFFFFu) c = 0xFFFFu;
     for (uint32_t i = 0; i < 4; i++) d[2 + i] = (c >> (4u * i)) & 0xFu;
@@ -72,7 +79,16 @@ static void run(uint32_t slot) {
                                            HEX_BLANK, HEX_BLANK});
   uint32_t t0 = rdcycle();
   accel_start(slot);
-  demo.status = accel_wait();
+  demo.status = accel_wait(ACCEL_WAIT_CYCLES);
+  demo.slot = slot;
+  demo.runs++;
+  demo.timeout = !(demo.status & STATUS_DONE);
+  if (demo.timeout) {
+    demo.result = demo.e2e_cycles = demo.cyc_total = demo.sw_cycles = demo.speedup = 0;
+    demo.mismatch = 0;
+    GPIO(GPIO_LEDR) = LED_ERROR;
+    return;
+  }
   demo.result = accel_result();
   accel_read_logits(hw_logits);
   uint32_t t1 = rdcycle();
@@ -89,8 +105,6 @@ static void run(uint32_t slot) {
   for (uint32_t i = 0; i < ACCEL_NUM_LOGITS; i++) demo.mismatch |= sw_logits[i] != hw_logits[i];
   uint32_t speedup = demo.e2e_cycles ? demo.sw_cycles / demo.e2e_cycles : 0;
   demo.speedup = speedup > 9999u ? 9999u : speedup;
-  demo.slot = slot;
-  demo.runs++;
   uint32_t err = (demo.status & STATUS_ERROR) || demo.mismatch;
   GPIO(GPIO_LEDR) = LED_DONE | (err ? LED_ERROR : 0u);
 }

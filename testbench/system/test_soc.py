@@ -25,6 +25,12 @@ does a CPU trap. Python wakes only on MAILBOX changes, so the firmware runs at s
           = the label, HEX5..HEX2 = the speedup in decimal (equal to the firmware's measured
           software / end-to-end cycles); SW[9] switches HEX5..HEX2 to CYC_TOTAL >> 4 in hex; a
           press during the run is ignored (exactly one run)
+  demo_timeout  (the demo built with ACCEL_WAIT_CYCLES = 2000, far below one run, so accel_wait
+          really times out while the accelerator is busy) a KEY[0] press: HEX0 = E, HEX1 = the
+          label, HEX5..HEX2 blank, LEDR[2] only; the software CNN does not run; SW[9] changes
+          nothing; after the accelerator has finished, a second press times out the same way
+
+The demo runs (the software CNN on the CPU) and bench are slow: marked `full` (full CI job).
 
 test_soc_bus_check_fires: firmware that stores to an unmapped address (apps/buserr) and firmware
 that executes ebreak (apps/trap) each fail the run through soc_bus_sva's a_no_write_error /
@@ -280,8 +286,10 @@ async def press(dut) -> None:
     dut.i_key_level.value = 0
 
 
-DEMO_STATE = 9  # words: runs, slot, result, status, mismatch, sw, e2e, cyc_total, speedup
+DEMO_STATE = 10  # words: runs, slot, result, status, mismatch, sw, e2e, cyc_total, speedup, timeout
 BLANK = 16
+HEX_E = 18
+DEMO_TIMEOUT_CYCLES = 2000  # accel_wait limit of the demo_timeout build (one run: 47,259 cycles)
 
 
 @cocotb.test(skip=TB_APP != "demo")
@@ -305,10 +313,10 @@ async def demo(dut):
     await wait_mailbox(dut, None, 1, 100_000_000, "demo run")
     await wait_signal(dut, dut.o_ledr, lambda: int(dut.o_ledr.value) == 2, 1000, "done LED")
     base = symbols()["demo"]
-    runs, run_slot, result, status, mismatch, sw, e2e, cyc_total, speedup = ram_words(
+    runs, run_slot, result, status, mismatch, sw, e2e, cyc_total, speedup, timeout = ram_words(
         dut, base, DEMO_STATE
     )
-    assert (runs, run_slot, mismatch) == (1, slot, 0), (runs, run_slot, mismatch)
+    assert (runs, run_slot, mismatch, timeout) == (1, slot, 0, 0), (runs, run_slot, mismatch)
     assert status & 0x6 == 0x2 and result == classes[slot]
     assert cyc_total == golden_cycles()
     assert speedup == min(sw // e2e, 9999) and speedup > 0
@@ -334,6 +342,45 @@ async def demo(dut):
     await ClockCycles(dut.clk, 100_000)
     await ReadOnly()
     assert int(dut.o_mailbox.value) == 1 and int(dut.o_ledr.value) == 2, "a second run started"
+
+
+@cocotb.test(skip=TB_APP != "demo_timeout")
+async def demo_timeout(dut):
+    await start(dut)
+    labels = json.loads((MEM_DIR / "demo.json").read_text())["label"]
+    slot = 5
+    dut.i_sw.value = slot
+    await wait_signal(
+        dut,
+        dut.o_hex_code,
+        lambda: hex_digits(dut) == [BLANK, labels[slot], *[BLANK] * 4],
+        200_000,
+        "idle display",
+    )
+    shown = [HEX_E, labels[slot], *[BLANK] * 4]
+    base = symbols()["demo"]
+    for n in (1, 2):
+        await press(dut)
+        await wait_mailbox(dut, None, n, 200_000, f"timed-out run {n}")
+        await wait_signal(dut, dut.o_ledr, lambda: int(dut.o_ledr.value) == 4, 1000, "LEDR[2]")
+        await wait_signal(dut, dut.o_hex_code, lambda: hex_digits(dut) == shown, 200_000, "E")
+        runs, run_slot, _, status, mismatch, sw, e2e, _, speedup, timeout = ram_words(
+            dut, base, DEMO_STATE
+        )
+        assert (runs, run_slot, timeout) == (n, slot, 1), (runs, run_slot, timeout)
+        assert status & 0x3 == 0x1, f"STATUS {status:#x}: want BUSY, not DONE, at the timeout"
+        assert (sw, e2e, speedup, mismatch) == (0, 0, 0, 0), "work done after a timeout"
+        # SW[9] does not bring up a cycle display after a timeout.
+        await FallingEdge(dut.clk)
+        dut.i_sw.value = 0x200 | slot
+        await ClockCycles(dut.clk, 20_000)
+        await ReadOnly()
+        assert hex_digits(dut) == shown and int(dut.o_ledr.value) == 4
+        await FallingEdge(dut.clk)
+        dut.i_sw.value = slot
+        # Let the accelerator finish the run that timed out (one run: 47,259 cycles).
+        await ClockCycles(dut.clk, 60_000)
+    dut._log.info("demo: accel_wait timed out after %d cycles twice", DEMO_TIMEOUT_CYCLES)
 
 
 def sources() -> list[Path]:
@@ -362,9 +409,15 @@ def params(fw: firmware.Firmware) -> dict[str, object]:
 
 
 def run_app(
-    app: str, make_vars: dict[str, str] | None = None, env: dict[str, str] | None = None
+    app: str,
+    make_vars: dict[str, str] | None = None,
+    env: dict[str, str] | None = None,
+    variant: str = "",
 ) -> None:
-    fw = firmware.build(app, make_vars)
+    """Build firmware `app` (with `make_vars`, as build `variant`) and run its cocotb test,
+    which is the one named `app` or `<app>_<variant>`."""
+    fw = firmware.build(app, make_vars, variant)
+    name = f"{app}_{variant}" if variant else app
     sym_file = fw.out / "symbols.json"
     sym_file.write_text(json.dumps(fw.symbols()))
     run_cocotb(
@@ -374,16 +427,22 @@ def run_app(
         test_module=Path(__file__).stem,
         parameters=params(fw),
         extra_build_args=["--assert"],
-        extra_env={"TB_APP": app, "TB_SYMBOLS": str(sym_file), **(env or {})},
-        build_tag=app,
+        extra_env={"TB_APP": name, "TB_SYMBOLS": str(sym_file), **(env or {})},
+        build_tag=name,
     )
 
 
-@pytest.mark.parametrize("app", ["smoke", "quick", "demo"])
+@pytest.mark.parametrize("app", ["smoke", "quick", pytest.param("demo", marks=pytest.mark.full)])
 def test_soc(app: str) -> None:
     run_app(app)
 
 
+def test_soc_demo_timeout() -> None:
+    """The board demo with a cycle limit far below one run: accel_wait times out."""
+    run_app("demo", {"ACCEL_WAIT_CYCLES": str(DEMO_TIMEOUT_CYCLES)}, variant="timeout")
+
+
+@pytest.mark.full
 def test_soc_bench() -> None:
     """The software CNN on one image (BENCH_IMAGES; scripts/soc_speedup.py runs more)."""
     n = os.environ.get("BENCH_IMAGES", "1")

@@ -709,6 +709,12 @@ and this section is updated with the firmware.
 
   `LEDR[1]` lights when done; `LEDR[2]` lights if the accelerator reported `ERROR` or the two sets
   of logits differ. Presses during the run are ignored (as in §12).
+- **Timeout.** The firmware polls `STATUS` for at most 1,000,000 CPU cycles after `START` (20 ms
+  at 50 MHz, about 21 times one run). If `DONE` has not appeared by then, `HEX0` shows `E`,
+  `HEX1` the label, `HEX5..HEX2` are blank (whatever `SW[9]`), and only `LEDR[2]` lights. Nothing
+  else is read from the accelerator and the software CNN does not run, since the buffer window
+  would wait for the run (§13.4). A later `KEY[0]` press tries again. Every run ends (§9), so this
+  shows only a hardware fault.
 - `LEDR[9]` lit means the CPU trapped (a firmware fault).
 
 ### 13.9 Speedup measurement (definitions)
