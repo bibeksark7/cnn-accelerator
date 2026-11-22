@@ -5,7 +5,7 @@ applied in a temporary git worktree and its killing test from
 `testbench/mutants/README.md` is run; every killing test also passes on the unmutated
 design (baseline).
 
-**52 / 52 mutants killed.**
+**54 / 54 mutants killed.**
 
 | Mutant | Verdict | Killing test | First failure |
 |---|---|---|---|
@@ -53,11 +53,13 @@ design (baseline).
 | `m42_xbar_two_reads_outstanding` | KILLED | `testbench/unit/test_axil_interconnect.py::test_axil_interconnect[icarus]` | test_one_outstanding: AR accepted |
 | `m43_ram_partial_not_merged` | KILLED | `testbench/unit/test_axil_ram.py::test_axil_ram[icarus]` | test_random_access: word 511: 0xc57c4f6d, want 0x397b4fb7 |
 | `m44_ram_strobe_lanes_reversed` | KILLED | `testbench/unit/test_axil_ram.py::test_axil_ram[icarus]` | test_random_access: word 511: 0x9b7c9b25, want 0x397b4fb7 |
-| `m45_ram_read_rsp_early` | KILLED | `testbench/unit/test_axil_ram.py::test_axil_ram[icarus]` | test_init_image: Can't convert LogicArray to int: it contains non-0/1 values |
+| `m45_ram_read_rsp_early` | KILLED | `testbench/unit/test_axil_ram.py::test_axil_ram[icarus]` | test_init_image: AXI RDATA: X/Z on o_rdata = XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX at 85 ns |
 | `m46_gpio_partial_write_done` | KILLED | `testbench/unit/test_axil_gpio.py::test_axil_gpio[icarus]` | test_partial_write: a partial write changed a register: {0: 165, 4: 305419896, 16: 1, 20: 3735928559} -> {0: 511, 4: 1073741823, 16: 0, 20: 4294967295} |
 | `m47_gpio_clear_beats_press` | KILLED | `testbench/unit/test_axil_gpio.py::test_axil_gpio[icarus]` | test_key_event: a press in the clearing cycle was lost |
 | `m48_axil_whi_kept` | KILLED | `testbench/system/test_accel_axil.py::test_accel_axil` | test_buffer_window: WHI not cleared by the low write |
 | `m49_axil_read_half_swapped` | KILLED | `testbench/system/test_accel_axil.py::test_accel_axil` | test_buffer_window: sel 0 word 6671 |
 | `m50_axil_csr_hole_aliased` | KILLED | `testbench/system/test_accel_axil.py::test_accel_axil` | test_csr_window: hole 0x1000: 0x434e4e31 0 |
-| `m51_axil_buf_ignores_mem_ready` | KILLED | `testbench/system/test_accel_axil.py::test_accel_axil` | test_buffer_waits: cocotb expected it would shut down the simulation, but the simulation ended prematurely. This could be due to an assertion failure or a call to an exit routine in the HDL, or due to the simulator running out of events to process (is your clock running?). |
-| `m52_soc_accel_region_4mb` | KILLED | `testbench/system/test_soc.py::test_soc[quick]` | quick: cocotb expected it would shut down the simulation, but the simulation ended prematurely. This could be due to an assertion failure or a call to an exit routine in the HDL, or due to the simulator running out of events to process (is your clock running?). |
+| `m51_axil_buf_ignores_mem_ready` | KILLED | `testbench/system/test_accel_axil.py::test_accel_axil` | [1903105000] %Error: accel_top_if_sva.sv:54: Assertion failed in accel_axil_tb.u_accel_top.u_accel_top_if_sva.a_mem_req_stable: 'assert' failed. \| first failing test: test_buffer_waits: cocotb expected it would shut down the simulation, but the simulation ended prematurely. This could be due to an assertion failure or a call to an exit routine in the HDL, or due to the simulator running out of events to process (is your clock running?). |
+| `m52_soc_accel_region_4mb` | KILLED | `testbench/system/test_soc.py::test_soc[quick]` | [215530000] %Error: soc_bus_sva.sv:31: Assertion failed in soc_top.u_soc_bus_sva.a_no_write_error: 'assert' failed. \| first failing test: quick: cocotb expected it would shut down the simulation, but the simulation ended prematurely. This could be due to an assertion failure or a call to an exit routine in the HDL, or due to the simulator running out of events to process (is your clock running?). |
+| `m53_axil_csr_waits_for_idle` | KILLED | `testbench/system/test_accel_axil.py::test_accel_axil` | test_poll_during_run: a register access took 47260 cycles during a run |
+| `m54_axil_whi_waits_for_idle` | KILLED | `testbench/system/test_accel_axil.py::test_accel_axil` | test_buffer_waits: WHI write held until the run ended |
