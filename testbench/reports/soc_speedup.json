@@ -1,0 +1,69 @@
+{
+ "script": "scripts/soc_speedup.py",
+ "summary": {
+  "images": 4,
+  "clock_mhz": 50.0,
+  "mean_cycles": {
+   "software": 17987201.75,
+   "software_instret": 2383368.75,
+   "upload": 34591.0,
+   "end_to_end": 47972.0,
+   "cyc_total": 47259.0
+  },
+  "speedup_end_to_end": 374.95209184524305,
+  "speedup_with_upload": 217.86032181485655,
+  "speedup_vs_cyc_total": 380.60902156203053,
+  "software_cpi": 7.546965508379683
+ },
+ "per_image": [
+  {
+   "image": 0,
+   "software": 17987313,
+   "software_instret": 2383315,
+   "upload": 34591,
+   "end_to_end": 47972,
+   "cyc_total": 47259,
+   "speedup_end_to_end": 374.95441090636206,
+   "speedup_with_upload": 217.8616692707387
+  },
+  {
+   "image": 1,
+   "software": 17986549,
+   "software_instret": 2383421,
+   "upload": 34591,
+   "end_to_end": 47972,
+   "cyc_total": 47259,
+   "speedup_end_to_end": 374.9384849495539,
+   "speedup_with_upload": 217.85241573101752
+  },
+  {
+   "image": 2,
+   "software": 17988217,
+   "software_instret": 2383239,
+   "upload": 34591,
+   "end_to_end": 47972,
+   "cyc_total": 47259,
+   "speedup_end_to_end": 374.9732552322188,
+   "speedup_with_upload": 217.8726184852779
+  },
+  {
+   "image": 3,
+   "software": 17986728,
+   "software_instret": 2383500,
+   "upload": 34591,
+   "end_to_end": 47972,
+   "cyc_total": 47259,
+   "speedup_end_to_end": 374.9422162928375,
+   "speedup_with_upload": 217.854583772392
+  }
+ ],
+ "firmware_compiler": "riscv64-unknown-elf-gcc (14.2.0+19) 14.2.0",
+ "provenance": {
+  "commit": "6056644ce343709f463788385529ae35132cbd74",
+  "rtl_tree": "df1c43495d928c09f99ab7871eada0e943df9408",
+  "firmware_tree": "f8d1955ea6129fdf6f93b3d989745233f4088ee1",
+  "picorv32_commit": "ef203c2b0a3fb793280f5114941416c425c5b461",
+  "tree_clean": true,
+  "verilator": "Verilator 5.053 devel rev v5.052-654-gdd8a7d5e4 (mod)"
+ }
+}
