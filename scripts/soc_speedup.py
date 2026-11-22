@@ -13,9 +13,15 @@ Every number is a cycle count of the RTL simulation of the whole SoC (cycle-accu
 RTL); times assume the 50 MHz board clock, at which the SoC build closes timing
 (fpga/de10lite_soc/reports/).
 
+Besides the measured speedups, the report gives an instruction-count bound: the software CNN's
+retired instructions divided by the accelerator's cycles, i.e. the speedup against an ideal core
+that retires one instruction per cycle at the same clock (same instructions, no memory stalls).
+It separates what the accelerator gains from what PicoRV32's 7-8 cycles per instruction add.
+
 Usage: scripts/soc_speedup.py [--images N] [--from-results]
   --from-results  rebuild the reports from the last run's results without simulating
-Run locally (the software CNN takes minutes of simulation per image); CI runs one image.
+Run locally (the software CNN takes minutes of simulation per image); the full CI job runs one
+image.
 """
 
 from __future__ import annotations
@@ -74,6 +80,8 @@ def write_reports() -> None:
     for r in rows:
         r["speedup_end_to_end"] = r["software"] / r["end_to_end"]
         r["speedup_with_upload"] = r["software"] / (r["upload"] + r["end_to_end"])
+        r["ipc1_bound_end_to_end"] = r["software_instret"] / r["end_to_end"]
+        r["ipc1_bound_with_upload"] = r["software_instret"] / (r["upload"] + r["end_to_end"])
     keys = ("software", "software_instret", "upload", "end_to_end", "cyc_total")
     mean = {k: statistics.fmean(r[k] for r in rows) for k in keys}
     summary = {
@@ -83,6 +91,9 @@ def write_reports() -> None:
         "speedup_end_to_end": mean["software"] / mean["end_to_end"],
         "speedup_with_upload": mean["software"] / (mean["upload"] + mean["end_to_end"]),
         "speedup_vs_cyc_total": mean["software"] / mean["cyc_total"],
+        # Speedup against an ideal core retiring one instruction per cycle at the same clock.
+        "ipc1_bound_end_to_end": mean["software_instret"] / mean["end_to_end"],
+        "ipc1_bound_with_upload": mean["software_instret"] / (mean["upload"] + mean["end_to_end"]),
         "software_cpi": mean["software"] / mean["software_instret"],
     }
     data = {
@@ -122,10 +133,20 @@ def write_reports() -> None:
         f"| Accelerator core (CYC_TOTAL) | {fmt(mean['cyc_total'])} | "
         f"{mean['cyc_total'] * ms:.3f} ms |",
         "",
-        "| Speedup | |",
-        "|---|---|",
-        f"| Software / accelerator end to end | {summary['speedup_end_to_end']:.1f}x |",
-        f"| Software / (upload + end to end) | {summary['speedup_with_upload']:.1f}x |",
+        "| Speedup | Measured on PicoRV32 | Against an ideal 1-instruction-per-cycle core |",
+        "|---|---|---|",
+        f"| Software / accelerator end to end | {summary['speedup_end_to_end']:.1f}x | "
+        f"{summary['ipc1_bound_end_to_end']:.1f}x |",
+        f"| Software / (upload + end to end) | {summary['speedup_with_upload']:.1f}x | "
+        f"{summary['ipc1_bound_with_upload']:.1f}x |",
+        "",
+        "Measured: the software CNN's cycles on PicoRV32 divided by the accelerator's. Against an "
+        "ideal 1-instruction-per-cycle core: the software CNN's retired instructions "
+        f"({fmt(mean['software_instret'])}) divided by the same accelerator cycles (as measured "
+        "here, with PicoRV32 driving the upload and the polling), i.e. the speedup over a core at "
+        "the same clock that runs the same instructions at one per cycle with no memory stalls. "
+        "That bound is what remains of the speedup without PicoRV32's "
+        f"{summary['software_cpi']:.2f} cycles per instruction.",
         "",
         "| Image | Software | Upload | End to end | CYC_TOTAL | Speedup (end to end) |",
         "|---|---|---|---|---|---|",

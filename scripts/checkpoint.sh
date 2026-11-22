@@ -451,16 +451,24 @@ for k, env in (("rtl_tree", "RTL"), ("firmware_tree", "FW"), ("picorv32_commit",
 if not prov.get("tree_clean"): problems.append("measured from a dirty tree")
 m = s["mean_cycles"]
 if abs(s["speedup_end_to_end"] - m["software"] / m["end_to_end"]) > 1e-9: problems.append("speedup inconsistent")
-# README: every speedup figure ("375.0×") is one of the report's two, and both are stated.
+if abs(s["speedup_with_upload"] - m["software"] / (m["upload"] + m["end_to_end"])) > 1e-9: problems.append("speedup with upload inconsistent")
+# Instruction-count bound: speedup against an ideal one-instruction-per-cycle core, same clock.
+if abs(s.get("ipc1_bound_end_to_end", 0) - m["software_instret"] / m["end_to_end"]) > 1e-9: problems.append("instruction-count bound (end to end) missing or inconsistent")
+if abs(s.get("ipc1_bound_with_upload", 0) - m["software_instret"] / (m["upload"] + m["end_to_end"])) > 1e-9: problems.append("instruction-count bound (with upload) missing or inconsistent")
+md = open("testbench/reports/soc_speedup.md").read()
+for k in ("ipc1_bound_end_to_end", "ipc1_bound_with_upload"):
+    if k in s and f"{s[k]:.1f}x" not in md: problems.append(f"soc_speedup.md does not state {k} {s[k]:.1f}x")
+# README: every speedup figure ("375.0×") is one of the report's four, and all four are stated.
 import re
 readme = open("README.md").read()
-allowed = {f"{s['speedup_end_to_end']:.1f}", f"{s['speedup_with_upload']:.1f}"}
+allowed = {f"{s[k]:.1f}" for k in ("speedup_end_to_end", "speedup_with_upload", "ipc1_bound_end_to_end", "ipc1_bound_with_upload") if k in s}
 quoted = re.findall(r"\b(\d+(?:\.\d+)?)\s?[×x](?=\W)", readme)
 quoted = [q for q in quoted if "." in q]  # "8×8" is the array size, not a speedup
 problems += [f"README speedup {q}x not in the report ({sorted(allowed)})" for q in quoted if q not in allowed]
 problems += [f"README does not state the {a}x speedup" for a in sorted(allowed) if a not in quoted]
 print(f"{s['images']} images: software {m['software']:,.0f} cycles, end to end {m['end_to_end']:,.0f}, "
       f"speedup {s['speedup_end_to_end']:.1f}x ({s['speedup_with_upload']:.1f}x with upload); "
+      f"ideal 1-IPC core: {s.get('ipc1_bound_end_to_end', 0):.1f}x ({s.get('ipc1_bound_with_upload', 0):.1f}x with upload); "
       f"{r['firmware_compiler']}")
 for p in problems: print("  ", p)
 sys.exit(1 if problems else 0)

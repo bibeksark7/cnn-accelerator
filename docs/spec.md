@@ -729,3 +729,7 @@ All times are CPU cycles read with `rdcycle` at the same clock:
 - **accelerator core:** `CYC_TOTAL` (§10.2), for reference.
 
 Speedup = software / end to end (and software / with upload, reported next to it).
+
+Instruction-count bound = the software CNN's retired instructions (`rdinstret`) / end to end (and
+/ with upload): the speedup against an ideal core that runs the same instructions at one per
+cycle, at the same clock, with no memory stalls. Reported next to the measured speedups.
