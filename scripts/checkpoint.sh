@@ -296,15 +296,18 @@ phase_3() {
   check "latest CI run on main is green for HEAD" check_ci_green_on_head
 }
 
-# Phase 4: the DE10-Lite build closes timing at 50 MHz with every path constrained, and its
-# reports are evidence for this tree (fpga/de10lite/reports/build_info.json; the M1 RTL tree,
-# scripts/m1_rtl_tree.sh).
+# A DE10-Lite build closes timing at 50 MHz with every path constrained, and its reports are
+# evidence for this tree. check_fpga_build <build dir> <project> <synchronizer chains> <provenance>
+# where <provenance> is a JSON object of build_info.json fields that must have these values.
+# Phase 4: fpga/de10lite, the M1 RTL tree (scripts/m1_rtl_tree.sh), 6 chains (SW[3:0], KEY[1:0]).
+# Phase 5: fpga/de10lite_soc, HEAD:rtl + HEAD:firmware + the PicoRV32 commit, 12 chains (SW[9:0],
+# KEY[1:0]).
 check_fpga_build() {
-  RTL_TREE="$(scripts/m1_rtl_tree.sh)" python - <<'PY'
+  FPGA_DIR="$1" PROJECT="$2" CHAINS="$3" EXPECT="$4" python - <<'PY'
 import hashlib, json, os, re, sys
-d = "fpga/de10lite/reports"
+d = os.environ["FPGA_DIR"] + "/reports"
 info = json.load(open(f"{d}/build_info.json"))
-sta = open(f"{d}/de10lite.sta.summary").read()
+sta = open(f"{d}/{os.environ['PROJECT']}.sta.summary").read()
 slacks = {m.group(1): float(m.group(2)) for m in
           re.finditer(r"Type\s*:\s*(.+?)\nSlack\s*:\s*(-?[\d.]+)", sta)}
 # Every operating condition (corner): the minimum slack over all of them must be positive.
@@ -315,7 +318,7 @@ ucp = open(f"{d}/unconstrained_paths.rpt").read()
 counts = [int(x) for x in re.findall(r";\s*Unconstrained[^;]*;\s*(\d+)\s*;\s*(\d+)", ucp) for x in x]
 problems = []
 if set(setup) != CORNERS or set(hold) != CORNERS:
-    problems.append(f"corners in de10lite.sta.summary: setup {sorted(setup)}, hold {sorted(hold)}")
+    problems.append(f"corners in the .sta.summary: setup {sorted(setup)}, hold {sorted(hold)}")
 if not setup or min(setup.values()) <= 0: problems.append(f"setup slack {setup}")
 if not hold or min(hold.values()) <= 0: problems.append(f"hold slack {hold}")
 # sta_reports.tcl's per-corner table must agree with the Quartus summary.
@@ -326,19 +329,20 @@ if set(per_corner) != CORNERS:
     problems.append(f"corners in timing_corners.rpt: {sorted(per_corner)}")
 for c, (s, h) in per_corner.items():
     if abs(s - setup.get(c, 1e9)) > 5e-4 or abs(h - hold.get(c, 1e9)) > 5e-4:
-        problems.append(f"{c}: timing_corners.rpt {s}/{h} differs from de10lite.sta.summary")
-# Synchronizers: 6 chains (SW[3:0], KEY[0], KEY[1]) of 2 registers each, MTBF known, every corner.
+        problems.append(f"{c}: timing_corners.rpt {s}/{h} differs from the .sta.summary")
+# Synchronizers: CHAINS chains of 2 registers each, MTBF known, every corner.
 mtbf = open(f"{d}/mtbf.rpt").read()
 chains = re.findall(r"Number of Synchronizer Chains Found: (\d+)", mtbf)
 shortest = re.findall(r"Shortest Synchronizer Chain: (\d+) Registers", mtbf)
 unknown = re.findall(r"Fraction of Chains for which MTBFs Could Not be Calculated: ([\d.]+)", mtbf)
 design_mtbf = re.findall(r"Worst-Case MTBF of Design is (\S+) years", mtbf)
-if not (len(chains) == len(CORNERS) and set(chains) == {"6"} and set(shortest) == {"2"}
+if not (len(chains) == len(CORNERS) and set(chains) == {os.environ["CHAINS"]} and set(shortest) == {"2"}
         and unknown and all(float(u) == 0 for u in unknown)):
     problems.append(f"mtbf.rpt: chains {chains}, shortest {shortest}, unknown {unknown}")
 if not counts or any(counts): problems.append(f"unconstrained paths: {counts}")
 if "Illegal Clocks" not in ucp: problems.append("unconstrained-paths report incomplete")
-if info.get("rtl_tree") != os.environ["RTL_TREE"]: problems.append("build is not of the M1 RTL tree")
+for k, v in json.loads(os.environ["EXPECT"]).items():
+    if info.get(k) != v: problems.append(f"build_info {k} {info.get(k)} != {v}")
 if not info.get("tree_clean"): problems.append("build did not start from a clean tree")
 for f, h in info.get("init_files_sha256", {}).items():
     if hashlib.sha256(open(f"model/artifacts/mem/{f}", "rb").read()).hexdigest() != h:
@@ -384,7 +388,7 @@ phase_4() {
   check "script and golden model tests" check_pytest scripts_model 30 scripts/tests model/tests
   check "RTL lint (Quartus compat, Verilator -Wall, Icarus, Yosys check)" scripts/lint.sh
   check "ruff format + ruff check clean" check_ruff
-  check "DE10-Lite build: positive setup and hold slack at 50 MHz in every corner, no unconstrained paths, synchronizer MTBF, reports of the M1 RTL tree" check_fpga_build
+  check "DE10-Lite build: positive setup and hold slack at 50 MHz in every corner, no unconstrained paths, synchronizer MTBF, reports of the M1 RTL tree" check_fpga_build fpga/de10lite de10lite 6 "{\"rtl_tree\": \"$(scripts/m1_rtl_tree.sh)\"}"
   check "DE10-Lite build: every Quartus warning listed in fpga/de10lite/expected_warnings.txt" python scripts/check_quartus_warnings.py
   check "README results table: every row links a committed report" check_readme_results
   check "README and architecture FPGA numbers (Fmax, slack, LEs, resources) match the committed build reports" python scripts/check_fpga_numbers.py
@@ -399,6 +403,71 @@ phase_4() {
   fi
 }
 
+# Phase 5: the SoC tests of this checkpoint's system run passed (by name, so a skipped or
+# deselected one cannot count).
+check_soc_tests() {
+  python - <<'PY'
+import sys, xml.etree.ElementTree as ET
+root = ET.parse("sim_build/checkpoint/system.xml").getroot()
+want = ["test_accel_axil", "test_soc[smoke]", "test_soc[quick]", "test_soc[demo]", "test_soc_bench",
+        "test_de10lite_soc_top",
+        "test_soc_bus_check_fires[buserr-a_no_write_error]", "test_soc_bus_check_fires[trap-a_no_trap]"]
+cases = {c.get("name"): c for c in root.iter("testcase")}
+bad = [n for n in want if n not in cases or any(ch.tag in ("failure", "error", "skipped") for ch in cases[n])]
+print(f"{len(want) - len(bad)}/{len(want)} SoC tests passed: " + ", ".join(n for n in want if n not in bad))
+for n in bad: print(f"  missing or not passed: {n}")
+sys.exit(1 if bad else 0)
+PY
+}
+
+# Phase 5: the speedup report (scripts/soc_speedup.py) is evidence for this tree: at least 4
+# images, measured on HEAD's RTL, firmware and PicoRV32 from a clean tree, and its speedups follow
+# from its own cycle counts.
+check_speedup_report() {
+  RTL="$(git rev-parse HEAD:rtl)" FW="$(git rev-parse HEAD:firmware)" \
+  CPU="$(git rev-parse HEAD:third_party/picorv32)" python - <<'PY'
+import json, os, sys
+r = json.load(open("testbench/reports/soc_speedup.json"))
+s, prov, rows = r["summary"], r["provenance"], r["per_image"]
+problems = []
+if s["images"] < 4 or len(rows) != s["images"]: problems.append(f"{s['images']} images (need >= 4)")
+for k, env in (("rtl_tree", "RTL"), ("firmware_tree", "FW"), ("picorv32_commit", "CPU")):
+    if prov.get(k) != os.environ[env]: problems.append(f"{k} {prov.get(k)} != HEAD's {os.environ[env]}")
+if not prov.get("tree_clean"): problems.append("measured from a dirty tree")
+m = s["mean_cycles"]
+if abs(s["speedup_end_to_end"] - m["software"] / m["end_to_end"]) > 1e-9: problems.append("speedup inconsistent")
+print(f"{s['images']} images: software {m['software']:,.0f} cycles, end to end {m['end_to_end']:,.0f}, "
+      f"speedup {s['speedup_end_to_end']:.1f}x ({s['speedup_with_upload']:.1f}x with upload); "
+      f"{r['firmware_compiler']}")
+for p in problems: print("  ", p)
+sys.exit(1 if problems else 0)
+PY
+}
+
+phase_5() {
+  echo "Phase 5: RISC-V SoC with AXI4-Lite"
+  check "unit tests pass (testbench/unit, incl. the AXI4-Lite blocks)" check_pytest unit 15 testbench/unit
+  check "system tests pass (accel_top, FPGA tops, accelerator AXI slave, SoC firmware, SoC board top)" check_pytest system 15 testbench/system
+  check "SoC: accelerator slave, firmware quick subset (50 images bit-exact), smoke, bench, board demo, board top, bus check live" check_soc_tests
+  check "formal proofs pass, and fail on their mutants (testbench/formal)" check_pytest formal 17 testbench/formal
+  check "script and golden model tests (incl. the software CNN against the golden model)" check_pytest scripts_model 30 scripts/tests model/tests
+  check "RTL lint (Quartus compat, Verilator -Wall, Icarus, Yosys check)" scripts/lint.sh
+  check "ruff format + ruff check clean" check_ruff
+  check "speedup report (testbench/reports/soc_speedup.json) measured on HEAD's RTL, firmware and CPU" check_speedup_report
+  check "SoC build: positive setup and hold slack at 50 MHz in every corner, no unconstrained paths, synchronizer MTBF, reports of HEAD" check_fpga_build fpga/de10lite_soc de10lite_soc 12 "{\"rtl_tree\": \"$(git rev-parse HEAD:rtl)\", \"firmware_tree\": \"$(git rev-parse HEAD:firmware)\", \"picorv32_commit\": \"$(git rev-parse HEAD:third_party/picorv32)\"}"
+  check "SoC build: every Quartus warning listed in fpga/de10lite_soc/expected_warnings.txt" python scripts/check_quartus_warnings.py --reports fpga/de10lite_soc/reports --expected fpga/de10lite_soc/expected_warnings.txt
+  check "Milestone 1 evidence still valid: full run report of the M1 RTL tree" check_full_run_report
+  check "Milestone 1 evidence still valid: DE10-Lite build of the M1 RTL tree" check_fpga_build fpga/de10lite de10lite 6 "{\"rtl_tree\": \"$(scripts/m1_rtl_tree.sh)\"}"
+  run_local_checks "optional local repository checks"
+  check "latest CI run on main is green for HEAD" check_ci_green_on_head
+  if [ -f fpga/de10lite_soc/demo.md ]; then
+    echo "  [BOARD] SoC demo confirmed on the board: fpga/de10lite_soc/demo.md"
+  else
+    echo "  [BOARD] SoC demo not yet confirmed on the board (fpga/de10lite_soc/demo.md does not exist)"
+    pass_note=" (board confirmation pending)"
+  fi
+}
+
 phase="${1:-}"
 case "$phase" in
   0) phase_0 ;;
@@ -406,7 +475,8 @@ case "$phase" in
   2) phase_2 ;;
   3) phase_3 ;;
   4) phase_4 ;;
-  *) echo "usage: $0 <phase>   (implemented: 0, 1, 2, 3, 4)" >&2; exit 2 ;;
+  5) phase_5 ;;
+  *) echo "usage: $0 <phase>   (implemented: 0, 1, 2, 3, 4, 5)" >&2; exit 2 ;;
 esac
 
 echo
