@@ -5,6 +5,9 @@
                       against a byte-array model; first and last words included; every response
                       OKAY; address bits [1:0] ignored
 
+Responses are sampled through common.sim.resolved (common/axil.py), so an X on RDATA fails
+naming the signal.
+
 Verilator runs bind testbench/sva/axil_slave_port_bind.sv (--assert).
 """
 

@@ -9,6 +9,9 @@ held, with response and data unchanged, until accepted, and a write response onl
 and W were accepted. AW and W are sent with independent random delays (either order, or the same
 cycle), and BREADY / RREADY with random delays, including ready before valid.
 
+Every sampled signal goes through common.sim.resolved, so an X or Z on a handshake or payload
+fails with the signal's name and value instead of a conversion error.
+
 Latencies are never assumed; `guard` only catches hangs.
 """
 
@@ -20,6 +23,8 @@ from dataclasses import dataclass
 import cocotb
 from cocotb.triggers import FallingEdge, Lock, ReadOnly, RisingEdge
 from cocotb.utils import get_sim_time
+
+from common.sim import resolved
 
 OKAY, EXOKAY, SLVERR, DECERR = 0, 1, 2, 3
 RESP_NAMES = {OKAY: "OKAY", EXOKAY: "EXOKAY", SLVERR: "SLVERR", DECERR: "DECERR"}
@@ -79,7 +84,7 @@ class AxilMaster:
         self.drv(f"{chan}valid").value = 1
         for _ in range(self.guard):
             await ReadOnly()
-            if int(self.mon(f"{chan}ready").value):
+            if resolved(self.mon(f"{chan}ready"), f"AXI {chan.upper()}READY"):
                 t = get_sim_time(unit="ns")
                 await RisingEdge(self.clk)
                 await FallingEdge(self.clk)
@@ -99,14 +104,14 @@ class AxilMaster:
             await FallingEdge(self.clk)
             ready.value = int(early or (seen is not None and waited >= delay))
             await ReadOnly()
-            valid = int(self.mon(f"{chan}valid").value)
+            valid = resolved(self.mon(f"{chan}valid"), f"AXI {chan.upper()}VALID")
             if seen is not None:
                 assert valid, f"{chan.upper()}VALID dropped before {chan.upper()}READY"
-                now = {f: int(self.mon(f).value) for f in fields}
+                now = {f: resolved(self.mon(f), f"AXI {f.upper()}") for f in fields}
                 assert now == seen, f"{chan.upper()} payload changed while waiting: {seen} -> {now}"
                 waited += 1
             elif valid:
-                seen = {f: int(self.mon(f).value) for f in fields}
+                seen = {f: resolved(self.mon(f), f"AXI {f.upper()}") for f in fields}
             if valid and int(ready.value):
                 t = get_sim_time(unit="ns")
                 await RisingEdge(self.clk)
