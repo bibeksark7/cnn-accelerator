@@ -1270,3 +1270,25 @@ be compared with it); SoC RTL outside `rtl/` (the project layout puts `axi/` and
 
 **Reason.** The Milestone 1 evidence stays checkable exactly as strictly as before (any change to
 a Milestone 1 RTL file still invalidates it), and the SoC work does not invalidate it.
+
+## D-046 — SoC simulation tests: firmware-driven, an HDL bus checker, Python woken by MAILBOX (Phase 5)
+
+**Decision.**
+- **Firmware decides, the test checks.** Each SoC test builds one firmware app, runs `soc_top` on
+  Verilator with every `accel_top` and AXI4-Lite assertion bound, waits for the app's completion
+  code in `MAILBOX`, then reads the app's results table straight from the RAM model (symbol
+  addresses from the ELF) and compares it with the golden model.
+- **Bus errors and traps are assertions.** `testbench/sva/soc_bus_sva.sv` (bound to `soc_top`)
+  fails the run on any `SLVERR`/`DECERR` the CPU accepts and on a CPU trap (D-040), and counts
+  the CPU's transactions.
+- **Simulator speed.** The Python side waits on `MAILBOX` value changes (with a timeout), never
+  on every clock edge: a per-cycle Python monitor (the first version) made the whole simulation
+  markedly slower.
+
+**Alternatives.** A Python bus monitor sampling every cycle (simple, but too slow for the
+software CNN's millions of cycles); firmware-only self-checking (then a firmware bug could hide a
+hardware bug); reading results back over a debug UART (no UART exists, and the RAM model is
+already visible to the test).
+
+**Reason.** The comparison is independent of the firmware, every bus error is caught where it
+happens, and long firmware runs stay practical in simulation.

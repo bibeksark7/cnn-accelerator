@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -45,7 +46,8 @@ class Firmware:
 def build(app: str, extra: dict[str, str] | None = None) -> Firmware:
     """Run `make APP=<app>`; raises with the compiler output if the build fails."""
     out = SIM_BUILD_DIR / "firmware" / app
-    args = ["make", "-C", str(FIRMWARE_DIR), f"APP={app}", f"OUT={out}"]
+    # PYTHON: the generators need NumPy, so they run with this interpreter (the venv's).
+    args = ["make", "-C", str(FIRMWARE_DIR), f"APP={app}", f"OUT={out}", f"PYTHON={sys.executable}"]
     args += [f"{k}={v}" for k, v in (extra or {}).items()]
     proc = subprocess.run(args, capture_output=True, text=True)
     if proc.returncode != 0:
