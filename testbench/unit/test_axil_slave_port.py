@@ -12,6 +12,9 @@
   test_write_first        a write and a read buffered in the same cycle: the write is served first
   test_reset_mid_transaction  a reset while a request waits: no valid output afterwards, every
                           channel ready, the next transaction works
+  test_zz_aw_w_order_cover  (Verilator, last) the bound axil_resp_order_sva saw every AW/W
+                          arrival order (c_aw_before_w, c_w_before_aw, c_aw_with_w); fails if any
+                          was never hit
   test_port_sva_fires     (Verilator) a master that changes AWADDR while waiting trips the AW
                           channel's a_payload_stable
 
@@ -28,6 +31,7 @@ import pytest
 from cocotb.triggers import ClockCycles, FallingEdge, ReadOnly
 
 from common.axil import DECERR, OKAY, SLVERR, AxilMaster, Timing
+from common.coverage import cover_aw_w_orders, is_verilator
 from common.runner import RTL_DIR, SIMULATORS, SVA_DIR, run_cocotb, run_sva_violation
 from common.sim import seeded_rng, start_clock_and_reset
 
@@ -234,6 +238,12 @@ async def test_reset_mid_transaction(dut):
     data, rresp = await master.read(0x80)
     assert local.log[0][:3] == (1, 0x80, 0x1234) and resp == local.log[0][4]
     assert data == 0x1234 and rresp == local.log[1][4]
+
+
+@cocotb.test(skip=not is_verilator() or os.environ.get("SVA_VIOLATION") is not None)
+async def test_zz_aw_w_order_cover(dut):
+    """Last test (Verilator): every AW/W arrival order reached the port."""
+    cover_aw_w_orders("slave port", dut.u_order_sva)
 
 
 @cocotb.test(skip=os.environ.get("SVA_VIOLATION") is None)

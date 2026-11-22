@@ -83,6 +83,28 @@ def cover_vr_links(links: dict[str, object], must_stall: set[str]) -> None:
             assert transfers and stalls, f"{name}: {transfers} transfers, {stalls} stalls"
 
 
+AW_W_ORDERS = {
+    "AW before W": "aw_before_w_n",
+    "W before AW": "w_before_aw_n",
+    "AW with W": "aw_with_w_n",
+}
+
+
+def cover_aw_w_orders(name: str, mon) -> None:
+    """Coverage from a bound axil_resp_order_sva (testbench/sva/axil_resp_order_sva.sv).
+
+    Records how often each AW/W arrival order (its covers c_aw_before_w, c_w_before_aw,
+    c_aw_with_w) was seen on the link `name`, and fails unless every order was seen at least
+    once. Verilator runs only (the monitor is an SVA bind).
+    """
+    counts = {order: int(getattr(mon, sig).value) for order, sig in AW_W_ORDERS.items()}
+    for order, hits in counts.items():
+        if hits:
+            cover("AXI4-Lite AW/W order (SVA monitor)", f"{name}: {order}", hits)
+    missing = [order for order, hits in counts.items() if not hits]
+    assert not missing, f"{name}: AW/W order never seen: {', '.join(missing)} ({counts})"
+
+
 async def csr_wait_monitor(dut) -> None:
     """DUT-observed: each new CSR request (rising i_csr_valid) is accepted at once or waits."""
     while True:

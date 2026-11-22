@@ -9,6 +9,9 @@
                           check that VALID and the payload are held until READY
   test_one_outstanding    while a write's B (a read's R) waits for the master, no new AW (AR) is
                           accepted; a W that arrives before its AW waits for it
+  test_zz_aw_w_order_cover  (Verilator, last) the bound axil_resp_order_sva on the master side
+                          saw every AW/W arrival order (c_aw_before_w, c_w_before_aw,
+                          c_aw_with_w); fails if any was never hit
 
 Slave models: SlaveBank (all NS slaves in one coroutine, writing whole vectors each cycle).
 Verilator runs bind testbench/sva/axil_interconnect_bind.sv (--assert) on the master side.
@@ -23,6 +26,7 @@ import pytest
 from cocotb.triggers import ClockCycles, FallingEdge, ReadOnly
 
 from common.axil import DECERR, OKAY, SLVERR, AxilMaster
+from common.coverage import cover_aw_w_orders, is_verilator
 from common.runner import RTL_DIR, SIMULATORS, SVA_DIR, run_cocotb
 from common.sim import seeded_rng, start_clock_and_reset
 
@@ -269,6 +273,12 @@ async def test_one_outstanding(dut):
     await ReadOnly()
     assert int(dut.o_s_arready.value) and int(dut.o_m_arvalid.value) == 1, "next AR not routed"
     await ClockCycles(dut.clk, 2)
+
+
+@cocotb.test(skip=not is_verilator())
+async def test_zz_aw_w_order_cover(dut):
+    """Last test (Verilator): every AW/W arrival order reached the master-side port."""
+    cover_aw_w_orders("interconnect master side", dut.u_order_sva)
 
 
 def params() -> dict[str, object]:
