@@ -300,8 +300,8 @@ phase_3() {
 # evidence for this tree. check_fpga_build <build dir> <project> <synchronizer chains> <provenance>
 # where <provenance> is a JSON object of build_info.json fields that must have these values.
 # Phase 4: fpga/de10lite, the M1 RTL tree (scripts/m1_rtl_tree.sh), 6 chains (SW[3:0], KEY[1:0]).
-# Phase 5: fpga/de10lite_soc, HEAD:rtl + HEAD:firmware + the PicoRV32 commit, 12 chains (SW[9:0],
-# KEY[1:0]).
+# Phase 5: fpga/de10lite_soc, HEAD:rtl + the PicoRV32 commit, 12 chains (SW[9:0], KEY[1:0]); its
+# firmware image is checked by check_soc_firmware_image.
 check_fpga_build() {
   FPGA_DIR="$1" PROJECT="$2" CHAINS="$3" EXPECT="$4" python - <<'PY'
 import hashlib, json, os, re, sys
@@ -459,6 +459,26 @@ sys.exit(0 if mem_bits == 65536 * 8 and m9k > 0 else 1)
 PY
 }
 
+# Phase 5: the SoC build's RAM image is the demo firmware of HEAD: rebuilt from HEAD with the
+# same compiler, its image equals the one the build used (byte for byte, sha256). This holds even
+# when other apps under firmware/ change after the build.
+check_soc_firmware_image() {
+  local out=sim_build/checkpoint/demo_fw
+  rm -rf "$out"
+  make -s -C firmware APP=demo OUT="$PWD/$out" PYTHON="$(command -v python)" >/dev/null || return 1
+  OUT="$out" python - <<'PY'
+import hashlib, json, os, sys
+info = json.load(open("fpga/de10lite_soc/reports/build_info.json"))
+out = os.environ["OUT"]
+cc = open(f"{out}/toolchain.txt").read().strip()
+h = hashlib.sha256(open(f"{out}/demo.hex", "rb").read()).hexdigest()
+print(f"demo firmware from HEAD: sha256 {h[:16]}…, {cc}; build used {info['firmware_hex_sha256'][:16]}…")
+if cc != info["firmware_compiler"]:
+    print(f"  compiler differs from the build's ({info['firmware_compiler']})"); sys.exit(1)
+sys.exit(0 if h == info["firmware_hex_sha256"] else 1)
+PY
+}
+
 phase_5() {
   echo "Phase 5: RISC-V SoC with AXI4-Lite"
   check "unit tests pass (testbench/unit, incl. the AXI4-Lite blocks)" check_pytest unit 15 testbench/unit
@@ -469,7 +489,8 @@ phase_5() {
   check "RTL lint (Quartus compat, Verilator -Wall, Icarus, Yosys check)" scripts/lint.sh
   check "ruff format + ruff check clean" check_ruff
   check "speedup report (testbench/reports/soc_speedup.json) measured on HEAD's RTL, firmware and CPU" check_speedup_report
-  check "SoC build: positive setup and hold slack at 50 MHz in every corner, no unconstrained paths, synchronizer MTBF, reports of HEAD" check_fpga_build fpga/de10lite_soc de10lite_soc 12 "{\"rtl_tree\": \"$(git rev-parse HEAD:rtl)\", \"firmware_tree\": \"$(git rev-parse HEAD:firmware)\", \"picorv32_commit\": \"$(git rev-parse HEAD:third_party/picorv32)\"}"
+  check "SoC build: positive setup and hold slack at 50 MHz in every corner, no unconstrained paths, synchronizer MTBF, reports of HEAD's RTL and PicoRV32" check_fpga_build fpga/de10lite_soc de10lite_soc 12 "{\"rtl_tree\": \"$(git rev-parse HEAD:rtl)\", \"picorv32_commit\": \"$(git rev-parse HEAD:third_party/picorv32)\"}"
+  check "SoC build: its RAM image is HEAD's demo firmware (rebuilt, same compiler, same sha256)" check_soc_firmware_image
   check "SoC build: the 64 KB RAM is block RAM (BUG-015)" check_soc_ram_in_block_ram
   check "SoC build: every Quartus warning listed in fpga/de10lite_soc/expected_warnings.txt" python scripts/check_quartus_warnings.py --reports fpga/de10lite_soc/reports --expected fpga/de10lite_soc/expected_warnings.txt
   check "Milestone 1 evidence still valid: full run report of the M1 RTL tree" check_full_run_report
