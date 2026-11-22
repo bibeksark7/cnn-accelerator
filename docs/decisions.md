@@ -1181,8 +1181,14 @@ only, keeps the memory port's handshake rule by construction, and leaves the cor
   carries its 50 images (39,200 bytes) to upload through the buffer window. At 32 bits wide an M9K
   block holds 8 Kbit, so the RAM needs 64 of the MAX 10's 182 blocks; the SoC build reports give
   the measured total.
-- **Boot.** `crt0.S` sets `sp` and `gp`, copies `.data` from its load image (placed after
-  `.rodata` by the linker script) to its run address, zeroes `.bss`, and calls `main`. The load
+- **Byte writes.** The RAM is one 32-bit `sram_1r1w` (the block-RAM template the accelerator's
+  buffers already use). A write with only some strobes set is a read-modify-write: read the word,
+  replace the strobed bytes, write it back the next cycle. A RAM with four byte lanes and
+  per-byte write enables (the first version, `sram_be`) was not inferred as block RAM by Quartus
+  Prime Lite 22.1: synthesis tried to build 64 KB from registers and did not finish (BUG-015).
+- **Boot.** `crt0.S` sets `sp` (firmware is built with `-mno-relax`, so `gp` is not used),
+  copies `.data` from its load image (placed after `.bss` by the linker script, so it lies outside
+  every section the firmware writes) to its run address, zeroes `.bss`, and calls `main`. The load
   image itself is never written.
 - **Firmware image.** `objcopy` to a flat binary, then a script converts it to 32-bit little-endian
   words for `$readmemh`. Built by `firmware/Makefile`; nothing generated is committed.

@@ -71,7 +71,7 @@ def symbols() -> dict[str, int]:
 
 
 def ram_word(dut, addr: int) -> int:
-    return int(dut.u_axil_ram.u_sram_be.mem[addr >> 2].value)
+    return int(dut.u_axil_ram.u_sram_1r1w.mem[addr >> 2].value)
 
 
 def ram_words(dut, addr: int, n: int) -> list[int]:
