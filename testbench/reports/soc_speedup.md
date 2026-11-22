@@ -9,20 +9,22 @@ The software CNN retires 2,383,369 instructions per image at 7.55 cycles per ins
 | Measurement (mean per image) | Cycles | Time at 50 MHz |
 |---|---|---|
 | Software CNN | 17,987,202 | 359.74 ms |
-| Accelerator, end to end (IMG_SEL, START, poll, read results) | 47,972 | 0.959 ms |
+| Accelerator, end to end (IMG_SEL, START, poll, read results) | 47,984 | 0.960 ms |
 | Image upload through the buffer window (784 bytes) | 34,591 | 0.692 ms |
 | Accelerator core (CYC_TOTAL) | 47,259 | 0.945 ms |
 
-| Speedup | |
-|---|---|
-| Software / accelerator end to end | 375.0x |
-| Software / (upload + end to end) | 217.9x |
+| Speedup | Measured on PicoRV32 | Against an ideal 1-instruction-per-cycle core |
+|---|---|---|
+| Software / accelerator end to end | 374.9x | 49.7x |
+| Software / (upload + end to end) | 217.8x | 28.9x |
+
+Measured: the software CNN's cycles on PicoRV32 divided by the accelerator's. Against an ideal 1-instruction-per-cycle core: the software CNN's retired instructions (2,383,369) divided by the same accelerator cycles (as measured here, with PicoRV32 driving the upload and the polling), i.e. the speedup over a core at the same clock that runs the same instructions at one per cycle with no memory stalls. That bound is what remains of the speedup without PicoRV32's 7.55 cycles per instruction.
 
 | Image | Software | Upload | End to end | CYC_TOTAL | Speedup (end to end) |
 |---|---|---|---|---|---|
-| 0 | 17,987,313 | 34,591 | 47,972 | 47,259 | 375.0x |
-| 1 | 17,986,549 | 34,591 | 47,972 | 47,259 | 374.9x |
-| 2 | 17,988,217 | 34,591 | 47,972 | 47,259 | 375.0x |
-| 3 | 17,986,728 | 34,591 | 47,972 | 47,259 | 374.9x |
+| 0 | 17,987,313 | 34,591 | 47,984 | 47,259 | 374.9x |
+| 1 | 17,986,549 | 34,591 | 47,984 | 47,259 | 374.8x |
+| 2 | 17,988,217 | 34,591 | 47,984 | 47,259 | 374.9x |
+| 3 | 17,986,728 | 34,591 | 47,984 | 47,259 | 374.8x |
 
-Provenance: commit `6056644ce343`, RTL tree `df1c43495d92`, firmware tree `f8d1955ea612`, PicoRV32 `ef203c2b0a3f`, clean tree: True; Verilator 5.053 devel rev v5.052-654-gdd8a7d5e4 (mod).
+Provenance: commit `25267bebca7d`, RTL tree `848fb3db43b2`, firmware tree `ddec2a8d13ba`, PicoRV32 `ef203c2b0a3f`, clean tree: True; Verilator 5.053 devel rev v5.052-654-gdd8a7d5e4 (mod).
