@@ -7,10 +7,11 @@ checkout), runs its killing test from the table below and parses the test result
 
 - a mutant is **killed** when its killing test fails;
 - when the table names a required assertion, the simulator log must also report that assertion
-  failing (an SVA kill; the mutant changes no output, see `docs/decisions.md` D-026);
+  failing: either the mutant changes no output (an SVA kill, see `docs/decisions.md` D-026), or
+  the assertion is what stops the simulation, so the kill is checked to come from it;
 - every killing test must first pass on the unmutated design (baseline).
 
-m01–m34 cover the accelerator (Milestone 1); m35–m52 cover the SoC blocks: the AXI4-Lite slave
+m01–m34 cover the accelerator (Milestone 1); m35–m54 cover the SoC blocks: the AXI4-Lite slave
 port, the interconnect, the RAM, the GPIO block, the accelerator's AXI4-Lite slave and the SoC
 address map.
 
@@ -76,5 +77,7 @@ applied to the working tree.
 | `m48_axil_whi_kept` | accelerator slave: WHI not cleared after a low-half buffer write (stale high half in the next word) | `testbench/system/test_accel_axil.py::test_accel_axil` | — |
 | `m49_axil_read_half_swapped` | accelerator slave: buffer-window read returns the other half of the 64-bit word | `testbench/system/test_accel_axil.py::test_accel_axil` | — |
 | `m50_axil_csr_hole_aliased` | accelerator slave: CSR-window addresses above 4 KB alias the CSRs instead of DECERR | `testbench/system/test_accel_axil.py::test_accel_axil` | — |
-| `m51_axil_buf_ignores_mem_ready` | accelerator slave: buffer-window access completes without waiting for the memory port's ready | `testbench/system/test_accel_axil.py::test_accel_axil` | — |
-| `m52_soc_accel_region_4mb` | SoC address map gives the accelerator 4 MB instead of 8 MB: the buffer window decodes as unmapped | `testbench/system/test_soc.py::test_soc[quick]` | — |
+| `m51_axil_buf_ignores_mem_ready` | accelerator slave: buffer-window access completes without waiting for the memory port's ready | `testbench/system/test_accel_axil.py::test_accel_axil` | `a_mem_req_stable` |
+| `m52_soc_accel_region_4mb` | SoC address map gives the accelerator 4 MB instead of 8 MB: the buffer window decodes as unmapped | `testbench/system/test_soc.py::test_soc[quick]` | `a_no_write_error` |
+| `m53_axil_csr_waits_for_idle` | accelerator slave: CSR accesses wait for the memory port's ready, i.e. are held until a run ends | `testbench/system/test_accel_axil.py::test_accel_axil` | — |
+| `m54_axil_whi_waits_for_idle` | accelerator slave: a high-half (WHI) write waits for the memory port's ready, i.e. is held until a run ends | `testbench/system/test_accel_axil.py::test_accel_axil` | — |

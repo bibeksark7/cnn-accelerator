@@ -1,0 +1,13 @@
+--- a/rtl/axi/accel_axil_slave.sv
++++ b/rtl/axi/accel_axil_slave.sv
+@@ -147,8 +147,8 @@
+         rsp_valid = 1'b1;
+         rsp_resp  = RESP_SLVERR;
+       end else if (do_csr) begin
+-        req_ready = i_csr_ready;
+-        rsp_valid = i_csr_ready;
++        req_ready = i_csr_ready && i_mem_ready;
++        rsp_valid = i_csr_ready && i_mem_ready;
+         rsp_rdata = req_we ? 32'd0 : i_csr_rdata;
+       end else if (do_whi) begin
+         rsp_valid = 1'b1;
