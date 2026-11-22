@@ -325,3 +325,21 @@ caught by `scripts/lint.sh` before any commit and are not listed.
   then fails with "the firmware ran N images, the test expects …" if the count differs.
 - **Regression test.** The bench test's image-count check; checked by hand: a rebuild with 4 then 1
   images regenerates `images.c` each time, and a rebuild with the same count does not.
+
+## BUG-019 — An AXI4-Lite cover point could never fire at the interconnect (Phase 5)
+
+- **Symptom.** With the slave-port and interconnect tests changed to fail unless every AW/W order
+  cover is hit, `test_axil_interconnect[verilator]` failed: `c_w_before_aw` had 0 hits over 300
+  writes, although the random master sends W before AW on about a third of them.
+- **How found.** The new requirement itself (`test_zz_aw_w_order_cover`), on its first run.
+- **Root cause.** Verification bug. `axil_resp_order_sva` documented its covers as "each arrival
+  order of AW and W" but defined them on acceptance (`wvalid && wready && ...`). The interconnect
+  holds W until its AW has been routed (spec §13.3), so at its CPU-side port a W is never accepted
+  first: the cover was unreachable there, and before the requirement nothing noticed that it never
+  fired.
+- **Fix.** The covers are defined on arrival: a transfer arrives in the first cycle its VALID is
+  high, and the k-th AW pairs with the k-th W (D-049). The monitor counts each order; both tests
+  require every count to be non-zero.
+- **Regression test.** `test_zz_aw_w_order_cover` in `test_axil_slave_port.py` and
+  `test_axil_interconnect.py`. Lesson: a cover point is evidence only once a test fails when it is
+  not hit.
