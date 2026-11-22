@@ -41,7 +41,8 @@ version = subprocess.run([qsh, "--version"], capture_output=True, text=True).std
 print(json.dumps({
     "script": "fpga/de10lite/build_win.sh",
     "commit": git("rev-parse", "HEAD"),
-    "rtl_tree": git("rev-parse", "HEAD:rtl"),
+    "rtl_tree": subprocess.run([f"{repo}/scripts/m1_rtl_tree.sh"], cwd=repo, capture_output=True,
+                               text=True).stdout.strip(),
     "tree_clean": git("status", "--porcelain") == "",
     "init_files_sha256": {f"{n}.hex": hashlib.sha256(open(f"{mem}/{n}.hex", "rb").read()).hexdigest()
                           for n in ("img", "wgt", "param", "desc", "label")},
@@ -49,7 +50,10 @@ print(json.dumps({
 }, indent=2))
 PY
 mv "$info_tmp" "$here/reports/build_info.json"
-find "$repo/rtl" -name '*.sv' -exec cp {} "$BUILD_DIR/" \;
+# The Milestone 1 RTL only: the SoC-only directories rtl/axi and rtl/soc belong to the SoC build
+# (fpga/de10lite_soc/, D-045).
+find "$repo/rtl" -name '*.sv' -not -path '*/rtl/axi/*' -not -path '*/rtl/soc/*' \
+  -exec cp {} "$BUILD_DIR/" \;
 cp "$here/build.tcl" "$here/sta_reports.tcl" "$here/pins.tcl" "$here/de10lite.sdc" "$BUILD_DIR/"
 for f in img wgt param desc label; do
   cp "$repo/model/artifacts/mem/$f.hex" "$BUILD_DIR/"

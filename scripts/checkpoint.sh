@@ -185,10 +185,11 @@ PY
 }
 
 # Full run report: at least 1,000 images, every logit bit-exact, every run DONE without error,
-# and evidence for this tree: the recorded RTL tree is HEAD:rtl, the init files are unchanged,
+# and evidence for this tree: the recorded RTL tree is the M1 RTL tree (scripts/m1_rtl_tree.sh:
+# HEAD:rtl without the SoC-only rtl/axi and rtl/soc, D-045), the init files are unchanged,
 # the run started from a clean tree, and both reports carry the same provenance.
 check_full_run_report() {
-  RTL_TREE="$(git rev-parse HEAD:rtl)" python - <<'PY'
+  RTL_TREE="$(scripts/m1_rtl_tree.sh)" python - <<'PY'
 import hashlib, json, os, sys
 r = json.load(open("testbench/reports/full_run.json"))
 perf = json.load(open("testbench/reports/perf_counters.json"))
@@ -199,7 +200,7 @@ problems = []
 if not (n >= 1000 and r["logits_bit_exact"] == n and r["status_done_no_error"] == n):
     problems.append("not every image bit-exact and clean")
 if prov.get("rtl_tree") != os.environ["RTL_TREE"]:
-    problems.append(f"RTL tree {prov.get('rtl_tree')} != HEAD:rtl {os.environ['RTL_TREE']}")
+    problems.append(f"RTL tree {prov.get('rtl_tree')} != M1 RTL tree {os.environ['RTL_TREE']}")
 for f, h in prov.get("init_files_sha256", {"(none recorded)": ""}).items():
     path = os.path.join("model/artifacts/mem", f)
     if not os.path.exists(path) or hashlib.sha256(open(path, "rb").read()).hexdigest() != h:
@@ -296,9 +297,10 @@ phase_3() {
 }
 
 # Phase 4: the DE10-Lite build closes timing at 50 MHz with every path constrained, and its
-# reports are evidence for this tree (fpga/de10lite/reports/build_info.json).
+# reports are evidence for this tree (fpga/de10lite/reports/build_info.json; the M1 RTL tree,
+# scripts/m1_rtl_tree.sh).
 check_fpga_build() {
-  RTL_TREE="$(git rev-parse HEAD:rtl)" python - <<'PY'
+  RTL_TREE="$(scripts/m1_rtl_tree.sh)" python - <<'PY'
 import hashlib, json, os, re, sys
 d = "fpga/de10lite/reports"
 info = json.load(open(f"{d}/build_info.json"))
@@ -336,7 +338,7 @@ if not (len(chains) == len(CORNERS) and set(chains) == {"6"} and set(shortest) =
     problems.append(f"mtbf.rpt: chains {chains}, shortest {shortest}, unknown {unknown}")
 if not counts or any(counts): problems.append(f"unconstrained paths: {counts}")
 if "Illegal Clocks" not in ucp: problems.append("unconstrained-paths report incomplete")
-if info.get("rtl_tree") != os.environ["RTL_TREE"]: problems.append("build is not of HEAD:rtl")
+if info.get("rtl_tree") != os.environ["RTL_TREE"]: problems.append("build is not of the M1 RTL tree")
 if not info.get("tree_clean"): problems.append("build did not start from a clean tree")
 for f, h in info.get("init_files_sha256", {}).items():
     if hashlib.sha256(open(f"model/artifacts/mem/{f}", "rb").read()).hexdigest() != h:
@@ -382,7 +384,7 @@ phase_4() {
   check "script and golden model tests" check_pytest scripts_model 30 scripts/tests model/tests
   check "RTL lint (Quartus compat, Verilator -Wall, Icarus, Yosys check)" scripts/lint.sh
   check "ruff format + ruff check clean" check_ruff
-  check "DE10-Lite build: positive setup and hold slack at 50 MHz in every corner, no unconstrained paths, synchronizer MTBF, reports of HEAD:rtl" check_fpga_build
+  check "DE10-Lite build: positive setup and hold slack at 50 MHz in every corner, no unconstrained paths, synchronizer MTBF, reports of the M1 RTL tree" check_fpga_build
   check "DE10-Lite build: every Quartus warning listed in fpga/de10lite/expected_warnings.txt" python scripts/check_quartus_warnings.py
   check "README results table: every row links a committed report" check_readme_results
   check "README and architecture FPGA numbers (Fmax, slack, LEs, resources) match the committed build reports" python scripts/check_fpga_numbers.py

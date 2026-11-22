@@ -1246,3 +1246,27 @@ multiplier (an inflated speedup).
 **Reason.** Each image does one job and fits the RAM; correctness is checked outside the
 firmware; and the speedup compares the same network on the same CPU, with and without the
 accelerator.
+
+## D-045 — SoC-only RTL in rtl/axi and rtl/soc; the Milestone 1 RTL tree (Phase 5)
+
+**Decision.**
+- **Layout.** Every module only the SoC uses lives in `rtl/axi/` (the AXI4-Lite slave front end,
+  interconnect, RAM, GPIO and accelerator slave) or `rtl/soc/` (`soc_top`, its byte-enabled RAM
+  primitive `sram_be`, and the board top `de10lite_soc_top`). No Milestone 1 file changes.
+- **Milestone 1 RTL tree.** `scripts/m1_rtl_tree.sh` gives the git tree hash of `rtl/` without
+  `rtl/axi` and `rtl/soc`. Before those directories existed it equals `git rev-parse HEAD:rtl`
+  (checked: `4beb0d98…` for both), so the provenance recorded by the full run and by the
+  DE10-Lite build still identifies the RTL they used. Checkpoints 3 and 4, `scripts/full_run.py`
+  and `fpga/de10lite/build_win.sh` use it instead of `HEAD:rtl`, and the Milestone 1 Quartus
+  build copies only that RTL.
+- **SoC build provenance.** `fpga/de10lite_soc/reports/build_info.json` records the whole
+  `HEAD:rtl`, `HEAD:firmware`, the PicoRV32 commit and the firmware image's hash, since all of
+  them go into that build.
+
+**Alternatives.** Rerunning the full run (about 70 minutes) and the Milestone 1 board build after
+every SoC commit (no Milestone 1 input changes, so the reruns would only re-prove the same
+result); recording a hash of the file list instead of a git tree (the existing reports could not
+be compared with it); SoC RTL outside `rtl/` (the project layout puts `axi/` and `soc/` there).
+
+**Reason.** The Milestone 1 evidence stays checkable exactly as strictly as before (any change to
+a Milestone 1 RTL file still invalidates it), and the SoC work does not invalidate it.

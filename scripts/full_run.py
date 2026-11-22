@@ -8,7 +8,8 @@
    a time, runs them back to back with IMG_SEL (weights loaded once, from the init files) and
    writes one JSON line per image: logits match, RESULT, STATUS and every performance counter.
 3. Records the provenance of the run before simulating (sim_build/full_run/provenance.json): the
-   commit, `git rev-parse HEAD:rtl` (the RTL tree), whether the working tree was clean, the sha256
+   commit, the M1 RTL tree (scripts/m1_rtl_tree.sh: HEAD:rtl without the SoC-only rtl/axi and
+   rtl/soc, D-045), whether the working tree was clean, the sha256
    of wgt/param/desc.hex and of the vectors, and the Verilator version. Both JSON reports carry it,
    and scripts/checkpoint.sh 3 rejects a report whose RTL tree or init files differ from HEAD's.
 4. Writes, from those lines:
@@ -72,7 +73,13 @@ def provenance(vectors: Path) -> dict:
     verilator = subprocess.run(["verilator", "--version"], capture_output=True, text=True).stdout
     return {
         "commit": git("rev-parse", "HEAD").strip(),
-        "rtl_tree": git("rev-parse", "HEAD:rtl").strip(),
+        "rtl_tree": subprocess.run(
+            [str(ROOT / "scripts" / "m1_rtl_tree.sh")],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip(),
         "tree_clean": git("status", "--porcelain").strip() == "",
         "init_files_sha256": {f: sha256(mem / f) for f in ("wgt.hex", "param.hex", "desc.hex")},
         "vectors_sha256": sha256(vectors),

@@ -70,7 +70,7 @@ async def test_random_access(dut):
 
 @pytest.mark.parametrize("sim", SIMULATORS)
 def test_axil_ram(sim: str) -> None:
-    sources = [RTL_DIR / "mem" / "sram_be.sv", RTL_DIR / "axi" / "axil_slave_port.sv"]
+    sources = [RTL_DIR / "soc" / "sram_be.sv", RTL_DIR / "axi" / "axil_slave_port.sv"]
     sources.append(RTL_DIR / "axi" / "axil_ram.sv")
     args: list[str] = []
     if sim == "verilator":
