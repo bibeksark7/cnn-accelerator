@@ -1,10 +1,11 @@
 """Functional coverage collector (docs/decisions.md D-034).
 
-In-house, because cocotb-coverage does not support cocotb 2.x and a new dependency needs
-approval. A test records hits with `cover(point, bin)`; the counts of one simulation are written
-to `coverage.json` in the simulation's working directory (its build directory) when the
-simulator's Python interpreter exits. `scripts/coverage_report.py` merges every build
-directory's file, compares the counts with the goals and writes testbench/reports/coverage.md.
+In-house, because cocotb-coverage does not support cocotb 2.x and the collector needed here is
+small enough not to justify another dependency. A test records hits with `cover(point, bin)`;
+the counts of one simulation are written to `coverage.json` in the simulation's working
+directory (its build directory) when the simulator's Python interpreter exits.
+`scripts/coverage_report.py` merges every build directory's file, compares the counts with the
+goals and writes testbench/reports/coverage.md.
 
 File format: {"scope": <toplevel>, "points": {point: {bin: hits}}}.
 """

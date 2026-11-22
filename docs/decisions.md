@@ -1091,9 +1091,9 @@ our own or GCC's.
   - The fast multiplier and barrel shifter make the software baseline as fast as this core can
     reasonably be, so the speedup is not inflated by a handicapped baseline.
   - The divider completes RV32M; neither the network nor the driver divides on the hot path.
-  - Interrupts are off: the firmware polls `STATUS` (approved by the project owner). One run takes
-    47,259 cycles (`testbench/reports/perf_counters.md`), and polling keeps the firmware a single
-    loop.
+  - Interrupts are off: the firmware polls `STATUS`. One run takes 47,259 cycles
+    (`testbench/reports/perf_counters.md`), the CPU has nothing else to do meanwhile, and polling
+    keeps the firmware a single loop with no interrupt handler or shared state to get wrong.
   - `ENABLE_COUNTERS64 = 0`: every timed interval is far below 2^32 cycles (86 s at 50 MHz),
     and firmware subtracts counter values as unsigned 32-bit numbers, which is correct across a
     wrap.
@@ -1118,8 +1118,7 @@ tools accept, and configuration parameters that map directly onto the ISA we com
 - **Interconnect.** An own `axil_interconnect`: one master, three slaves (RAM, accelerator, GPIO)
   and an internal decode-error responder. It routes each channel by address, allows one
   outstanding write and one outstanding read, and accepts no new address on a channel until that
-  channel's response has been taken (spec §13.3). Approved by the project owner over
-  `alexforencich/verilog-axi`.
+  channel's response has been taken (spec §13.3).
 - **Address map** (spec §13.3). Regions on 256 MB boundaries by type (`0x0` memory, `0x1`
   accelerator, `0x2` peripherals), each decoded exactly: anything outside a region, including
   RAM aliases above 64 KB, is `DECERR`. The accelerator's CSR and buffer windows are both served
@@ -1131,14 +1130,16 @@ tools accept, and configuration parameters that map directly onto the ISA we com
   silently on the board. The SoC simulation tests monitor both response channels and fail on any
   `SLVERR` or `DECERR` that the test did not provoke on purpose.
 
-**Alternatives.** `verilog-axi`'s `axil_interconnect` or `axil_crossbar` (MIT; more general than
-one in-order master needs, a dependency to pin, and code we could not explain line by line);
-a native PicoRV32 memory bus instead of AXI (the milestone is about AXI4-Lite, and Phase 6's UVM
+**Alternatives.** `verilog-axi`'s `axil_interconnect` or `axil_crossbar` (MIT; built for several
+masters and several outstanding transactions, with arbitration and response tracking this bus
+never uses, and a second third-party dependency to pin); a native PicoRV32 memory bus instead of AXI (the milestone is about AXI4-Lite, and Phase 6's UVM
 agent needs it); partial decoding with aliases (smaller, but a stray pointer would then hit a
 real device instead of a reported error).
 
-**Reason.** With one master issuing one transaction at a time, a decoder plus per-channel routing
-is the whole job: small, fully testable, and explainable in an interview.
+**Reason.** One in-order master issuing one transaction at a time needs only an address decoder
+plus per-channel routing: no arbitration, no transaction IDs, no reordering. That logic is small
+enough to test completely at unit level (every region, every region edge, unmapped addresses,
+every AW/W arrival order, backpressure on every channel), and its mutants are killed by that unit test.
 
 ## D-041 — Accelerator AXI4-Lite slave: CSR window, buffer window with a high-half register (Phase 5)
 
@@ -1176,7 +1177,7 @@ only, keeps the memory port's handshake rule by construction, and leaves the cor
 ## D-042 — RAM and firmware boot: 64 KB, `.data` copied from its load image at every reset (Phase 5)
 
 **Decision.**
-- **RAM.** 64 KB (approved by the project owner), one block for code, data and stack, preloaded
+- **RAM.** 64 KB, one block for code, data and stack, preloaded
   with the firmware image by `$readmemh`. Sized for the largest firmware: the quick-subset test
   carries its 50 images (39,200 bytes) to upload through the buffer window. At 32 bits wide an M9K
   block holds 8 Kbit, so the RAM needs 64 of the MAX 10's 182 blocks; the SoC build reports give
@@ -1212,7 +1213,7 @@ exactly as it restarts the accelerator without reloading its buffers.
   unconnected.
 - **Trap LED.** `LEDR[9]` is wired to the CPU's `trap`, not to GPIO, so a firmware fault is
   visible even when firmware can no longer run.
-- **Separate build** (approved by the project owner). `fpga/de10lite_soc/` with its own `build.tcl`,
+- **Separate build.** `fpga/de10lite_soc/` with its own `build.tcl`,
   pins, SDC, expected-warnings list and reports; the Milestone 1 build in `fpga/de10lite/` is not
   changed. The board blocks (`reset_gen`, `sync_2ff`, `debounce`, `hex7seg`) are reused.
 
