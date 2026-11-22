@@ -703,7 +703,7 @@ and this section is updated with the firmware.
   - `SW[9] = 1`: `min(CYC_TOTAL >> 4, 0xFFFF)` in hex, as §12.
 
   `LEDR[1]` lights when done; `LEDR[2]` lights if the accelerator reported `ERROR` or the two sets
-  of logits differ.
+  of logits differ. Presses during the run are ignored (as in §12).
 - `LEDR[9]` lit means the CPU trapped (a firmware fault).
 
 ### 13.9 Speedup measurement (definitions)
