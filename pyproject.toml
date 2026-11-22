@@ -10,6 +10,9 @@ testpaths = ["testbench", "model/tests", "scripts/tests"]
 # PYTHONPATH, by the cocotb test modules running inside the simulator.
 pythonpath = ["testbench", "."]
 addopts = "-ra --strict-markers"
+markers = [
+    "full: slow test, run by the full CI job (nightly, manual) and locally, not on every push",
+]
 
 [tool.ruff]
 target-version = "py314"

@@ -1,69 +1,29 @@
 name: CI
 
+# Fast job on every push and pull request: ruff, RTL lint, every unit test, and the quick-subset
+# system tests (pytest -m "not full"). The slow tests (marked `full`), the formal proofs and the
+# rest run in full.yml (nightly and on manual trigger); checkpoints require full.yml green for
+# HEAD.
+
 on:
   push:
   pull_request:
-  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  # Same snapshot as the local toolchain (docs/decisions.md). Provides Verilator, Yosys, SymbiYosys.
-  OSS_CAD_SUITE_TAG: "2026-11-01"
-
 jobs:
-  check:
+  fast:
+    name: Fast (lint, unit, quick subset)
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
         with:
           submodules: true
 
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.14"
-          cache: pip
-          cache-dependency-path: requirements.txt
-
-      - name: Install Python dependencies
-        run: pip install -r requirements.txt
-
-      - name: Install Icarus Verilog 12 and the RISC-V GCC toolchain
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends iverilog gcc-riscv64-unknown-elf
-
-      - name: Cache OSS CAD Suite
-        id: oss-cache
-        uses: actions/cache@v6
-        with:
-          path: ~/tools/oss-cad-suite
-          key: oss-cad-suite-linux-x64-${{ env.OSS_CAD_SUITE_TAG }}
-
-      - name: Download OSS CAD Suite
-        if: steps.oss-cache.outputs.cache-hit != 'true'
-        run: |
-          tag="$OSS_CAD_SUITE_TAG"
-          mkdir -p "$HOME/tools"
-          curl -fsSL --retry 3 \
-            "https://github.com/YosysHQ/oss-cad-suite-build/releases/download/${tag}/oss-cad-suite-linux-x64-${tag//-/}.tgz" \
-            | tar -xz -C "$HOME/tools"
-
-      - name: Tool versions
-        run: |
-          source scripts/env.sh
-          echo "python:    $(command -v python) $(python --version)"
-          echo "iverilog:  $(command -v iverilog) $(iverilog -V 2>&1 | head -1)"
-          echo "verilator: $(command -v verilator) $(verilator --version)"
-          echo "yosys:     $(yosys -V)"
-          echo "riscv gcc: $(command -v riscv64-unknown-elf-gcc) $(riscv64-unknown-elf-gcc --version | head -1)"
-          riscv64-unknown-elf-gcc -march=rv32im_zicsr -mabi=ilp32 -print-multi-directory | grep -qx rv32im/ilp32 \
-            || { echo "RISC-V GCC lacks the rv32im/ilp32 multilib"; exit 1; }
-          iverilog -V 2>&1 | head -1 | grep -q "version 12\." || { echo "need Icarus 12"; exit 1; }
-          [ "$(command -v iverilog)" = /usr/bin/iverilog ] || { echo "Icarus must come from the system, not the suite"; exit 1; }
+      - uses: ./.github/actions/setup
 
       - name: Ruff
         run: |
@@ -81,45 +41,27 @@ jobs:
 
       - name: Check unit test results file
         if: always()
-        run: python scripts/check_junit.py sim_build/unit.xml
+        run: python scripts/check_junit.py sim_build/unit.xml --min-tests 80
 
-      - name: System tests (accel_top quick subset, accelerator AXI slave, SoC firmware; Verilator)
+      - name: Quick-subset system tests (accel_top, accelerator AXI slave, SoC firmware; Verilator)
         if: always()
         run: |
           source scripts/env.sh
-          pytest testbench/system --junitxml=sim_build/system.xml
+          pytest testbench/system -m "not full" --junitxml=sim_build/system.xml
 
       - name: Check system test results file
         if: always()
-        run: python scripts/check_junit.py sim_build/system.xml --min-tests 3
+        run: python scripts/check_junit.py sim_build/system.xml --min-tests 10
 
-      - name: Formal proofs (SymbiYosys)
+      - name: Script and golden model tests
         if: always()
         run: |
           source scripts/env.sh
-          pytest testbench/formal --junitxml=sim_build/formal.xml
+          pytest scripts/tests model/tests --junitxml=sim_build/scripts_model.xml
 
-      - name: Check formal results file
+      - name: Check script and golden model results file
         if: always()
-        run: python scripts/check_junit.py sim_build/formal.xml --min-tests 17
-
-      - name: Script tests (lint fixtures, Quartus compatibility checker)
-        if: always()
-        run: |
-          source scripts/env.sh
-          pytest scripts/tests --junitxml=sim_build/scripts.xml
-
-      - name: Check script test results file
-        if: always()
-        run: python scripts/check_junit.py sim_build/scripts.xml --min-tests 10
-
-      - name: Golden model and artifact tests
-        if: always()
-        run: pytest model/tests --junitxml=sim_build/model.xml
-
-      - name: Check golden model results file
-        if: always()
-        run: python scripts/check_junit.py sim_build/model.xml --min-tests 20
+        run: python scripts/check_junit.py sim_build/scripts_model.xml --min-tests 30
 
       - name: Upload simulation results
         if: failure()

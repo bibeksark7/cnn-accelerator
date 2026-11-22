@@ -77,18 +77,33 @@ run_local_checks() { # run_local_checks "<description>"
   [ "$found" -eq 1 ] || skip "$1 (none in this clone)"
 }
 
+# The full CI job (.github/workflows/full.yml: every test, formal included) passed for HEAD: the
+# most recent full.yml run of HEAD whose "Full regression" job ran is completed and green. The
+# fast workflow (ci.yml) runs a subset on every push and is not enough for a checkpoint. Trigger
+# a run with: gh workflow run full.yml --ref main
 check_ci_green_on_head() {
-  local head json status conclusion sha
+  local head
   head="$(git rev-parse HEAD)"
   [ -z "$(git status --porcelain)" ] || { echo "uncommitted or untracked changes:"; git status --short; return 1; }
   [ "$(git rev-parse '@{u}' 2>/dev/null)" = "$head" ] || { echo "HEAD is not pushed to its upstream"; return 1; }
-  json="$(gh run list --branch main --limit 1 --json status,conclusion,headSha,url)" || return 1
-  status="$(echo "$json" | python -c 'import json,sys; r=json.load(sys.stdin); print(r[0]["status"] if r else "")')"
-  conclusion="$(echo "$json" | python -c 'import json,sys; r=json.load(sys.stdin); print(r[0]["conclusion"] if r else "")')"
-  sha="$(echo "$json" | python -c 'import json,sys; r=json.load(sys.stdin); print(r[0]["headSha"] if r else "")')"
-  echo "$json"
-  [ "$sha" = "$head" ] || { echo "latest CI run on main is for $sha, not HEAD $head"; return 1; }
-  [ "$status" = "completed" ] && [ "$conclusion" = "success" ] || { echo "CI status=$status conclusion=$conclusion"; return 1; }
+  HEAD_SHA="$head" python - <<'PY'
+import json, os, subprocess, sys
+head = os.environ["HEAD_SHA"]
+def gh(*args):
+    return json.loads(subprocess.run(["gh", *args], check=True, capture_output=True, text=True).stdout)
+runs = gh("run", "list", "--workflow", "full.yml", "--branch", "main", "--commit", head, "--limit", "20",
+          "--json", "databaseId,status,conclusion,url,createdAt,event")
+for r in sorted(runs, key=lambda r: r["createdAt"], reverse=True):
+    jobs = [j for j in gh("run", "view", str(r["databaseId"]), "--json", "jobs")["jobs"]
+            if j["name"] == "Full regression"]
+    if not jobs or jobs[0]["conclusion"] == "skipped":
+        continue  # a nightly run skipped because this commit already had a green full run
+    j = jobs[0]
+    print(f"full.yml run for HEAD {head[:12]} ({r['event']}): {r['url']}  job {j['status']}/{j['conclusion']}")
+    sys.exit(0 if j["status"] == "completed" and j["conclusion"] == "success" else 1)
+print(f"no full.yml run with the full job for HEAD {head[:12]} (gh workflow run full.yml --ref main)")
+sys.exit(1)
+PY
 }
 
 check_accuracy_report() {
@@ -248,7 +263,7 @@ phase_0() {
   check "RTL lint (verilator -Wall, iverilog, yosys)" scripts/lint.sh
   check "ruff format + ruff check clean" check_ruff
   run_local_checks "optional local repository checks"
-  check "latest CI run on main is green for HEAD" check_ci_green_on_head
+  check "full CI job (full.yml) green for HEAD" check_ci_green_on_head
 }
 
 phase_1() {
@@ -259,7 +274,7 @@ phase_1() {
   check "spec.md and verification_plan.md present" check_docs_exist docs/spec.md docs/verification_plan.md
   check "ruff format + ruff check clean" check_ruff
   run_local_checks "optional local repository checks"
-  check "latest CI run on main is green for HEAD" check_ci_green_on_head
+  check "full CI job (full.yml) green for HEAD" check_ci_green_on_head
 }
 
 phase_2() {
@@ -272,7 +287,7 @@ phase_2() {
   check "ruff format + ruff check clean" check_ruff
   run_quartus_probes
   run_local_checks "optional local repository checks"
-  check "latest CI run on main is green for HEAD" check_ci_green_on_head
+  check "full CI job (full.yml) green for HEAD" check_ci_green_on_head
 }
 
 phase_3() {
@@ -293,7 +308,7 @@ phase_3() {
   check "ruff format + ruff check clean" check_ruff
   run_quartus_probes
   run_local_checks "optional local repository checks"
-  check "latest CI run on main is green for HEAD" check_ci_green_on_head
+  check "full CI job (full.yml) green for HEAD" check_ci_green_on_head
 }
 
 # A DE10-Lite build closes timing at 50 MHz with every path constrained, and its reports are
@@ -394,7 +409,7 @@ phase_4() {
   check "README and architecture FPGA numbers (Fmax, slack, LEs, resources) match the committed build reports" python scripts/check_fpga_numbers.py
   check "README badges match the committed coverage and mutation reports" python scripts/readme_badges.py --check
   run_local_checks "optional local repository checks"
-  check "latest CI run on main is green for HEAD" check_ci_green_on_head
+  check "full CI job (full.yml) green for HEAD" check_ci_green_on_head
   if [ -f fpga/de10lite/demo.md ]; then
     echo "  [BOARD] demo confirmed on the board: fpga/de10lite/demo.md"
   else
@@ -507,7 +522,7 @@ phase_5() {
   check "Milestone 1 evidence still valid: full run report of the M1 RTL tree" check_full_run_report
   check "Milestone 1 evidence still valid: DE10-Lite build of the M1 RTL tree" check_fpga_build fpga/de10lite de10lite 6 "{\"rtl_tree\": \"$(scripts/m1_rtl_tree.sh)\"}"
   run_local_checks "optional local repository checks"
-  check "latest CI run on main is green for HEAD" check_ci_green_on_head
+  check "full CI job (full.yml) green for HEAD" check_ci_green_on_head
   if [ -f fpga/de10lite_soc/demo.md ]; then
     echo "  [BOARD] SoC demo confirmed on the board: fpga/de10lite_soc/demo.md"
   else

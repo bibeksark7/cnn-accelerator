@@ -1,0 +1,125 @@
+name: Full regression
+
+# Every test: ruff, RTL lint, unit, all system tests (including the slow ones marked `full`:
+# the 4-state X check, the Icarus network run, the SoC bench and board demo), formal proofs,
+# script and golden model tests. Nightly on main and on manual trigger. scripts/checkpoint.sh
+# requires this workflow's `full` job to be green for HEAD.
+
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: full-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  decide:
+    name: Decide
+    runs-on: ubuntu-24.04
+    outputs:
+      run: ${{ steps.check.outputs.run }}
+    steps:
+      # A nightly run is skipped when this commit already has a successful full run; a manual
+      # run always runs.
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run=true
+          if [ "${{ github.event_name }}" = schedule ]; then
+            done_ok=0
+            for id in $(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/full.yml/runs?head_sha=$GITHUB_SHA&status=success" \
+                --jq '.workflow_runs[].id'); do
+              n=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$id/jobs" \
+                --jq '[.jobs[] | select(.name == "Full regression" and .conclusion == "success")] | length')
+              done_ok=$((done_ok + n))
+            done
+            echo "earlier full runs of $GITHUB_SHA that passed: $done_ok"
+            if [ "$done_ok" -gt 0 ]; then run=false; fi
+          fi
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+
+  full:
+    name: Full regression
+    needs: decide
+    if: needs.decide.outputs.run == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+
+      - uses: ./.github/actions/setup
+
+      - name: Ruff
+        run: |
+          ruff format --check .
+          ruff check .
+
+      - name: RTL lint (Verilator -Wall, Icarus, Yosys)
+        run: scripts/lint.sh
+
+      - name: Unit tests (Icarus + Verilator)
+        if: always()
+        run: |
+          source scripts/env.sh
+          pytest testbench/unit --junitxml=sim_build/unit.xml
+
+      - name: Check unit test results file
+        if: always()
+        run: python scripts/check_junit.py sim_build/unit.xml --min-tests 80
+
+      - name: System tests (all, incl. the slow ones; Verilator and Icarus)
+        if: always()
+        run: |
+          source scripts/env.sh
+          pytest testbench/system --junitxml=sim_build/system.xml
+
+      - name: Check system test results file
+        if: always()
+        run: python scripts/check_junit.py sim_build/system.xml --min-tests 15
+
+      - name: Formal proofs (SymbiYosys)
+        if: always()
+        run: |
+          source scripts/env.sh
+          pytest testbench/formal --junitxml=sim_build/formal.xml
+
+      - name: Check formal results file
+        if: always()
+        run: python scripts/check_junit.py sim_build/formal.xml --min-tests 17
+
+      - name: Script tests (lint fixtures, Quartus compatibility checker)
+        if: always()
+        run: |
+          source scripts/env.sh
+          pytest scripts/tests --junitxml=sim_build/scripts.xml
+
+      - name: Check script test results file
+        if: always()
+        run: python scripts/check_junit.py sim_build/scripts.xml --min-tests 10
+
+      - name: Golden model and artifact tests
+        if: always()
+        run: pytest model/tests --junitxml=sim_build/model.xml
+
+      - name: Check golden model results file
+        if: always()
+        run: python scripts/check_junit.py sim_build/model.xml --min-tests 20
+
+      - name: Upload simulation results
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sim-results
+          path: |
+            sim_build/**/*.xml
+            sim_build/**/*.fst
+          if-no-files-found: ignore

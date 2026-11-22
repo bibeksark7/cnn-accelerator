@@ -801,11 +801,12 @@ def init_params() -> dict[str, object]:
     }
 
 
-CONFIGS = [  # (simulator, mode, images)
+CONFIGS = [  # (simulator, mode, images); the Icarus runs are slow: full CI job only
     ("verilator", "main", 50),
     ("verilator", "saturation", 1),
-    ("icarus", "quick", 2),
-    ("icarus", "xcheck", 1),  # test_errors and test_reset_mid_run with the X monitor (4-state)
+    pytest.param("icarus", "quick", 2, marks=pytest.mark.full),
+    # test_errors and test_reset_mid_run with the X monitor (4-state)
+    pytest.param("icarus", "xcheck", 1, marks=pytest.mark.full),
 ]
 
 

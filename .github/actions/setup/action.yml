@@ -1,0 +1,61 @@
+name: Set up the toolchain
+description: >-
+  Python 3.14 with requirements.txt, Icarus Verilog 12 and the RISC-V GCC toolchain from apt, and
+  the pinned OSS CAD Suite snapshot (Verilator, Yosys, SymbiYosys), cached. Prints and checks the
+  tool versions. Used by both CI workflows (fast and full), so they run the same tools.
+
+inputs:
+  oss-cad-suite-tag:
+    description: OSS CAD Suite release; the same snapshot as the local toolchain (docs/decisions.md)
+    default: "2026-11-01"
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v7
+      with:
+        python-version: "3.14"
+        cache: pip
+        cache-dependency-path: requirements.txt
+
+    - name: Install Python dependencies
+      shell: bash
+      run: pip install -r requirements.txt
+
+    - name: Install Icarus Verilog 12 and the RISC-V GCC toolchain
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends iverilog gcc-riscv64-unknown-elf
+
+    - name: Cache OSS CAD Suite
+      id: oss-cache
+      uses: actions/cache@v6
+      with:
+        path: ~/tools/oss-cad-suite
+        key: oss-cad-suite-linux-x64-${{ inputs.oss-cad-suite-tag }}
+
+    - name: Download OSS CAD Suite
+      if: steps.oss-cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        TAG: ${{ inputs.oss-cad-suite-tag }}
+      run: |
+        mkdir -p "$HOME/tools"
+        curl -fsSL --retry 3 \
+          "https://github.com/YosysHQ/oss-cad-suite-build/releases/download/${TAG}/oss-cad-suite-linux-x64-${TAG//-/}.tgz" \
+          | tar -xz -C "$HOME/tools"
+
+    - name: Tool versions
+      shell: bash
+      run: |
+        source scripts/env.sh
+        echo "python:    $(command -v python) $(python --version)"
+        echo "iverilog:  $(command -v iverilog) $(iverilog -V 2>&1 | head -1)"
+        echo "verilator: $(command -v verilator) $(verilator --version)"
+        echo "yosys:     $(yosys -V)"
+        echo "riscv gcc: $(command -v riscv64-unknown-elf-gcc) $(riscv64-unknown-elf-gcc --version | head -1)"
+        riscv64-unknown-elf-gcc -march=rv32im_zicsr -mabi=ilp32 -print-multi-directory | grep -qx rv32im/ilp32 \
+          || { echo "RISC-V GCC lacks the rv32im/ilp32 multilib"; exit 1; }
+        iverilog -V 2>&1 | head -1 | grep -q "version 12\." || { echo "need Icarus 12"; exit 1; }
+        [ "$(command -v iverilog)" = /usr/bin/iverilog ] || { echo "Icarus must come from the system, not the suite"; exit 1; }
