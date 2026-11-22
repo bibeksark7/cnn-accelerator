@@ -7,7 +7,7 @@ Status values: **done** (test exists and passes in CI), **planned** (phase in br
 **gap** (known hole, with reason).
 
 CI has two workflows: `ci.yml` on every push (ruff, RTL lint, every unit test, the system tests
-not marked `full`, script and model tests; well under 10 minutes) and `full.yml` (every test,
+not marked `full`, script and model tests; four parallel jobs, under 10 minutes) and `full.yml` (every test,
 formal proofs included; nightly and on manual trigger). "In CI" means the full job; checkpoints
 require it to be green for HEAD. Tests marked `full` (slow): the Icarus `accel_top` runs
 (`quick-2`, `xcheck-1`), `test_soc[demo]` and `test_soc_bench`.

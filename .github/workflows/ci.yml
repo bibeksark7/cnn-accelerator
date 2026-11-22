@@ -1,6 +1,8 @@
 name: CI
 
-# Fast job on every push and pull request: ruff, RTL lint, every unit test, and the quick-subset
+# Fast checks on every push and pull request, as four parallel jobs so the workflow finishes in
+# well under 10 minutes: ruff, RTL lint and the script and golden-model tests; the Icarus unit
+# tests; the other unit tests (Verilator, SVA-fires, synthesis checks); and the quick-subset
 # system tests (pytest -m "not full"). The slow tests (marked `full`), the formal proofs and the
 # rest run in full.yml (nightly and on manual trigger); checkpoints require full.yml green for
 # HEAD.
@@ -15,9 +17,21 @@ concurrency:
 
 jobs:
   fast:
-    name: Fast (lint, unit, quick subset)
+    name: Fast (${{ matrix.name }})
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - part: lint
+            name: lint, scripts, model
+          - part: unit-icarus
+            name: unit, Icarus
+          - part: unit-other
+            name: unit, Verilator
+          - part: system
+            name: quick-subset system tests
     steps:
       - uses: actions/checkout@v7
         with:
@@ -26,48 +40,50 @@ jobs:
       - uses: ./.github/actions/setup
 
       - name: Ruff
+        if: matrix.part == 'lint'
         run: |
           ruff format --check .
           ruff check .
 
       - name: RTL lint (Verilator -Wall, Icarus, Yosys)
+        if: matrix.part == 'lint'
         run: scripts/lint.sh
 
-      - name: Unit tests (Icarus + Verilator)
-        if: always()
+      - name: Script and golden model tests
+        if: always() && matrix.part == 'lint'
         run: |
           source scripts/env.sh
-          pytest testbench/unit --junitxml=sim_build/unit.xml
+          pytest scripts/tests model/tests --junitxml=sim_build/results.xml
 
-      - name: Check unit test results file
-        if: always()
-        run: python scripts/check_junit.py sim_build/unit.xml --min-tests 80
+      - name: Unit tests on Icarus
+        if: matrix.part == 'unit-icarus'
+        run: |
+          source scripts/env.sh
+          pytest testbench/unit -k icarus --junitxml=sim_build/results.xml
+
+      - name: Unit tests on Verilator, SVA-fires and synthesis checks (every unit test not on Icarus)
+        if: matrix.part == 'unit-other'
+        run: |
+          source scripts/env.sh
+          pytest testbench/unit -k "not icarus" --junitxml=sim_build/results.xml
 
       - name: Quick-subset system tests (accel_top, accelerator AXI slave, SoC firmware; Verilator)
-        if: always()
+        if: matrix.part == 'system'
         run: |
           source scripts/env.sh
-          pytest testbench/system -m "not full" --junitxml=sim_build/system.xml
+          pytest testbench/system -m "not full" --junitxml=sim_build/results.xml
 
-      - name: Check system test results file
+      - name: Check the results file
         if: always()
-        run: python scripts/check_junit.py sim_build/system.xml --min-tests 10
-
-      - name: Script and golden model tests
-        if: always()
-        run: |
-          source scripts/env.sh
-          pytest scripts/tests model/tests --junitxml=sim_build/scripts_model.xml
-
-      - name: Check script and golden model results file
-        if: always()
-        run: python scripts/check_junit.py sim_build/scripts_model.xml --min-tests 30
+        env:
+          MIN_TESTS: ${{ matrix.part == 'lint' && 30 || matrix.part == 'system' && 10 || 30 }}
+        run: python scripts/check_junit.py sim_build/results.xml --min-tests "$MIN_TESTS"
 
       - name: Upload simulation results
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: sim-results
+          name: sim-results-${{ matrix.part }}
           path: |
             sim_build/**/*.xml
             sim_build/**/*.fst

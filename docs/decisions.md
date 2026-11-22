@@ -1362,7 +1362,9 @@ drift.
   test, the system tests not marked `full` (the 50-image quick subset on `accel_top` and through
   the SoC firmware, the saturating images, the accelerator slave, the FPGA tops, the SoC smoke,
   demo-timeout and bus-check tests, every assertion-fires test), and the script and golden-model
-  tests. Target: under 10 minutes.
+  tests. Target: under 10 minutes. It runs as four parallel jobs (lint with the script and model
+  tests; the Icarus unit tests; the other unit tests; the quick-subset system tests): as one job it
+  took 13 minutes on a GitHub runner (unit tests 6.8, system tests 5.0).
 - **Full** (`.github/workflows/full.yml`, nightly on `main` and `workflow_dispatch`): every test,
   including those marked `full` (the Icarus `accel_top` runs with the 4-state X check, the SoC
   board demo with the software CNN, the bench image) and the formal proofs. A nightly run is
@@ -1374,7 +1376,8 @@ drift.
 - **Marking.** `pytest.mark.full` (registered in `pyproject.toml`) marks slow tests or parameter
   sets; nothing is skipped by it, the fast job deselects them with `-m "not full"`.
 
-**Alternatives.** One job for everything on every push (35 minutes per push); running the slow
+**Alternatives.** One job for everything on every push (35 minutes per push); `pytest-xdist` to
+parallelize inside one job (a new dependency, and a GitHub runner has few cores); running the slow
 tests only locally (then nothing checks them between checkpoints); a time-based split of the
 whole suite across parallel jobs (every push still pays for the slowest tests).
 
