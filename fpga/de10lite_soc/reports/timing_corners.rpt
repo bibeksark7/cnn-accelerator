@@ -1,0 +1,5 @@
+# Worst slack per operating condition (ns), clock clk50; written by sta_reports.tcl
+corner;setup_slack;hold_slack
+Slow 1200mV 85C Model;5.515;0.247
+Slow 1200mV 0C Model;6.496;0.245
+Fast 1200mV 0C Model;13.186;0.090

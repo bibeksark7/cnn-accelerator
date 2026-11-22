@@ -1,0 +1,97 @@
+Warning (10335): Unrecognized synthesis attribute "parallel_case" at picorv32.v(331)
+Warning (10335): Unrecognized synthesis attribute "full_case" at picorv32.v(402)
+Warning (10335): Unrecognized synthesis attribute "parallel_case" at picorv32.v(1119)
+Warning (10335): Unrecognized synthesis attribute "parallel_case" at picorv32.v(1251)
+Warning (10335): Unrecognized synthesis attribute "full_case" at picorv32.v(1251)
+Warning (10335): Unrecognized synthesis attribute "parallel_case" at picorv32.v(1268)
+Warning (10335): Unrecognized synthesis attribute "full_case" at picorv32.v(1268)
+Warning (10335): Unrecognized synthesis attribute "parallel_case" at picorv32.v(1314)
+Warning (10335): Unrecognized synthesis attribute "parallel_case" at picorv32.v(1485)
+Warning (10335): Unrecognized synthesis attribute "full_case" at picorv32.v(1485)
+Warning (10335): Unrecognized synthesis attribute "parallel_case" at picorv32.v(1497)
+Warning (10335): Unrecognized synthesis attribute "parallel_case" at picorv32.v(1583)
+Warning (10335): Unrecognized synthesis attribute "parallel_case" at picorv32.v(1627)
+Warning (10335): Unrecognized synthesis attribute "full_case" at picorv32.v(1627)
+Warning (10335): Unrecognized synthesis attribute "parallel_case" at picorv32.v(1735)
+Warning (10335): Unrecognized synthesis attribute "parallel_case" at picorv32.v(1766)
+Warning (10335): Unrecognized synthesis attribute "parallel_case" at picorv32.v(1836)
+Warning (10335): Unrecognized synthesis attribute "full_case" at picorv32.v(1836)
+Warning (10335): Unrecognized synthesis attribute "parallel_case" at picorv32.v(1844)
+Warning (10335): Unrecognized synthesis attribute "full_case" at picorv32.v(1844)
+Warning (10335): Unrecognized synthesis attribute "parallel_case" at picorv32.v(1859)
+Warning (10335): Unrecognized synthesis attribute "full_case" at picorv32.v(1859)
+Warning (10335): Unrecognized synthesis attribute "parallel_case" at picorv32.v(1884)
+Warning (10335): Unrecognized synthesis attribute "full_case" at picorv32.v(1884)
+Warning (10335): Unrecognized synthesis attribute "parallel_case" at picorv32.v(1901)
+Warning (10335): Unrecognized synthesis attribute "full_case" at picorv32.v(1901)
+Warning (10036): Verilog HDL or VHDL warning at soc_top.sv(66): object "unused_resp" assigned a value but never read
+Warning (10036): Verilog HDL or VHDL warning at picorv32.v(181): object "dbg_insn_addr" assigned a value but never read
+Warning (10036): Verilog HDL or VHDL warning at picorv32.v(183): object "dbg_mem_valid" assigned a value but never read
+Warning (10036): Verilog HDL or VHDL warning at picorv32.v(184): object "dbg_mem_instr" assigned a value but never read
+Warning (10036): Verilog HDL or VHDL warning at picorv32.v(185): object "dbg_mem_ready" assigned a value but never read
+Warning (10036): Verilog HDL or VHDL warning at picorv32.v(186): object "dbg_mem_addr" assigned a value but never read
+Warning (10036): Verilog HDL or VHDL warning at picorv32.v(187): object "dbg_mem_wdata" assigned a value but never read
+Warning (10036): Verilog HDL or VHDL warning at picorv32.v(188): object "dbg_mem_wstrb" assigned a value but never read
+Warning (10036): Verilog HDL or VHDL warning at picorv32.v(189): object "dbg_mem_rdata" assigned a value but never read
+Warning (10036): Verilog HDL or VHDL warning at picorv32.v(375): object "mem_busy" assigned a value but never read
+Warning (10036): Verilog HDL or VHDL warning at picorv32.v(696): object "dbg_rs1val" assigned a value but never read
+Warning (10036): Verilog HDL or VHDL warning at picorv32.v(697): object "dbg_rs2val" assigned a value but never read
+Warning (10036): Verilog HDL or VHDL warning at picorv32.v(698): object "dbg_rs1val_valid" assigned a value but never read
+Warning (10036): Verilog HDL or VHDL warning at picorv32.v(699): object "dbg_rs2val_valid" assigned a value but never read
+Warning (10036): Verilog HDL or VHDL warning at picorv32.v(769): object "dbg_valid_insn" assigned a value but never read
+Warning (10036): Verilog HDL or VHDL warning at picorv32.v(1184): object "dbg_ascii_state" assigned a value but never read
+Warning (10763): Verilog HDL warning at picorv32.v(332): case statement has overlapping case item expressions with non-constant or don't care bits - unable to check case statement for completeness
+Warning (10270): Verilog HDL Case Statement warning at picorv32.v(332): incomplete case statement has no default case item
+Warning (10230): Verilog HDL assignment warning at picorv32.v(617): truncated value with size 32 to match size of target (2)
+Warning (10230): Verilog HDL assignment warning at picorv32.v(1245): truncated value with size 33 to match size of target (32)
+Warning (10230): Verilog HDL assignment warning at picorv32.v(1250): truncated value with size 32 to match size of target (1)
+Warning (10763): Verilog HDL warning at picorv32.v(1252): case statement has overlapping case item expressions with non-constant or don't care bits - unable to check case statement for completeness
+Warning (10208): Verilog HDL Case Statement warning at picorv32.v(1252): honored full_case synthesis attribute - differences between design synthesis and simulation may occur
+Warning (10763): Verilog HDL warning at picorv32.v(1269): case statement has overlapping case item expressions with non-constant or don't care bits - unable to check case statement for completeness
+Warning (10208): Verilog HDL Case Statement warning at picorv32.v(1269): honored full_case synthesis attribute - differences between design synthesis and simulation may occur
+Warning (10763): Verilog HDL warning at picorv32.v(1315): case statement has overlapping case item expressions with non-constant or don't care bits - unable to check case statement for completeness
+Warning (10270): Verilog HDL Case Statement warning at picorv32.v(1315): incomplete case statement has no default case item
+Warning (10230): Verilog HDL assignment warning at picorv32.v(1349): truncated value with size 32 to match size of target (5)
+Warning (10230): Verilog HDL assignment warning at picorv32.v(1404): truncated value with size 32 to match size of target (5)
+Warning (10230): Verilog HDL assignment warning at picorv32.v(1426): truncated value with size 32 to match size of target (4)
+Warning (10230): Verilog HDL assignment warning at picorv32.v(1428): truncated value with size 32 to match size of target (4)
+Warning (10763): Verilog HDL warning at picorv32.v(1498): case statement has overlapping case item expressions with non-constant or don't care bits - unable to check case statement for completeness
+Warning (10230): Verilog HDL assignment warning at picorv32.v(1594): truncated value with size 32 to match size of target (5)
+Warning (10763): Verilog HDL warning at picorv32.v(1628): case statement has overlapping case item expressions with non-constant or don't care bits - unable to check case statement for completeness
+Warning (10208): Verilog HDL Case Statement warning at picorv32.v(1628): honored full_case synthesis attribute - differences between design synthesis and simulation may occur
+Warning (10230): Verilog HDL assignment warning at picorv32.v(1731): truncated value with size 32 to match size of target (5)
+Warning (10230): Verilog HDL assignment warning at picorv32.v(1761): truncated value with size 32 to match size of target (5)
+Warning (10763): Verilog HDL warning at picorv32.v(1837): case statement has overlapping case item expressions with non-constant or don't care bits - unable to check case statement for completeness
+Warning (10208): Verilog HDL Case Statement warning at picorv32.v(1837): honored full_case synthesis attribute - differences between design synthesis and simulation may occur
+Warning (10230): Verilog HDL assignment warning at picorv32.v(1842): truncated value with size 32 to match size of target (5)
+Warning (10763): Verilog HDL warning at picorv32.v(1845): case statement has overlapping case item expressions with non-constant or don't care bits - unable to check case statement for completeness
+Warning (10208): Verilog HDL Case Statement warning at picorv32.v(1845): honored full_case synthesis attribute - differences between design synthesis and simulation may occur
+Warning (10230): Verilog HDL assignment warning at picorv32.v(1850): truncated value with size 32 to match size of target (5)
+Warning (10763): Verilog HDL warning at picorv32.v(1860): case statement has overlapping case item expressions with non-constant or don't care bits - unable to check case statement for completeness
+Warning (10208): Verilog HDL Case Statement warning at picorv32.v(1860): honored full_case synthesis attribute - differences between design synthesis and simulation may occur
+Warning (10763): Verilog HDL warning at picorv32.v(1885): case statement has overlapping case item expressions with non-constant or don't care bits - unable to check case statement for completeness
+Warning (10208): Verilog HDL Case Statement warning at picorv32.v(1885): honored full_case synthesis attribute - differences between design synthesis and simulation may occur
+Warning (10763): Verilog HDL warning at picorv32.v(1902): case statement has overlapping case item expressions with non-constant or don't care bits - unable to check case statement for completeness
+Warning (10208): Verilog HDL Case Statement warning at picorv32.v(1902): honored full_case synthesis attribute - differences between design synthesis and simulation may occur
+Warning (10270): Verilog HDL Case Statement warning at picorv32.v(2355): incomplete case statement has no default case item
+Warning (10230): Verilog HDL assignment warning at picorv32.v(2394): truncated value with size 4 to match size of target (3)
+Warning (10230): Verilog HDL assignment warning at picorv32.v(2411): truncated value with size 64 to match size of target (32)
+Warning (10259): Verilog HDL error at picorv32.v(2478): constant value overflow
+Warning (10230): Verilog HDL assignment warning at picorv32.v(2499): truncated value with size 63 to match size of target (32)
+Warning (276020): Inferred RAM node "soc_top:u_soc_top|picorv32_axi:u_picorv32_axi|picorv32:picorv32_core|cpuregs_rtl_0" from synchronous design logic.  Pass-through logic has been added to match the read-during-write behavior of the original design.
+Warning (276020): Inferred RAM node "soc_top:u_soc_top|picorv32_axi:u_picorv32_axi|picorv32:picorv32_core|cpuregs_rtl_1" from synchronous design logic.  Pass-through logic has been added to match the read-during-write behavior of the original design.
+Warning (12241): 1 hierarchies have connectivity warnings - see the Connectivity Checks report folder
+Warning (13024): Output pins are stuck at VCC or GND
+Warning (292013): Feature LogicLock is only available with a valid subscription license. You can purchase a software subscription to gain full access to this feature.
+Warning (15714): Some pins have incomplete I/O assignments. Refer to the I/O Assignment Warnings report for details
+Warning (169177): 13 pins must meet Intel FPGA requirements for 3.3-, 3.0-, and 2.5-V interfaces. For more information, refer to AN 447: Interfacing MAX 10 Devices with 3.3/3.0/2.5-V LVTTL/LVCMOS I/O Systems.
+Info: Quartus Prime Analysis & Synthesis was successful. 0 errors, 90 warnings
+Info (170137): Fitter placement was successful
+Info: Quartus Prime Fitter was successful. 0 errors, 3 warnings
+Info: Quartus Prime Assembler was successful. 0 errors, 0 warnings
+Info: Quartus Prime Timing Analyzer was successful. 0 errors, 0 warnings
+Info (293000): Quartus Prime Full Compilation was successful. 0 errors, 93 warnings
+Info (23030): Evaluation of Tcl script build.tcl was successful
+Info: Quartus Prime Shell was successful. 0 errors, 93 warnings
+Info (23030): Evaluation of Tcl script sta_reports.tcl was successful
+Info: Quartus Prime Timing Analyzer was successful. 0 errors, 0 warnings

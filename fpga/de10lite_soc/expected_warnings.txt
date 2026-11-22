@@ -1,0 +1,29 @@
+# Quartus warnings expected in the SoC build (fpga/de10lite_soc/reports/warnings.txt, written by
+# build_win.sh). scripts/check_quartus_warnings.py (run by scripts/checkpoint.sh 5) fails on any
+# warning that no entry matches, on any Critical Warning or Error, and if the list is incomplete.
+#
+# Format, one entry per line:   <message id> | <regex for the whole message text> | <reason>
+# The separator is " | " (space, bar, space); a hierarchy bar in a regex is written "\|".
+
+# PicoRV32 (third_party/picorv32, used unmodified; D-039). Every entry is limited to its file.
+10335 | Unrecognized synthesis attribute "(full_case|parallel_case)" at picorv32\.v\(\d+\) | PicoRV32 marks case statements with Yosys-style full_case/parallel_case comments-as-attributes; Quartus does not take them as attributes. Behaviour is defined by the RTL itself.
+10208 | Verilog HDL Case Statement warning at picorv32\.v\(\d+\): honored full_case synthesis attribute - differences between design synthesis and simulation may occur | PicoRV32's one-hot instruction decode cases carry (* full_case *); the selects are one-hot by construction, so synthesis and simulation agree. The SoC tests run the same RTL in Verilator.
+10763 | Verilog HDL warning at picorv32\.v\(\d+\): case statement has overlapping case item expressions with non-constant or don't care bits - unable to check case statement for completeness | PicoRV32's case (1'b1) decode style (one-hot selects as case items); intended by its author.
+10270 | Verilog HDL Case Statement warning at picorv32\.v\(\d+\): incomplete case statement has no default case item | PicoRV32 case statements without a default; the uncovered values cannot occur in its state encoding.
+10230 | Verilog HDL assignment warning at picorv32\.v\(\d+\): truncated value with size \d+ to match size of target \(\d+\) | PicoRV32 assigns integer and wider expressions to narrower registers on purpose (e.g. shift amounts, 64-bit products' low word).
+10259 | Verilog HDL error at picorv32\.v\(2478\): constant value overflow | picorv32_pcpi_div: quotient_msk <= 1 << 31 overflows a 32-bit signed integer constant but gives the intended bit pattern 0x8000_0000; the demo SoC test executes the divider and checks its result.
+10036 | Verilog HDL or VHDL warning at picorv32\.v\(\d+\): object "(dbg_[a-z0-9_]+|mem_busy)" assigned a value but never read | PicoRV32's debug signals (dbg_*) and mem_busy exist for its own simulation traces; nothing reads them in synthesis.
+276020 | Inferred RAM node "soc_top:u_soc_top\|picorv32_axi:u_picorv32_axi\|picorv32:picorv32_core\|cpuregs_rtl_[01]" from synchronous design logic\.  Pass-through logic has been added to match the read-during-write behavior of the original design\. | PicoRV32's register file (two read ports, so two RAM copies) can read a register in the cycle it is written; Quartus adds the bypass that keeps that behaviour.
+12241 | 1 hierarchies have connectivity warnings - see the Connectivity Checks report folder | The one hierarchy is PicoRV32's core inside picorv32_axi: its look-ahead outputs (mem_la_*) are left open by picorv32_axi itself.
+
+# Own design
+10036 | Verilog HDL or VHDL warning at soc_top\.sv\(66\): object "unused_resp" assigned a value but never read | Lint sink for BRESP/RRESP, which PicoRV32 ignores (spec 13.3); soc_bus_sva checks them in simulation.
+
+# Unused board outputs
+13024 | Output pins are stuck at VCC or GND | Header of the 13410 lines below.
+13410 | Pin "HEX[0-5]\[7\]" is stuck at VCC | The decimal points are not used; the segments are active low, so VCC keeps them off (spec 13.7).
+
+# Tool and board notices (as in the Milestone 1 build, fpga/de10lite/expected_warnings.txt)
+292013 | Feature LogicLock is only available with a valid subscription license\. You can purchase a software subscription to gain full access to this feature\. | Printed by every Quartus Prime Lite compile; the project uses no LogicLock regions.
+15714 | Some pins have incomplete I/O assignments\. Refer to the I/O Assignment Warnings report for details | The HEX and LEDR outputs have no drive-strength assignment: pins.tcl takes only location and I/O standard from Terasic's golden top, so Quartus uses the 3.3-V LVTTL default. They drive LEDs and segments and are false-pathed.
+169177 | 13 pins must meet Intel FPGA requirements for 3\.3-, 3\.0-, and 2\.5-V interfaces\. For more information, refer to AN 447: Interfacing MAX 10 Devices with 3\.3/3\.0/2\.5-V LVTTL/LVCMOS I/O Systems\. | The 13 inputs (SW[9:0], KEY[1:0], MAX10_CLK1_50) are 3.3-V; AN 447's limits apply to the board's signals, which the DE10-Lite board design sets.
