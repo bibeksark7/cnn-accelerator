@@ -444,6 +444,21 @@ sys.exit(1 if problems else 0)
 PY
 }
 
+# Phase 5: the SoC RAM is block RAM (BUG-015): axil_ram holds all 64 KB in M9K memory bits.
+check_soc_ram_in_block_ram() {
+  python - <<'PY'
+import re, sys
+rows = open("fpga/de10lite_soc/reports/resources_by_entity.rpt").read().splitlines()
+row = next((r for r in rows if "|axil_ram:u_axil_ram|" in r), None)
+if row is None:
+    print("no axil_ram row in resources_by_entity.rpt"); sys.exit(1)
+cols = [c.strip() for c in row.split(";")]
+lcs, mem_bits, m9k = cols[2], int(cols[5]), int(cols[6])
+print(f"axil_ram: {lcs} logic cells, {mem_bits:,} memory bits in {m9k} M9K blocks")
+sys.exit(0 if mem_bits == 65536 * 8 and m9k > 0 else 1)
+PY
+}
+
 phase_5() {
   echo "Phase 5: RISC-V SoC with AXI4-Lite"
   check "unit tests pass (testbench/unit, incl. the AXI4-Lite blocks)" check_pytest unit 15 testbench/unit
@@ -455,6 +470,7 @@ phase_5() {
   check "ruff format + ruff check clean" check_ruff
   check "speedup report (testbench/reports/soc_speedup.json) measured on HEAD's RTL, firmware and CPU" check_speedup_report
   check "SoC build: positive setup and hold slack at 50 MHz in every corner, no unconstrained paths, synchronizer MTBF, reports of HEAD" check_fpga_build fpga/de10lite_soc de10lite_soc 12 "{\"rtl_tree\": \"$(git rev-parse HEAD:rtl)\", \"firmware_tree\": \"$(git rev-parse HEAD:firmware)\", \"picorv32_commit\": \"$(git rev-parse HEAD:third_party/picorv32)\"}"
+  check "SoC build: the 64 KB RAM is block RAM (BUG-015)" check_soc_ram_in_block_ram
   check "SoC build: every Quartus warning listed in fpga/de10lite_soc/expected_warnings.txt" python scripts/check_quartus_warnings.py --reports fpga/de10lite_soc/reports --expected fpga/de10lite_soc/expected_warnings.txt
   check "Milestone 1 evidence still valid: full run report of the M1 RTL tree" check_full_run_report
   check "Milestone 1 evidence still valid: DE10-Lite build of the M1 RTL tree" check_fpga_build fpga/de10lite de10lite 6 "{\"rtl_tree\": \"$(scripts/m1_rtl_tree.sh)\"}"
