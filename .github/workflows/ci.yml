@@ -31,8 +31,10 @@ jobs:
       - name: Install Python dependencies
         run: pip install -r requirements.txt
 
-      - name: Install Icarus Verilog 12
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends iverilog
+      - name: Install Icarus Verilog 12 and the RISC-V GCC toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends iverilog gcc-riscv64-unknown-elf
 
       - name: Cache OSS CAD Suite
         id: oss-cache
@@ -57,6 +59,9 @@ jobs:
           echo "iverilog:  $(command -v iverilog) $(iverilog -V 2>&1 | head -1)"
           echo "verilator: $(command -v verilator) $(verilator --version)"
           echo "yosys:     $(yosys -V)"
+          echo "riscv gcc: $(command -v riscv64-unknown-elf-gcc) $(riscv64-unknown-elf-gcc --version | head -1)"
+          riscv64-unknown-elf-gcc -march=rv32im_zicsr -mabi=ilp32 -print-multi-directory | grep -qx rv32im/ilp32 \
+            || { echo "RISC-V GCC lacks the rv32im/ilp32 multilib"; exit 1; }
           iverilog -V 2>&1 | head -1 | grep -q "version 12\." || { echo "need Icarus 12"; exit 1; }
           [ "$(command -v iverilog)" = /usr/bin/iverilog ] || { echo "Icarus must come from the system, not the suite"; exit 1; }
 
@@ -78,7 +83,7 @@ jobs:
         if: always()
         run: python scripts/check_junit.py sim_build/unit.xml
 
-      - name: System tests (accel_top, quick subset on Verilator)
+      - name: System tests (accel_top quick subset, accelerator AXI slave, SoC firmware; Verilator)
         if: always()
         run: |
           source scripts/env.sh
