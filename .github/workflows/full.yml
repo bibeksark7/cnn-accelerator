@@ -2,8 +2,9 @@ name: Full regression
 
 # Every test: ruff, RTL lint, unit, all system tests (including the slow ones marked `full`:
 # the 4-state X check, the Icarus network run, the SoC bench and board demo), formal proofs,
-# script and golden model tests. Nightly on main and on manual trigger. scripts/checkpoint.sh
-# requires this workflow's `full` job to be green for HEAD.
+# script and golden model tests, the UVM bench with its fixed seeds and a UVM seed sweep (10 random
+# seeds per test, coverage merged over all of them). Nightly on main and on manual trigger.
+# scripts/checkpoint.sh requires this workflow's `full` job to be green for HEAD.
 
 on:
   schedule:
@@ -50,7 +51,7 @@ jobs:
     needs: decide
     if: needs.decide.outputs.run == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 75
+    timeout-minutes: 100
     steps:
       - uses: actions/checkout@v7
         with:
@@ -124,7 +125,39 @@ jobs:
 
       - name: Check UVM results file
         if: always()
-        run: python scripts/check_junit.py sim_build/uvm.xml --min-tests 9
+        run: python scripts/check_junit.py sim_build/uvm.xml --min-tests 11
+
+      # Seeds come from UVM_SEED_BASE (this run's id): different every night, reproducible from the
+      # run. Each test's name carries its seed; a failure message carries the replay command.
+      - name: UVM seed sweep (10 random seeds per test, coverage merged over the sweep)
+        if: always()
+        env:
+          BUILD_JOBS: 4
+          UVM_SEEDS: 10
+          UVM_SEED_BASE: ${{ github.run_id }}
+        run: |
+          source scripts/env.sh
+          pytest testbench/uvm --junitxml=sim_build/uvm_sweep.xml
+
+      - name: Check UVM seed sweep results file
+        if: always()
+        run: python scripts/check_junit.py sim_build/uvm_sweep.xml --min-tests 74
+
+      - name: Failing UVM seeds (replay commands)
+        if: failure()
+        run: |
+          python - <<'PY'
+          import re, xml.etree.ElementTree as ET
+          from pathlib import Path
+          for f in ("sim_build/uvm.xml", "sim_build/uvm_sweep.xml"):
+              if not Path(f).exists():
+                  continue
+              for c in ET.parse(f).getroot().iter("testcase"):
+                  m = re.fullmatch(r"test_uvm\[(\w+)-s(\d+)\]", c.get("name", ""))
+                  if m and any(ch.tag in ("failure", "error") for ch in c):
+                      print(f"FAILED {m[0]}: UVM_SEED={m[2]} pytest "
+                            f"'testbench/uvm/test_uvm.py::test_uvm[{m[1]}]'")
+          PY
 
       - name: Upload simulation results
         if: failure()

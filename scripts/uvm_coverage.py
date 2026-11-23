@@ -78,7 +78,7 @@ def git(*args: str) -> str:
     return subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True).stdout.strip()
 
 
-def report(bins: dict[str, Bin], tests: list[str]) -> Report:
+def report(bins: dict[str, Bin], tests: list[str], seeds: str = "") -> Report:
     groups: dict[str, list[Bin]] = {}
     for b in sorted(bins.values(), key=lambda b: b.name):
         groups.setdefault(b.group, []).append(b)
@@ -103,6 +103,7 @@ def report(bins: dict[str, Bin], tests: list[str]) -> Report:
         "",
         f"- Result: **{summary}**",
         f"- Tests: {', '.join(tests)}",
+        *([f"- Seeds: {seeds}"] if seeds else []),
         f"- Commit: `{git('rev-parse', 'HEAD')}` (tree {'clean' if clean else 'DIRTY'})",
         f"- RTL tree: `{git('rev-parse', 'HEAD:rtl')}`; UVM bench tree: "
         f"`{git('rev-parse', 'HEAD:testbench/uvm')}`; uvm-core: "

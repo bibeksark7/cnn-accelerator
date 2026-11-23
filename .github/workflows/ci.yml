@@ -86,7 +86,7 @@ jobs:
       - name: Check the results file
         if: always()
         env:
-          MIN_TESTS: ${{ matrix.part == 'lint' && 30 || matrix.part == 'system' && 10 || matrix.part == 'uvm' && 9 || 30 }}
+          MIN_TESTS: ${{ matrix.part == 'lint' && 30 || matrix.part == 'system' && 10 || matrix.part == 'uvm' && 11 || 30 }}
         run: python scripts/check_junit.py sim_build/results.xml --min-tests "$MIN_TESTS"
 
       - name: Upload simulation results
