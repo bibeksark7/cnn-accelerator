@@ -588,6 +588,23 @@ check_uvm_mutants() {
   [ "$killed" -eq "$n" ]
 }
 
+# Phase 6: the README's UVM row quotes the committed UVM coverage and mutation reports.
+check_uvm_readme() {
+  python - <<'PY'
+import re, sys
+row = [l for l in open("README.md").read().splitlines() if l.startswith("| UVM testbench")]
+cov = re.search(r"Result: \*\*(\d+) bins, (\d+) met", open("testbench/reports/uvm_coverage.md").read())
+mut = re.search(r"\*\*(\d+) / (\d+) mutants killed", open("testbench/reports/uvm_mutation.md").read())
+want = [f"{cov[2]} / {cov[1]} coverage bins", f"{mut[1]} / {mut[2]} injected bugs caught"]
+if len(row) != 1:
+    print(f"README: {len(row)} UVM rows in the results table"); sys.exit(1)
+missing = [w for w in want if w not in row[0]]
+print(f"README UVM row states: {', '.join(w for w in want if w not in missing)}")
+for w in missing: print(f"  README does not state '{w}' (from the reports)")
+sys.exit(1 if missing else 0)
+PY
+}
+
 check_uvm_core_pin() {
   local want=78c06547a2a0a29b3dc9dcafae62b75b2ff61544 have
   have="$(git rev-parse HEAD:third_party/uvm-core)"
@@ -602,6 +619,7 @@ phase_6() {
   check "UVM: every test by name, incl. the deliberate violation failing through a_awvalid_held" check_uvm_tests
   check "UVM coverage: goal met; committed report (testbench/reports/uvm_coverage.md) is this tree's and matches this run" check_uvm_coverage_report
   check "UVM: every mutant in testbench/uvm/mutants.md killed (fresh run; committed report complete)" check_uvm_mutants
+  check "README's UVM row matches the committed UVM coverage and mutation reports" check_uvm_readme
   check "no RTL mutant applied to the working tree" check_no_mutant_applied
   check "unit tests pass (testbench/unit)" check_pytest unit 15 testbench/unit
   check "system tests pass (testbench/system)" check_pytest system 15 testbench/system
