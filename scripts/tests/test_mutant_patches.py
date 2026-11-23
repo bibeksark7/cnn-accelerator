@@ -1,5 +1,6 @@
 """RTL mutant patches in testbench/mutants/: each applies cleanly to the current RTL, and each has
-a README row whose killing test exists (scripts/run_mutants.py runs them)."""
+a README row whose killing test exists (scripts/run_mutants.py runs them). The UVM bench's table
+(testbench/uvm/mutants.md) names only existing patches, and its killing tests exist too."""
 
 from __future__ import annotations
 
@@ -27,13 +28,15 @@ def _load_runner():
 
 RUNNER = _load_runner()
 ROWS = {m.name: m for m in RUNNER.parse_readme()}
+UVM_TABLE = ROOT / "testbench" / "uvm" / "mutants.md"
+UVM_ROWS = RUNNER.parse_readme(UVM_TABLE.read_text())
 
 
 @cache
 def _collected_nodes() -> frozenset[str]:
     out = subprocess.run(
         [sys.executable, "-m", "pytest", "--collect-only", "-q", "-p", "no:cacheprovider",
-         "testbench/unit", "testbench/system"],
+         "testbench/unit", "testbench/system", "testbench/uvm"],
         cwd=ROOT, capture_output=True, text=True, check=True,
     ).stdout  # fmt: skip
     return frozenset(line.strip() for line in out.splitlines() if "::" in line)
@@ -59,4 +62,14 @@ def test_patch_applies(patch: Path):
 def test_killing_test_exists(patch: Path):
     row = ROWS.get(patch.stem)
     assert row is not None, f"{patch.stem} has no README row"
+    assert row.node in _collected_nodes(), f"{row.node} is not a collected pytest node"
+
+
+def test_uvm_table_names_existing_patches():
+    assert UVM_ROWS, f"no mutant rows in {UVM_TABLE}"
+    assert {m.name for m in UVM_ROWS} <= {p.stem for p in PATCHES}
+
+
+@pytest.mark.parametrize("row", UVM_ROWS, ids=[m.name for m in UVM_ROWS])
+def test_uvm_killing_test_exists(row):
     assert row.node in _collected_nodes(), f"{row.node} is not a collected pytest node"
