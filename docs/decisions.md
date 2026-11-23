@@ -1403,3 +1403,95 @@ what the master sent, not what the bound port saw).
 **Reason.** Arrival order is what a master controls and what a slave must cope with; counting it
 where the assertions are bound makes "every order was exercised" a pass/fail condition of the
 tests that claim it.
+
+## D-050 — UVM simulator: Verilator (Phase 6)
+
+**Decision.** The UVM testbench (`testbench/uvm/`) runs on Verilator, the same OSS CAD Suite
+snapshot as every other Verilator test and as CI (Verilator 5.053, suite 2026-11-01).
+
+**Alternatives.**
+- Questa Intel Starter FPGA Edition 2021.2 (installed with Quartus Prime Lite 22.1std, free
+  license). A UVM test that only prints runs, but `vsim` refuses to load any design that uses
+  `randomize()`, `randcase` or a covergroup ("Unable to checkout verification license"): the free
+  license has no SystemVerilog verification feature. A UVM bench without constrained-random
+  stimulus or functional coverage would not be a meaningful one.
+- EDA Playground: runs only in a browser, by hand; cannot be part of CI or a checkpoint.
+
+**Reason.** Probed before building (2026-11-22, scratch benches, nothing committed): on Verilator
+with uvm-core, a UVM agent with a clocking-block virtual interface from `uvm_config_db`,
+sequences, `randomize() with` constraints, analysis ports and a covergroup with a cross worked;
+a frontdoor register model on the real `accel_axil_tb` passed `uvm_reg_hw_reset_seq` and read
+ID and CONFIG correctly; DECERR responses were checked; an assertion in the interface fired and
+failed the run. Verilator is free, already installed, and already in CI.
+
+**Limits found** (and how the bench deals with them, D-052): `get_coverage()` of a single
+coverpoint or cross is not supported; `randomize()` with constraints calls an external SMT
+solver (z3) per call; UVM's HDL backdoor C code has no Verilator back end; Verilator is a
+two-state simulator, so X-propagation is not checked here (Icarus `xcheck` tests do that).
+
+## D-051 — UVM library: uvm-core 2020.3.1 as a submodule (Phase 6)
+
+**Decision.** `third_party/uvm-core` is a git submodule of `accellera-official/uvm-core`, pinned
+at tag `2020.3.1` (commit 78c06547), the Accellera reference implementation of IEEE 1800.2-2020,
+Apache-2.0. It is used unmodified; `third_party/uvm-core.vlt` turns Verilator warnings off for its
+files only (as for PicoRV32, D-039).
+
+**Alternatives.** The UVM 1.2 copy that ships with Questa (part of a commercial tool install,
+not redistributable from this repository, and not on CI machines); Accellera's UVM 1.2 download
+(behind a click-through, not on an official git host, and the older standard); a patched fork
+for Verilator (unneeded: the reference library compiles unmodified with this Verilator).
+
+**Reason.** The current standard's reference library, pinned to an exact commit like every other
+dependency, available to CI through `actions/checkout` with submodules.
+
+## D-052 — UVM bench design on Verilator (Phase 6)
+
+**Decision.**
+- **Design under test:** `testbench/hdl/accel_axil_tb.sv` (`accel_axil_slave` + `accel_top`, the
+  pairing of the cocotb system test), built **without init files**: every test loads the network
+  and its images through the bus, as firmware does.
+- **Agent** (`axil_pkg`, reusable): a pipelined driver (writes and reads in their own threads, up
+  to two in flight per direction, AW and W with independent delays, BREADY / RREADY delayed or
+  raised before VALID) and a monitor that rebuilds each transaction with the cycle of every
+  handshake and the stall cycles of each channel.
+- **Scoreboard as the predictor:** it models the CSRs, WHI and a shadow of every buffer word the
+  bench wrote, and applies transactions in completion order (the slave serves one at a time,
+  spec §13.4, so this is service order). Busy-dependent rules (IMG_SEL / DESC writes ignored and
+  START ignored while busy; buffer accesses held until a run ends) are decided from the cycles in
+  which the slave could serve the access and accel_top's BUSY output, without assuming any
+  latency: idle when service could start means the access happened while idle, since only this
+  slave can start a run. At START the descriptor table is checked as the sequencer will (§9);
+  when the network and the image slot equal the reference, the logits and class are the Python
+  export's. The register model's mirror is predicted by the scoreboard (`UVM_PREDICT_WRITE`),
+  not by `uvm_reg_predictor`, because only the scoreboard knows whether a write was performed.
+- **Randomization:** per-transaction timing and high-volume stimulus are procedural
+  (`$urandom_range`, `randcase`, seeded by `+verilator+seed`). Measured: constrained
+  `randomize()` takes about 15 ms per call with Verilator's default sampler and about 3 ms with
+  `+verilator+rand+sampler+solver`, a round trip to an external z3 process, against tens of
+  thousands of transactions per test. `randomize()` with constraints is used where the
+  constraint is the point: `accel_desc_err_item` generates descriptors that break a §9 rule,
+  stated as a constraint, and the scoreboard predicts which rule with its own procedural checker.
+- **Coverage:** covergroups sampled by the scoreboard (which knows busy, WHI and the predicted
+  outcome); bins collected with `--coverage-user` per test and merged by
+  `scripts/uvm_coverage.py`, which fails on any unmet bin not listed as a documented gap.
+- **DPI:** only uvm-core's message, regular-expression and command-line C code
+  (`testbench/uvm/uvm_dpi.cc`); not the HDL backdoor, so register access is frontdoor only.
+- **Lint:** the bench's own files are compiled with every Verilator warning fatal except WIDTH
+  (`testbench/uvm/uvm_bench.vlt`): its rules are meant for RTL and flag standard bench idioms
+  (`if (!x.randomize())`, the 64-bit register-API arguments). The RTL stays `-Wall` clean.
+- **Pass criterion:** exit 0, no UVM_ERROR / UVM_FATAL / UVM_WARNING, and the test's own
+  "TEST PASSED" line, which requires the scoreboard to have checked a minimum (golden runs,
+  checked reads, runs) so a test that checked nothing fails.
+- **Build:** once per session, `-j 2` by default (`BUILD_JOBS`). Measured from scratch: about
+  2.5 minutes and about 4.8 GB more memory in use (two compiler processes, the largest 2.6 GB);
+  CI builds at `-j 4` (16 GB runners).
+
+**Alternatives.** A reference model that replays the cocotb masters' fixed expectations
+(cannot follow randomized concurrent traffic); a scoreboard that samples accel_top internals to
+learn when a CSR access happened (couples the bench to the RTL's structure); `uvm_reg_predictor`
+(predicts every write as performed, wrong while busy); constrained `randomize()` everywhere
+(minutes per test on Verilator).
+
+**Reason.** The bench stays a black box on the AXI4-Lite port plus accel_top's documented status
+outputs, makes no latency assumptions (so it would run unchanged on the weight-stationary array),
+and fits in a few minutes of CI.

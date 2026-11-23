@@ -343,3 +343,49 @@ caught by `scripts/lint.sh` before any commit and are not listed.
 - **Regression test.** `test_zz_aw_w_order_cover` in `test_axil_slave_port.py` and
   `test_axil_interconnect.py`. Lesson: a cover point is evidence only once a test fails when it is
   not hit.
+
+## BUG-020 — A UVM test that passed while checking almost nothing (Phase 6)
+
+- **Symptom.** `accel_poll_test` (register traffic throughout a run, spec §13.4) failed its own
+  minimum: 175 checked reads over 4 runs, against 2,000 required. Every check that ran passed.
+- **How found.** The test's minimum (`min_checked_reads`), which every UVM test has so that a
+  test that exercises nothing cannot print TEST PASSED.
+- **Root cause.** Verification bug, two of them. The poll sequence started 20 cycles after the
+  run sequence and stopped after seeing DONE three times, but DONE was still set from the
+  previous run, so it stopped before the new run's START. When it did run, its random mix
+  included buffer-window accesses, which the slave correctly holds until the run ends; the slave
+  serves one transaction at a time, so the first of them held every later poll too.
+- **Fix.** The poll sequence waits until STATUS shows BUSY, makes `n_free` accesses the slave must
+  answer during a run (registers, WHI) and only then a few held buffer accesses.
+- **Regression test.** `accel_poll_test`'s minimums (2,000 checked reads, 4 runs, 3 golden runs).
+
+## BUG-021 — Register-model predictions silently rejected (Phase 6)
+
+- **Symptom.** `accel_reg_test` passed with 2,112 `UVM_WARNING`s: "Trying to predict value of
+  register 'regs.IMG_SEL' while it is being accessed".
+- **How found.** Reading the log of the first passing run; the pass criterion then ignored
+  warnings.
+- **Root cause.** Verification bug. The scoreboard predicts the register model's mirror (only it
+  knows whether a write was performed while busy), with `predict()`'s default
+  `UVM_PREDICT_DIRECT`. UVM refuses a direct prediction while a register operation on that
+  register is in flight, which is exactly when the scoreboard sees the write, and returns without
+  updating the mirror: the warning was the only sign.
+- **Fix.** The scoreboard predicts with `UVM_PREDICT_WRITE` (allowed during an access; applies the
+  field's access policy), and a UVM test now fails on any UVM_WARNING.
+- **Regression test.** Every UVM test (`check_passed` in `testbench/uvm/test_uvm.py`: no
+  UVM_ERROR, UVM_FATAL or UVM_WARNING).
+
+## BUG-022 — A poll gap that stalled every other sequence (Phase 6)
+
+- **Symptom.** The merged UVM coverage missed one bin: no low-half buffer write ever arrived while
+  the accelerator was busy, although the poll test issues one in every other run.
+- **How found.** `scripts/uvm_coverage.py`'s goal (every bin met or a documented gap).
+- **Root cause.** Verification bug. The run sequence spaced its STATUS polls by giving each read a
+  random AR delay of up to 255 cycles. The driver issues reads in order, so the poll sequence's
+  accesses queued behind every gap (about 50 cycles each), the run ended before the poll
+  sequence reached its held accesses, and they all arrived while idle.
+- **Fix.** Poll gaps are waits in the sequence itself (`accel_base_seq::wait_cycles`), which do
+  not hold the driver; the poll test also rotates which held access goes first, since only the
+  first reaches the slave while busy (the rest wait behind it).
+- **Regression test.** The coverage goal in `test_uvm_coverage` (bin
+  `cg_access_busy.x_access_busy.<A_BUF_LOW_WRITE, busy>`).

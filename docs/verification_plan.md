@@ -137,3 +137,27 @@ require it to be green for HEAD. Tests marked `full` (slow): the Icarus `accel_t
 | SoC timing closure and constraints | `fpga/de10lite_soc/build_win.sh`: setup/hold slack at 50 MHz in all corners, no unconstrained paths, 12 synchronizer chains with MTBF, every warning listed with a reason | reports in `fpga/de10lite_soc/reports/` | checkpoint 5 checks |
 | Bug injection: SoC mutants | m35–m54 in `testbench/mutants/` (D-047): slave front end, interconnect, RAM, GPIO, accelerator slave, address map; run with the accelerator's by `scripts/run_mutants.py`; checkpoint 5 runs every mutant | each SoC block has at least two; the killing test is its unit test where one exists; m51 and m52 must fail through their named assertion | done: 20 / 20 killed, none equivalent |
 | On the board | the DE10-Lite is programmed with the SoC and the demo run; the record is `fpga/de10lite_soc/demo.md` | — | pending |
+
+## 8. UVM testbench (Phase 6; Verilator + uvm-core, D-050 to D-052)
+
+`testbench/uvm/`: an AXI4-Lite agent (`axil_pkg`), a register model of the CSR map, a
+busy-aware scoreboard that predicts every response and read (D-052), functional coverage, and
+seven tests on `accel_axil_tb` (accelerator slave + `accel_top`, no init files). Run by
+`pytest testbench/uvm` (fast CI job and full CI job); a test passes only with exit 0, no
+UVM_ERROR / UVM_FATAL / UVM_WARNING and its own TEST PASSED line, which requires a minimum of
+checked reads, runs and golden-checked runs.
+
+| Feature | Test(s) | Coverage items | Status |
+|---|---|---|---|
+| CSR map reset values and access rules (§10.2) | `accel_reg_test`: `uvm_reg_hw_reset_seq`, single-bit bash of IMG_SEL and all 32 DESC words, 1,500 random CSR accesses (every offset, unmapped ones, bits [1:0] set), a second reset: DESC kept, the rest reset | every register (and unmapped offsets) read and written (`cg_csr`); ignored address bits (`cg_low_addr`) | done |
+| Responses: OKAY, SLVERR (partial strobes), DECERR (hole) (§13.4) | `accel_bus_test`: 3,000 random buffer-window, 1,000 CSR and 1,500 error-address transactions in parallel, two in flight per direction; every response predicted by address and strobes | each response by region and direction (`cg_resp`); every partial strobe pattern (`cg_strb`) | done |
+| Buffer window: selects, halves, WHI, wrap (§13.4) | `accel_bus_test`, `accel_reset_test` (WHI cleared by reset); reads checked against a shadow of every word written | every select × half × direction (`cg_buf`); words past the depth per buffer (`cg_wrap`); low-half writes with WHI zero / non-zero to byte, wide and reserved buffers (`cg_whi`) | done |
+| Inference through the bus, bit-exact | `accel_infer_test`: network uploaded through the window and DESC, then all 54 reference images (quick subset + saturating) back to back, slots reused, one rerun without reload; logits and RESULT against the Python export; ERROR and RESULT also checked on accel_top's outputs as each run ends | every IMG_SEL slot started (`cg_run.cp_img_sel`); golden-checked runs | done |
+| CSR accesses never held during a run; buffer accesses held (§13.4) | `accel_poll_test`: thousands of register reads, IMG_SEL / START / DESC writes (ignored while busy) and WHI writes during runs, each answered within 32 cycles of the slave being free; then buffer reads and low-half writes that complete only after BUSY falls | each access kind arriving while idle and while busy (`cg_access_busy`); START ignored while busy (`cg_event`) | done |
+| §9 descriptor errors | `accel_error_test`: each error kind once (reserved op, CONV/POOL dst IMG or LOGIT, src = dst, src LOGIT, FC dst ≠ LOGIT, ARGMAX src ≠ LOGIT, no last), then 12 constrained-random invalid descriptors (`accel_desc_err_item`); outcome, layer index, LAYER_CYC pattern and RESULT predicted from the table | every outcome (`cg_run.cp_outcome`) | done |
+| Reset (§10.2) | `accel_reset_test`: reset at four points in a run and while idle; every CSR read back; WHI cleared; buffers and DESC kept (the same image runs bit-exact after it) | reset during a run, reset while idle, back-to-back runs (`cg_event`) | done |
+| Concurrency and timing | `accel_random_test`: uploads and runs with background reads and error traffic, up to 8-cycle delays; every test randomizes AW / W skew and B / R ready (delayed or before VALID) | AW / W acceptance order (`cg_aw_w_order`); request and response stalls (`cg_stall`) | done |
+| AXI4-Lite protocol assertions | `testbench/uvm/tb/axil_if.sv` in every test: VALID held with stable payload (master), B / R held stable, B only after AW and W, R only after AR, no EXOKAY, quiet in reset; `test_uvm_violation`: the driver withdraws AWVALID on purpose and the run must fail through `a_awvalid_held` | — | done |
+| UVM functional coverage report | `test_uvm_coverage` → `scripts/uvm_coverage.py` → `testbench/reports/uvm_coverage.md` | goal: every bin met or a documented gap | done |
+| Mutants against the UVM bench | `testbench/uvm/mutants.md` (17 of the existing patches: slave front end, accelerator slave, memory port, datapath, result, §9 checks) run by `scripts/run_mutants.py --table` → `testbench/reports/uvm_mutation.md` | every row killed | done |
+| X-propagation | not checked here: Verilator is two-state (D-050); covered by the Icarus `xcheck` system tests | — | gap (by design) |
