@@ -15,6 +15,7 @@ class accel_env extends uvm_env;
   accel_timeline timeline;
   accel_coverage cov;
   virtual axil_if vif;
+  virtual accel_backdoor_if bif;
 
   function new(string name, uvm_component parent);
     super.new(name, parent);
@@ -23,6 +24,8 @@ class accel_env extends uvm_env;
   function void build_phase(uvm_phase phase);
     if (!uvm_config_db#(virtual axil_if)::get(this, "", "vif", vif))
       `uvm_fatal("NOVIF", "accel_env: no AXI4-Lite interface")
+    if (!uvm_config_db#(virtual accel_backdoor_if)::get(this, "", "backdoor_vif", bif))
+      `uvm_fatal("NOVIF", "accel_env: no backdoor interface")
     if (!uvm_config_db#(axil_cfg)::get(this, "", "agent_cfg", agent_cfg))
       agent_cfg = axil_cfg::type_id::create("agent_cfg");
     uvm_config_db#(axil_cfg)::set(this, "agent", "cfg", agent_cfg);
@@ -46,12 +49,13 @@ class accel_env extends uvm_env;
     sb.refd = refd;
     sb.regs = regs;
     sb.cov = cov;
-    regs.default_map.set_sequencer(agent.sqr, adapter);
+    if (agent_cfg.is_active == UVM_ACTIVE) regs.default_map.set_sequencer(agent.sqr, adapter);
     regs.default_map.set_auto_predict(0);
-    accel_base_seq::vif = vif;
+    regs.set_backdoors(bif, sb);
   endfunction
 
-  // Hang guard: a transaction in flight and none completed for HANG_CYCLES cycles. A buffer-window
+  // Hang guard: a transaction on the bus (the monitor's view) and none completed for HANG_CYCLES
+  // cycles. A buffer-window
   // access legitimately holds the slave until a run ends (about 47,000 cycles), so the bound is
   // far above one run; it only turns a hang into a failure instead of a wall-clock timeout.
   localparam int unsigned HANG_CYCLES = 400_000;
@@ -59,7 +63,7 @@ class accel_env extends uvm_env;
     int unsigned last_done = 0, quiet = 0;
     forever begin
       repeat (1000) @(posedge vif.clk);
-      if (agent.drv.idle() || agent.mon.n_done != last_done) quiet = 0;
+      if (agent.mon.idle() || agent.mon.n_done != last_done) quiet = 0;
       else quiet += 1000;
       last_done = agent.mon.n_done;
       if (quiet >= HANG_CYCLES)
@@ -70,7 +74,7 @@ class accel_env extends uvm_env;
   // Synchronous reset for `cycles` cycles. Only with the bus idle: AXI4-Lite has no way to cancel
   // a transaction, and the bench's model of one cut by reset would be a guess.
   task reset_dut(int unsigned cycles = 4);
-    while (!agent.drv.idle()) @(posedge vif.clk);
+    while (!agent.idle()) @(posedge vif.clk);
     repeat (2) @(posedge vif.clk);
     vif.rst <= 1'b1;
     repeat (cycles) @(posedge vif.clk);

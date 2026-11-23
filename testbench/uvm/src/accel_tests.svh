@@ -1,9 +1,12 @@
 // accel_tests: the UVM tests (select with +UVM_TESTNAME). Each starts with a reset and ends by
-// printing "TEST PASSED" only if no UVM_ERROR or UVM_FATAL was reported, the scoreboard saw no
-// mismatch, and the test's own minimums were met (so a test that checked nothing cannot pass).
+// printing "TEST PASSED" only if no UVM_ERROR, UVM_FATAL or UVM_WARNING was reported, the
+// scoreboard saw no mismatch, and the test's own minimums were met (so a test that checked
+// nothing cannot pass).
 //
-//   accel_reg_test       register model: reset values, bit-bash of IMG_SEL and every DESC word,
-//                        random CSR traffic, then a second reset (DESC kept, the rest reset)
+//   accel_reg_test       register model: reset values, bit-bash and frontdoor-against-backdoor
+//                        access (uvm_reg_access_seq) of IMG_SEL and every DESC word, random CSR
+//                        traffic with partial-strobe writes, then a second reset (DESC kept, the
+//                        rest reset)
 //   accel_bus_test       random buffer-window, CSR-window and error-address traffic in parallel,
 //                        two transactions in flight per direction, random timing
 //   accel_infer_test     the network uploaded through the bus, then every reference image (the
@@ -12,9 +15,10 @@
 //   accel_error_test     each §9 descriptor error, then a correct run again
 //   accel_reset_test     reset in the middle of a run and while idle; WHI, CSRs, buffers after it
 //   accel_random_test    runs, uploads, random reads and error traffic all at once, extreme timing
-//   accel_violation_test the driver breaks the AXI4-Lite rules on purpose (AWVALID withdrawn): the
-//                        interface assertion must stop the simulation (the pytest entry expects
-//                        this test to fail through a_awvalid_held)
+//   accel_violation_test the driver breaks the AXI4-Lite rules on purpose (+VIOLATION=AW, W or AR:
+//                        that channel's VALID withdrawn before READY): the interface assertion
+//                        must stop the simulation (the pytest entry expects this test to fail
+//                        through that channel's valid_ready_sva a_valid_held)
 class accel_base_test extends uvm_test;
   `uvm_component_utils(accel_base_test)
   accel_env env;
@@ -79,8 +83,10 @@ class accel_base_test extends uvm_test;
   function void report_phase(uvm_phase phase);
     uvm_report_server rs = uvm_report_server::get_server();
     int errors = rs.get_severity_count(UVM_ERROR) + rs.get_severity_count(UVM_FATAL);
+    int warnings = rs.get_severity_count(UVM_WARNING);
     string why = "";
     if (errors != 0) why = $sformatf("%0d UVM errors", errors);
+    else if (warnings != 0) why = $sformatf("%0d UVM warnings", warnings);
     else if (env.sb.n_errors_seen != 0) why = "scoreboard mismatches";
     else if (env.sb.n_golden_runs < min_golden_runs)
       why = $sformatf("%0d golden-checked runs, need %0d", env.sb.n_golden_runs, min_golden_runs);
@@ -102,6 +108,7 @@ class accel_reg_test extends accel_base_test;
   task body();
     uvm_reg_hw_reset_seq rst_seq = uvm_reg_hw_reset_seq::type_id::create("hw_reset");
     uvm_reg_single_bit_bash_seq bash = uvm_reg_single_bit_bash_seq::type_id::create("bit_bash");
+    uvm_reg_access_seq access = uvm_reg_access_seq::type_id::create("access");
     accel_csr_rand_seq csr = accel_csr_rand_seq::type_id::create("csr_rand");
     uvm_status_e st;
     uvm_reg_data_t v;
@@ -113,6 +120,10 @@ class accel_reg_test extends accel_base_test;
       bash.rg = env.regs.desc[w];
       bash.start(null);
     end
+    // Frontdoor write, backdoor check; backdoor write, frontdoor check (IMG_SEL and DESC: the
+    // registers with a backdoor; the others are marked NO_REG_ACCESS_TEST in accel_regs).
+    access.model = env.regs;
+    access.start(null);
     // Leave the reference table in DESC (the random sequence restores what it changes).
     foreach (env.regs.desc[w]) env.regs.desc[w].write(st, env.refd.desc[w]);
     void'(seq_cfg(csr));
@@ -332,25 +343,50 @@ class accel_violation_test extends accel_base_test;
     super.new(name, parent);
   endfunction
   function void configure_agent(axil_cfg cfg);
+    string which = "AW";
+    void'($value$plusargs("VIOLATION=%s", which));
     cfg.max_outstanding = 2;
-    cfg.violation = AXIL_WITHDRAW_AW;
+    case (which)
+      "AW": cfg.violation = AXIL_WITHDRAW_AW;
+      "W": cfg.violation = AXIL_WITHDRAW_W;
+      "AR": cfg.violation = AXIL_WITHDRAW_AR;
+      default: `uvm_fatal("TEST", {"+VIOLATION must be AW, W or AR, not ", which})
+    endcase
   endfunction
   task body();
-    accel_write_seq slow = accel_write_seq::type_id::create("slow_b");
-    accel_write_seq next = accel_write_seq::type_id::create("next");
-    // Two writes back to back with a slow BREADY: the second AW waits (the slave's AW buffer is
-    // full until the first B is accepted) and the driver withdraws it.
-    void'(seq_cfg(slow, 0, 0));
-    void'(seq_cfg(next, 0, 0));
-    slow.min_resp_delay = 10;
-    slow.addr = buf_addr(7, 0, 0);
-    next.addr = buf_addr(7, 1, 0);
-    fork
-      slow.start(env.agent.sqr);
-      begin
-        env.wait_cycles(1);
-        next.start(env.agent.sqr);
-      end
-    join
+    // Two writes (or reads) back to back with a slow BREADY (RREADY) on the first: the second's
+    // AW and W (AR) wait, since the slave's buffers stay full until the first response is
+    // accepted, and the driver withdraws the chosen VALID.
+    if (agent_cfg.violation == AXIL_WITHDRAW_AR) begin
+      accel_read_seq slow = accel_read_seq::type_id::create("slow_r");
+      accel_read_seq next = accel_read_seq::type_id::create("next");
+      void'(seq_cfg(slow, 0, 0));
+      void'(seq_cfg(next, 0, 0));
+      slow.min_resp_delay = 10;
+      slow.addr = buf_addr(7, 0, 0);
+      next.addr = buf_addr(7, 1, 0);
+      fork
+        slow.start(env.agent.sqr);
+        begin
+          env.wait_cycles(1);
+          next.start(env.agent.sqr);
+        end
+      join
+    end else begin
+      accel_write_seq slow = accel_write_seq::type_id::create("slow_b");
+      accel_write_seq next = accel_write_seq::type_id::create("next");
+      void'(seq_cfg(slow, 0, 0));
+      void'(seq_cfg(next, 0, 0));
+      slow.min_resp_delay = 10;
+      slow.addr = buf_addr(7, 0, 0);
+      next.addr = buf_addr(7, 1, 0);
+      fork
+        slow.start(env.agent.sqr);
+        begin
+          env.wait_cycles(1);
+          next.start(env.agent.sqr);
+        end
+      join
+    end
   endtask
 endclass

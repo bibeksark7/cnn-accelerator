@@ -3,7 +3,8 @@
 //
 // The scoreboard classifies each AXI transaction by whether the accelerator was busy over the
 // cycles in which the slave could have served it (see accel_scoreboard). `known_until` lets it
-// wait until the timeline covers a transaction's cycles before classifying it.
+// wait until the timeline covers a transaction's cycles before classifying it; `updated` fires
+// each time known_until advances (after that cycle's events are published).
 class accel_run_event extends uvm_object;
   typedef enum {
     EV_START,
@@ -28,6 +29,7 @@ class accel_timeline extends uvm_object;
   bit busy_val[$];
   longint reset_at[$];  // cycles in which rst was sampled high after being low
   longint known_until = -1;
+  event updated;
 
   function new(string name = "accel_timeline");
     super.new(name);
@@ -117,6 +119,7 @@ class accel_status_monitor extends uvm_monitor;
         if (e.kind != accel_run_event::EV_RESET) ap.write(e);
       end
       timeline.known_until = vif.mon_cb.cycle;
+      ->timeline.updated;
     end
   endtask
 endclass

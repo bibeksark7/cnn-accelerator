@@ -389,3 +389,30 @@ caught by `scripts/lint.sh` before any commit and are not listed.
   first reaches the slave while busy (the rest wait behind it).
 - **Regression test.** The coverage goal in `test_uvm_coverage` (bin
   `cg_access_busy.x_access_busy.<A_BUF_LOW_WRITE, busy>`).
+
+## BUG-023 — Register mirror predicted two cycles after write() returned (Phase 6 review)
+
+- **Symptom.** With `uvm_reg_access_seq` added to `accel_reg_test`, every register it covers
+  failed its first check: after a frontdoor write of `~v`, the backdoor read (one time unit after
+  `write()` returned) found the new value in the design, but the mirror still held the old one
+  (`Register "regs.IMG_SEL" value read from DUT (0xf) does not match mirrored value (0x0)`; 33
+  such errors, one per register). Each was followed by a scoreboard error on the frontdoor read
+  back (`IMG_SEL read 00000000, predicted 0000000f`; 48 in all).
+- **How found.** The new sequence (frontdoor write, backdoor check; backdoor write, frontdoor
+  check), run against a backdoor added for IMG_SEL and the descriptor table.
+- **Root cause.** Verification bug. The scoreboard is the register model's predictor (auto-predict
+  off, D-052), and it processed each transaction only once the BUSY timeline covered two cycles
+  past the response handshake, so the mirror was updated about two cycles after the driver had
+  handed the response back and `write()` had returned. Any sequence that used the mirror right
+  after a write saw a stale value. The scoreboard errors followed from the same lag: the late
+  prediction of the frontdoor write landed after the backdoor write and overwrote the model with
+  the older value. The only rule that needed the later cycles was the check that BUSY rose after
+  a performed START.
+- **Fix.** A transaction is processed as soon as the timeline covers its response-valid cycle:
+  from `write_axil`, or, if the status monitor has not sampled that cycle yet, when it has (it now
+  signals each update with an event). Both happen in the time step in which the monitor publishes
+  the response, the one in which the driver returns it, so the mirror and the model are current
+  when `write()` returns. The START check waits in a queue until the timeline covers two cycles
+  past the response. A backdoor write also updates the scoreboard's model.
+- **Regression test.** `accel_reg_test` runs `uvm_reg_access_seq` on IMG_SEL and all 32 DESC
+  words in every regression.

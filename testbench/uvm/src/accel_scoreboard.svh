@@ -36,7 +36,6 @@ class accel_scoreboard extends uvm_component;
 
   uvm_analysis_imp_axil #(axil_item, accel_scoreboard) axil_imp;
   uvm_analysis_imp_run #(accel_run_event, accel_scoreboard) run_imp;
-  virtual accel_status_if vif;  // for the cycle loop only
   accel_timeline timeline;
   accel_ref refd;
   accel_regs regs;
@@ -62,7 +61,13 @@ class accel_scoreboard extends uvm_component;
   int layer_cyc_nz[DESC_DEPTH];  // 0 zero, 1 nonzero, -1 unknown
   bit counters_zero;  // after reset, before any run
   longint last_busy_cycles = -1;  // BUSY cycles of the last run that ended normally
+  longint last_end_cycle = -1;  // the cycle it ended (BUSY fell)
   bit [31:0] ctr_last[4];  // counters read during the current run (non-decreasing)
+  // Counters (CYC_TOTAL, CYC_MAC, BUF_RD, BUF_WR) read once settled after the last run, and as
+  // read after the first golden run of the reference network (every golden run must match).
+  bit [31:0] ctr_final[4], ctr_golden[4];
+  bit ctr_final_known[4], ctr_golden_known[4], ctr_bound_checked[4];
+  bit ended_golden;
   // The run in progress, as predicted at its START.
   bit run_active, run_unknown;
   run_outcome_e run_outcome;
@@ -73,7 +78,7 @@ class accel_scoreboard extends uvm_component;
   // ---- statistics (reported, and required by the tests)
   int unsigned n_txn, n_checked_reads, n_unchecked_reads, n_errors_seen;
   int unsigned n_starts, n_runs_ended, n_golden_runs, n_logits_checked, n_rises;
-  int unsigned n_resp_checked, n_ambiguous_starts;
+  int unsigned n_resp_checked, n_ambiguous_starts, n_counter_bounds;
 
   function new(string name, uvm_component parent);
     super.new(name, parent);
@@ -81,13 +86,9 @@ class accel_scoreboard extends uvm_component;
     run_imp  = new("run_imp", this);
   endfunction
 
-  function void build_phase(uvm_phase phase);
-    if (!uvm_config_db#(virtual accel_status_if)::get(this, "", "status_vif", vif))
-      `uvm_fatal("NOVIF", "accel_scoreboard: no status interface")
-  endfunction
-
   function void write_axil(axil_item t);
     txq.push_back(t);
+    process(0);
   endfunction
 
   function void write_run(accel_run_event e);
@@ -97,25 +98,46 @@ class accel_scoreboard extends uvm_component;
 
   task run_phase(uvm_phase phase);
     forever begin
-      @(vif.mon_cb);
+      @(timeline.updated);
       process(0);
     end
   endtask
 
-  // Transactions are processed once the timeline covers two cycles past their response, and run
-  // events strictly before a transaction's response-valid cycle are applied before it (a later
-  // event cannot have affected it). Events with no transaction after them are applied once no
-  // in-flight transaction can still precede them (EVENT_DEFER cycles: a generous bound on how
-  // long a response waits for READY), or at the end of the test.
+  // Transactions are processed as soon as the timeline covers their response-valid cycle: from
+  // write_axil, or, if the status monitor has not yet sampled that cycle, when it has (both in the
+  // time step in which the monitor publishes the response, the one in which the driver returns it
+  // to the sequence). So the model and the register mirror are current when a register write()
+  // returns (BUG-023: they used to lag by two cycles, and uvm_reg_access_seq's backdoor check
+  // after write() saw the old mirror). Run events strictly before a transaction's response-valid
+  // cycle are applied before it (a later event cannot have affected it). Events with no
+  // transaction after them are applied once no in-flight transaction can still precede them
+  // (EVENT_DEFER cycles: a generous bound on how long a response waits for READY), or at the end
+  // of the test. The one check that needs later cycles, that BUSY rose after a performed START,
+  // waits in start_checks until the timeline covers them.
   localparam longint EVENT_DEFER = 256;
+  localparam longint START_RISE_BOUND = 2;  // cycles after the response (not a latency)
+  typedef struct {
+    longint s;
+    axil_item t;
+  } start_check_t;
+  start_check_t start_checks[$];
+
   function void process(bit flush);
-    while (txq.size() > 0 && (flush || txq[0].resp_cycle + 2 <= timeline.known_until)) begin
+    while (txq.size() > 0 && (flush || txq[0].resp_valid_cycle <= timeline.known_until)) begin
       axil_item t = txq.pop_front();
       while (evq.size() > 0 && evq[0].cycle < t.resp_valid_cycle) apply_event(evq.pop_front());
       check_txn(t);
     end
     while (evq.size() > 0 && (flush || evq[0].cycle + EVENT_DEFER <= timeline.known_until))
       apply_event(evq.pop_front());
+    while (start_checks.size() > 0 &&
+           (flush || start_checks[0].t.resp_valid_cycle + START_RISE_BOUND <= timeline.known_until))
+    begin
+      start_check_t c = start_checks.pop_front();
+      if (!timeline.rose_in(c.s, c.t.resp_valid_cycle + START_RISE_BOUND))
+        `uvm_error("SB", $sformatf("START written while idle, but BUSY did not rise: %s",
+                                   c.t.convert2string()))
+    end
   endfunction
 
   // ================================================================ run and reset events
@@ -133,6 +155,10 @@ class accel_scoreboard extends uvm_component;
     run_active = 0;
     n_runs_ended++;
     last_busy_cycles = e.busy_cycles;
+    last_end_cycle = e.cycle;
+    ended_golden = run_golden;
+    ctr_final_known = '{default: 0};
+    ctr_bound_checked = '{default: 0};
     done = 1;
     if (run_outcome == RUN_UNKNOWN) begin
       status_known = 0;
@@ -191,6 +217,7 @@ class accel_scoreboard extends uvm_component;
     foreach (layer_cyc_nz[l]) layer_cyc_nz[l] = 0;
     counters_zero = 1;
     last_busy_cycles = -1;
+    last_end_cycle = -1;
     regs.reset();  // DESC has no reset value: its mirror is kept
     `uvm_info("SB", $sformatf("@%0d reset: CSRs and WHI back to their reset values", c), UVM_MEDIUM)
   endfunction
@@ -248,9 +275,7 @@ class accel_scoreboard extends uvm_component;
 
   function void start_run(axil_item t, longint s);
     n_starts++;
-    if (!timeline.rose_in(s, t.resp_valid_cycle + 2))
-      `uvm_error("SB", $sformatf("START written while idle, but BUSY did not rise: %s",
-                                 t.convert2string()))
+    start_checks.push_back('{s, t});
     run_active = 1;
     run_unknown = 0;
     done = 0;
@@ -262,6 +287,8 @@ class accel_scoreboard extends uvm_component;
     foreach (layer_cyc_nz[l]) layer_cyc_nz[l] = -1;
     counters_zero = 0;
     ctr_last = '{default: 0};
+    last_busy_cycles = -1;
+    last_end_cycle = -1;
     mem[SEL_ACT0].delete();
     mem[SEL_ACT1].delete();
     run_outcome = img_sel_known ? predict_outcome(run_layer, run_argmax_before_end) : RUN_UNKNOWN;
@@ -288,6 +315,7 @@ class accel_scoreboard extends uvm_component;
     foreach (layer_cyc_nz[l]) layer_cyc_nz[l] = -1;
     counters_zero = 0;
     last_busy_cycles = -1;
+    last_end_cycle = -1;
     mem[SEL_ACT0].delete();
     mem[SEL_ACT1].delete();
   endfunction
@@ -396,7 +424,7 @@ class accel_scoreboard extends uvm_component;
       end
       R_IMG_SEL: check_read(t, img_sel_known, {28'd0, img_sel}, "IMG_SEL");
       R_RESULT: check_read(t, result_known && cls != 2, {24'd0, result}, "RESULT");
-      R_CYC_TOTAL, R_CYC_MAC, R_BUF_RD, R_BUF_WR: counter_read(t, k, cls);
+      R_CYC_TOTAL, R_CYC_MAC, R_BUF_RD, R_BUF_WR: counter_read(t, k, cls, s);
       R_LAYER_CYC: begin
         int l = (off - CSR_LAYER_CYC) / 4;
         if (!idle_settled || layer_cyc_nz[l] < 0) n_unchecked_reads++;
@@ -423,8 +451,18 @@ class accel_scoreboard extends uvm_component;
   // The counters (spec §10.2): 0 after reset, before any run; never decreasing during a run; after
   // a run, CYC_TOTAL within 2 of the number of cycles BUSY was high (a bound around "cycles from
   // START to DONE", which also covers the counters settling one cycle after DONE; not a latency).
-  function void counter_read(axil_item t, csr_e k, int cls);
+  // Once settled (read SETTLE cycles or more after BUSY fell; they are final one cycle after DONE):
+  // unchanging until the next START or reset; CYC_MAC at most CYC_TOTAL, BUF_RD at most
+  // 5 · CYC_TOTAL and BUF_WR at most 2 · CYC_TOTAL (a cycle counts at most one MAC step, five
+  // buffer reads and two writes); and, after a golden run, equal to the first golden run's values
+  // (the reference network's schedule does not depend on the image).
+  localparam longint SETTLE = 3;
+  localparam int CTR_PER_CYCLE[4] = '{1, 1, 5, 2};
+  function void counter_read(axil_item t, csr_e k, int cls, longint s);
     int i = int'(k) - int'(R_CYC_TOTAL);
+    string name = ctr_name(i);
+    bit ended = cls == 0 && !run_active && !run_unknown && last_busy_cycles >= 0;
+    bit checked = 0;
     if (counters_zero && cls == 0) begin
       check_read(t, 1, 0, "counter after reset");
       return;
@@ -435,14 +473,51 @@ class accel_scoreboard extends uvm_component;
       ctr_last[i] = t.data;
       return;
     end
-    if (cls == 0 && !run_active && !run_unknown && last_busy_cycles >= 0 && k == R_CYC_TOTAL) begin
-      n_checked_reads++;
+    if (ended && k == R_CYC_TOTAL) begin
+      checked = 1;
       if (longint'(t.data) < last_busy_cycles - 2 || longint'(t.data) > last_busy_cycles + 2)
         fail(t, $sformatf("CYC_TOTAL %0d, but BUSY was high for %0d cycles", t.data,
                           last_busy_cycles));
-      return;
     end
-    n_unchecked_reads++;
+    if (ended && last_end_cycle >= 0 && s >= last_end_cycle + SETTLE) begin
+      checked = 1;
+      if (ctr_final_known[i] && t.data != ctr_final[i])
+        fail(t, $sformatf("%s changed from %0d after the run ended", name, ctr_final[i]));
+      ctr_final[i] = t.data;
+      ctr_final_known[i] = 1;
+      check_counter_bounds(t);
+      if (ended_golden) begin
+        if (ctr_golden_known[i] && t.data != ctr_golden[i])
+          fail(t, $sformatf("%s %0d after a golden run; the first golden run gave %0d", name,
+                            t.data, ctr_golden[i]));
+        ctr_golden[i] = t.data;
+        ctr_golden_known[i] = 1;
+      end
+    end
+    if (checked) n_checked_reads++;
+    else n_unchecked_reads++;
+  endfunction
+
+  function string ctr_name(int i);
+    case (i)
+      0: return "CYC_TOTAL";
+      1: return "CYC_MAC";
+      2: return "BUF_RD";
+      default: return "BUF_WR";
+    endcase
+  endfunction
+
+  // Once CYC_TOTAL and another counter of the same run are both known.
+  function void check_counter_bounds(axil_item t);
+    if (!ctr_final_known[0]) return;
+    for (int i = 1; i < 4; i++) begin
+      if (!ctr_final_known[i] || ctr_bound_checked[i]) continue;
+      ctr_bound_checked[i] = 1;
+      n_counter_bounds++;
+      if (longint'(ctr_final[i]) > CTR_PER_CYCLE[i] * longint'(ctr_final[0]))
+        fail(t, $sformatf("%s = %0d exceeds %0d x CYC_TOTAL (%0d)", ctr_name(i), ctr_final[i],
+                          CTR_PER_CYCLE[i], ctr_final[0]));
+    end
   endfunction
 
   // ---------------------------------------------------------------- buffer window
@@ -480,6 +555,21 @@ class accel_scoreboard extends uvm_component;
     end
   endfunction
 
+  // ================================================================ backdoor
+  // A backdoor write (accel_reg_backdoor) of IMG_SEL (word < 0) or DESC word `word`, made while
+  // idle: the model takes the value as the bus would have written it.
+  function void backdoor_write(int word, bit [31:0] v);
+    if (run_active || run_unknown)
+      `uvm_error("SB", "backdoor register write while a run may be in progress")
+    if (word < 0) begin
+      img_sel_known = 1;
+      img_sel = v[3:0];
+    end else begin
+      desc_known[word] = 1;
+      desc[word] = v;
+    end
+  endfunction
+
   // ================================================================ end of test
   function void extract_phase(uvm_phase phase);
     process(1);
@@ -494,9 +584,10 @@ class accel_scoreboard extends uvm_component;
   function void report_phase(uvm_phase phase);
     `uvm_info("SB", $sformatf({"%0d transactions, %0d responses checked; reads: %0d checked, ",
                                "%0d not predictable; runs: %0d started, %0d ended, %0d against ",
-                               "the golden model (%0d logits compared); %0d mismatches"}, n_txn,
-                              n_resp_checked, n_checked_reads, n_unchecked_reads, n_starts,
-                              n_runs_ended, n_golden_runs, n_logits_checked, n_errors_seen),
+                               "the golden model (%0d logits compared); counter bounds: %0d ",
+                               "checked; %0d mismatches"}, n_txn, n_resp_checked,
+                              n_checked_reads, n_unchecked_reads, n_starts, n_runs_ended,
+                              n_golden_runs, n_logits_checked, n_counter_bounds, n_errors_seen),
               UVM_NONE)
   endfunction
 endclass

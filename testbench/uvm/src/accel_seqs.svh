@@ -17,7 +17,7 @@ class accel_base_seq extends uvm_sequence #(axil_item);
   int unsigned max_delay = 3;  // AW / W / AR start delay and response-ready delay, cycles
   int unsigned early_pct = 30;  // chance of raising BREADY / RREADY before VALID
   int unsigned min_resp_delay = 0;  // > 0: BREADY / RREADY held off at least this long
-  static virtual axil_if vif;  // set by accel_env, for waits that must not hold the driver
+  virtual axil_if vif;  // for waits that must not hold the driver (uvm_config_db, as the agent's)
   int unsigned guard = 2_000_000;  // polls before a run counts as hung (not an expected value)
 
   function new(string name = "accel_base_seq");
@@ -48,6 +48,13 @@ class accel_base_seq extends uvm_sequence #(axil_item);
     finish_item(t);
     get_base_response(r, t.get_transaction_id());
     if (!$cast(rsp, r)) `uvm_fatal("SEQ", "response is not an axil_item")
+  endtask
+
+  // The interface the sequencer's agent drives, from the same uvm_config_db entry.
+  task pre_body();
+    if (vif == null && !uvm_config_db#(virtual axil_if)::get(m_sequencer, "", "vif", vif))
+      `uvm_fatal("NOVIF", {get_type_name(), ": no virtual interface for ",
+                           m_sequencer.get_full_name()})
   endtask
 
   // Idle cycles in this sequence only (other sequences' transactions keep flowing).
@@ -185,7 +192,11 @@ endclass
 
 // Random accesses to every CSR offset (mapped ones weighted up): reads of anything; writes to the
 // read-only and unmapped offsets (ignored), to IMG_SEL, and to DESC words (a random value, read
-// back, then the original value restored). No CTRL writes (they start runs).
+// back, then the original value restored). No full-strobe CTRL writes (they start runs).
+//
+// With writes allowed, first the directed partial-strobe writes (spec §13.3: SLVERR, not
+// performed): every pattern other than 4'b1111 to IMG_SEL, to a DESC word, and to CTRL with START
+// set (no run may start), each followed by a read of IMG_SEL and the DESC word (unchanged).
 class accel_csr_rand_seq extends accel_base_seq;
   `uvm_object_utils(accel_csr_rand_seq)
   int unsigned n = 500;
@@ -193,8 +204,22 @@ class accel_csr_rand_seq extends accel_base_seq;
   function new(string name = "accel_csr_rand_seq");
     super.new(name);
   endfunction
+
+  task partial_writes();
+    bit [31:0] v;
+    for (int s = 0; s < 15; s++) begin
+      bit [11:0] desc = CSR_DESC + 12'(4 * $urandom_range(0, DESC_WORDS - 1));
+      write(23'(CSR_IMG_SEL), $urandom, 4'(s));
+      write(23'(desc), $urandom, 4'(s));
+      write(23'(CSR_CTRL), $urandom | 32'h1, 4'(s));
+      csr_read(CSR_IMG_SEL, v);
+      csr_read(desc, v);
+    end
+  endtask
+
   task body();
     bit [31:0] v;
+    if (allow_writes) partial_writes();
     repeat (n) begin
       bit [11:0] off;
       randcase
