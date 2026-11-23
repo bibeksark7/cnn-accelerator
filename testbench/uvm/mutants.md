@@ -17,10 +17,14 @@ assertion of the AXI4-Lite checker bound to `axil_if`, or a UVM message ID in br
 scoreboard mismatch, `[HANG]` the env's watchdog (no transaction completed for 400,000 cycles),
 `[STATUS]` the status monitor. `scripts/run_mutants.py` reports any other failure as WRONG.
 
+`m36` shows as an R without an AR, not as a B before W: the port takes a transaction's direction
+from whether both AW and W are buffered, so a transaction started with only AW buffered is decoded
+as a read and answered on R.
+
 | Mutant | Bug | Killing test | Required kill mechanism |
 |---|---|---|---|
 | `m35_port_resp_not_held` | AXI slave port drops B / R after one cycle instead of holding them until BREADY / RREADY | `testbench/uvm/test_uvm.py::test_uvm[accel_bus_test]` | `u_b_vr_sva.a_valid_held` or `u_r_vr_sva.a_valid_held` |
-| `m36_port_write_without_w` | AXI slave port starts a write once AW is buffered, without waiting for W | `testbench/uvm/test_uvm.py::test_uvm[accel_bus_test]` | `u_order_sva.a_b_after_aw_and_w` |
+| `m36_port_write_without_w` | AXI slave port starts a write once AW is buffered, without waiting for W | `testbench/uvm/test_uvm.py::test_uvm[accel_bus_test]` | `u_order_sva.a_r_after_ar` |
 | `m37_port_same_cycle_rsp_lost` | AXI slave port ignores a local response given in the request's acceptance cycle | `testbench/uvm/test_uvm.py::test_uvm[accel_bus_test]` | `[HANG]` |
 | `m38_port_ar_freed_on_b` | AXI slave port frees the AR buffer on the B handshake instead of R (reads hang) | `testbench/uvm/test_uvm.py::test_uvm[accel_bus_test]` | `[HANG]` |
 | `m48_axil_whi_kept` | accelerator slave: WHI not cleared after a low-half buffer write (stale high half in the next word) | `testbench/uvm/test_uvm.py::test_uvm[accel_bus_test]` | `[SB]` |
