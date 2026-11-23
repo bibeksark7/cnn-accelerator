@@ -1,9 +1,10 @@
 // axil_pkg: a reusable UVM agent for one AXI4-Lite master interface (axil_if).
 //
 //   axil_item       one transaction: kind, address, data, strobes, response; the timing knobs the
-//                   driver applies; the handshake cycles the monitor observed
-//   axil_cfg        agent configuration: active/passive, outstanding limit, timing ranges, and a
-//                   deliberate protocol violation (to prove the interface assertions fire)
+//                   driver applies; what the monitor observed (handshake cycles, stalls, and the
+//                   bus's concurrency when the transaction was accepted)
+//   axil_cfg        agent configuration: active/passive, outstanding limit, coverage on/off, and
+//                   a deliberate protocol violation (to prove the interface assertions fire)
 //   axil_driver     pipelined master: writes and reads run in their own threads; AW and W start
 //                   with independent delays; up to `max_outstanding` writes (and reads) are in
 //                   flight; BREADY / RREADY are raised after a random delay or before VALID.
@@ -11,8 +12,11 @@
 //                   calls get_response, and the register adapter sets provides_responses)
 //   axil_monitor    rebuilds each transaction from the five channels (AW and W paired in order,
 //                   B / R matched in order) and publishes it when its response is accepted, with
-//                   the cycle of every handshake and the cycles each VALID waited for READY
-//   axil_agent      sequencer + driver + monitor
+//                   the cycle of every handshake and the cycles each VALID waited for READY; also
+//                   knows when the bus is idle (nothing presented and unanswered), so a passive
+//                   agent needs no driver for that
+//   axil_coverage   concurrency coverage (cg_outstanding) of the monitor's transactions
+//   axil_agent      sequencer + driver (active only) + monitor (+ coverage)
 //
 // Latencies are never assumed: the driver waits for every handshake, the monitor only records.
 package axil_pkg;
@@ -27,18 +31,22 @@ package axil_pkg;
   localparam bit [1:0] AXIL_OKAY = 2'b00, AXIL_EXOKAY = 2'b01, AXIL_SLVERR = 2'b10,
       AXIL_DECERR = 2'b11;
 
-  // Deliberate master-side protocol violations (axil_cfg.violation).
+  // Deliberate master-side protocol violations (axil_cfg.violation): the channel's VALID dropped
+  // one cycle after it was raised, if not yet accepted.
   typedef enum int {
     AXIL_NO_VIOLATION,
-    AXIL_WITHDRAW_AW  // AWVALID dropped one cycle after it was raised if not yet accepted
+    AXIL_WITHDRAW_AW,
+    AXIL_WITHDRAW_W,
+    AXIL_WITHDRAW_AR
   } axil_violation_e;
 
   // ------------------------------------------------------------------ transaction
+  // Not randomized as a whole: sequences set the fields procedurally (accel_base_seq::xfer; D-052).
   class axil_item extends uvm_sequence_item;
-    rand axil_kind_e kind;
-    rand bit [22:0] addr;
-    rand bit [31:0] data;  // write data, or the read data the monitor / driver saw
-    rand bit [3:0] strb;
+    axil_kind_e kind;
+    bit [22:0] addr;
+    bit [31:0] data;  // write data, or the read data the monitor / driver saw
+    bit [3:0] strb;
     bit [1:0] resp;
 
     // Driver timing (cycles), set by the sequence (accel_base_seq::xfer).
@@ -50,6 +58,13 @@ package axil_pkg;
     // Observed by the monitor (cycle stamps of axil_if.cycle at each handshake).
     longint aw_cycle, w_cycle, ar_cycle, resp_valid_cycle, resp_cycle;
     int unsigned aw_stall, w_stall, ar_stall, resp_stall;  // cycles VALID waited for READY
+    // Observed by the monitor in the cycle the transaction was accepted (its last request channel):
+    // writes and reads in flight (presented on the bus, response not yet accepted; this one
+    // included), whether a transaction of the other direction was pending (accepted, response
+    // not yet accepted), and, if its AW (or AR) was accepted in the same cycle as an AR (or AW),
+    // whether this one was answered first.
+    int unsigned wr_in_flight, rd_in_flight;
+    bit other_pending, aw_ar_same_cycle, served_first;
 
     `uvm_object_utils(axil_item)
 
@@ -79,6 +94,11 @@ package axil_pkg;
       w_stall = t.w_stall;
       ar_stall = t.ar_stall;
       resp_stall = t.resp_stall;
+      wr_in_flight = t.wr_in_flight;
+      rd_in_flight = t.rd_in_flight;
+      other_pending = t.other_pending;
+      aw_ar_same_cycle = t.aw_ar_same_cycle;
+      served_first = t.served_first;
     endfunction
 
     // Cycle the transaction's last request channel was accepted (AW and W, or AR).
@@ -106,6 +126,7 @@ package axil_pkg;
   class axil_cfg extends uvm_object;
     uvm_active_passive_enum is_active = UVM_ACTIVE;
     int unsigned max_outstanding = 2;  // per direction
+    bit has_coverage = 1;
     axil_violation_e violation = AXIL_NO_VIOLATION;
     `uvm_object_utils(axil_cfg)
     function new(string name = "axil_cfg");
@@ -210,7 +231,15 @@ package axil_pkg;
       vif.drv_cb.wvalid <= 1'b1;
       vif.drv_cb.wdata  <= t.data;
       vif.drv_cb.wstrb  <= t.strb;
-      do @(vif.drv_cb); while (!vif.drv_cb.wready);
+      @(vif.drv_cb);
+      if (cfg.violation == AXIL_WITHDRAW_W && !vif.drv_cb.wready) begin
+        `uvm_info("VIOLATION", "withdrawing WVALID before WREADY (deliberate)", UVM_LOW)
+        vif.drv_cb.wvalid <= 1'b0;
+        @(vif.drv_cb);
+        vif.drv_cb.wvalid <= 1'b1;
+        @(vif.drv_cb);
+      end
+      while (!vif.drv_cb.wready) @(vif.drv_cb);
       vif.drv_cb.wvalid <= 1'b0;
     endtask
 
@@ -246,7 +275,15 @@ package axil_pkg;
         repeat (t.aw_delay) @(vif.drv_cb);
         vif.drv_cb.arvalid <= 1'b1;
         vif.drv_cb.araddr  <= t.addr;
-        do @(vif.drv_cb); while (!vif.drv_cb.arready);
+        @(vif.drv_cb);
+        if (cfg.violation == AXIL_WITHDRAW_AR && !vif.drv_cb.arready) begin
+          `uvm_info("VIOLATION", "withdrawing ARVALID before ARREADY (deliberate)", UVM_LOW)
+          vif.drv_cb.arvalid <= 1'b0;
+          @(vif.drv_cb);
+          vif.drv_cb.arvalid <= 1'b1;
+          @(vif.drv_cb);
+        end
+        while (!vif.drv_cb.arready) @(vif.drv_cb);
         vif.drv_cb.arvalid <= 1'b0;
         rd_pend.put(t);
       end
@@ -277,6 +314,11 @@ package axil_pkg;
   endclass
 
   // ------------------------------------------------------------------ monitor
+  // Counts per channel (since the last reset): presentations (the first cycle of each VALID
+  // period: VALID then stays high until READY, the interface assertions check that), handshakes,
+  // and responses. A write is in flight from its first presented channel (AW or W) until its B
+  // handshake, a read from ARVALID until its R handshake; a transaction is pending at the slave
+  // from its first accepted request channel until its response handshake.
   class axil_monitor extends uvm_monitor;
     `uvm_component_utils(axil_monitor)
     virtual axil_if vif;
@@ -286,6 +328,7 @@ package axil_pkg;
       bit [22:0] addr;
       longint cycle;
       int unsigned stall;
+      bit with_other;  // accepted in the same cycle as the other direction's address
     } addr_beat_t;
     typedef struct {
       bit [31:0] data;
@@ -293,11 +336,22 @@ package axil_pkg;
       longint cycle;
       int unsigned stall;
     } data_beat_t;
+    // The bus at the cycle a transaction was accepted (see axil_item).
+    typedef struct {
+      int unsigned wr_in_flight, rd_in_flight;
+      bit other_pending;
+    } accept_t;
     int unsigned n_done;  // transactions completed (the env's hang watchdog watches it)
     addr_beat_t aw_q[$], ar_q[$];
     data_beat_t w_q[$];
+    accept_t wr_acc_q[$], rd_acc_q[$];
     int unsigned aw_stall, w_stall, ar_stall, b_stall, r_stall;
     longint b_first, r_first;
+    int unsigned aw_arr, w_arr, ar_arr;  // presentations
+    int unsigned aw_acc, w_acc, ar_acc, wr_acc;  // handshakes; writes with both AW and W accepted
+    int unsigned b_n, r_n;  // response handshakes
+    bit aw_wait, w_wait, ar_wait;  // VALID high and not accepted in the previous cycle
+    bit pair_open, pair_answered;  // an AW / AR accepted together; one of the two answered
 
     function new(string name, uvm_component parent);
       super.new(name, parent);
@@ -309,17 +363,47 @@ package axil_pkg;
         `uvm_fatal("NOVIF", "axil_monitor: no virtual interface")
     endfunction
 
+    function int unsigned wr_in_flight();
+      return (aw_arr > w_arr ? aw_arr : w_arr) - b_n;
+    endfunction
+
+    function int unsigned wr_pending();
+      return (aw_acc > w_acc ? aw_acc : w_acc) - b_n;
+    endfunction
+
+    // No transaction presented on the bus and unanswered (the env resets the DUT only then).
+    function bit idle();
+      return wr_in_flight() == 0 && ar_arr == r_n;
+    endfunction
+
     function void flush();
       aw_q.delete();
       ar_q.delete();
       w_q.delete();
+      wr_acc_q.delete();
+      rd_acc_q.delete();
       {aw_stall, w_stall, ar_stall, b_stall, r_stall} = '0;
       b_first = -1;
       r_first = -1;
+      {aw_arr, w_arr, ar_arr, aw_acc, w_acc, ar_acc, wr_acc, b_n, r_n} = '0;
+      {aw_wait, w_wait, ar_wait, pair_open, pair_answered} = '0;
+    endfunction
+
+    // A response of a transaction whose address was accepted together with the other direction's:
+    // the first of the two answered was served first.
+    function bit answered_first(bit with_other);
+      if (!with_other || !pair_open) return 0;
+      if (pair_answered) begin
+        pair_open = 0;
+        return 0;
+      end
+      pair_answered = 1;
+      return 1;
     endfunction
 
     task run_phase(uvm_phase phase);
       longint c;
+      bit aw_hs, w_hs, ar_hs, b_hs, r_hs;
       flush();
       forever begin
         @(vif.mon_cb);
@@ -328,28 +412,58 @@ package axil_pkg;
           continue;
         end
         c = vif.mon_cb.cycle;
+        aw_hs = vif.mon_cb.awvalid && vif.mon_cb.awready;
+        w_hs = vif.mon_cb.wvalid && vif.mon_cb.wready;
+        ar_hs = vif.mon_cb.arvalid && vif.mon_cb.arready;
+        b_hs = vif.mon_cb.bvalid && vif.mon_cb.bready;
+        r_hs = vif.mon_cb.rvalid && vif.mon_cb.rready;
+        // Presentations.
+        if (vif.mon_cb.awvalid && !aw_wait) aw_arr++;
+        if (vif.mon_cb.wvalid && !w_wait) w_arr++;
+        if (vif.mon_cb.arvalid && !ar_wait) ar_arr++;
+        aw_wait = vif.mon_cb.awvalid && !vif.mon_cb.awready;
+        w_wait = vif.mon_cb.wvalid && !vif.mon_cb.wready;
+        ar_wait = vif.mon_cb.arvalid && !vif.mon_cb.arready;
         // Requests.
-        if (vif.mon_cb.awvalid && vif.mon_cb.awready) begin
-          aw_q.push_back('{vif.mon_cb.awaddr, c, aw_stall});
+        if (aw_hs) begin
+          aw_q.push_back('{vif.mon_cb.awaddr, c, aw_stall, ar_hs});
           aw_stall = 0;
+          aw_acc++;
         end else if (vif.mon_cb.awvalid) aw_stall++;
-        if (vif.mon_cb.wvalid && vif.mon_cb.wready) begin
+        if (w_hs) begin
           w_q.push_back('{vif.mon_cb.wdata, vif.mon_cb.wstrb, c, w_stall});
           w_stall = 0;
+          w_acc++;
         end else if (vif.mon_cb.wvalid) w_stall++;
-        if (vif.mon_cb.arvalid && vif.mon_cb.arready) begin
-          ar_q.push_back('{vif.mon_cb.araddr, c, ar_stall});
+        if (ar_hs) begin
+          ar_q.push_back('{vif.mon_cb.araddr, c, ar_stall, aw_hs});
           ar_stall = 0;
+          ar_acc++;
         end else if (vif.mon_cb.arvalid) ar_stall++;
+        if (aw_hs && ar_hs) begin
+          pair_open = 1;
+          pair_answered = 0;
+        end
+        // The bus as each transaction is accepted (responses of this cycle counted as done).
+        while (wr_acc < aw_acc && wr_acc < w_acc) begin
+          wr_acc++;
+          wr_acc_q.push_back('{wr_in_flight() - int'(b_hs), ar_arr - r_n - int'(r_hs),
+                               ar_acc - r_n - int'(r_hs) > 0});
+        end
+        if (ar_hs)
+          rd_acc_q.push_back('{wr_in_flight() - int'(b_hs), ar_arr - r_n - int'(r_hs),
+                               wr_pending() - int'(b_hs) > 0});
         // Responses.
         if (vif.mon_cb.bvalid && b_first < 0) b_first = c;
-        if (vif.mon_cb.bvalid && vif.mon_cb.bready) begin
+        if (b_hs) begin
           axil_item t = axil_item::type_id::create("wr");
-          if (aw_q.size() == 0 || w_q.size() == 0)
+          b_n++;
+          if (aw_q.size() == 0 || w_q.size() == 0 || wr_acc_q.size() == 0)
             `uvm_error("AXIL_MON", "write response without an accepted AW and W")
           else begin
             addr_beat_t a = aw_q.pop_front();
             data_beat_t w = w_q.pop_front();
+            accept_t x = wr_acc_q.pop_front();
             t.kind = AXIL_WRITE;
             t.addr = a.addr;
             t.data = w.data;
@@ -362,6 +476,11 @@ package axil_pkg;
             t.resp_valid_cycle = b_first;
             t.resp_cycle = c;
             t.resp_stall = b_stall;
+            t.wr_in_flight = x.wr_in_flight;
+            t.rd_in_flight = x.rd_in_flight;
+            t.other_pending = x.other_pending;
+            t.aw_ar_same_cycle = a.with_other;
+            t.served_first = answered_first(a.with_other);
             n_done++;
             ap.write(t);
           end
@@ -369,11 +488,14 @@ package axil_pkg;
           b_stall = 0;
         end else if (vif.mon_cb.bvalid) b_stall++;
         if (vif.mon_cb.rvalid && r_first < 0) r_first = c;
-        if (vif.mon_cb.rvalid && vif.mon_cb.rready) begin
+        if (r_hs) begin
           axil_item t = axil_item::type_id::create("rd");
-          if (ar_q.size() == 0) `uvm_error("AXIL_MON", "read response without an accepted AR")
+          r_n++;
+          if (ar_q.size() == 0 || rd_acc_q.size() == 0)
+            `uvm_error("AXIL_MON", "read response without an accepted AR")
           else begin
             addr_beat_t a = ar_q.pop_front();
+            accept_t x = rd_acc_q.pop_front();
             t.kind = AXIL_READ;
             t.addr = a.addr;
             t.data = vif.mon_cb.rdata;
@@ -384,6 +506,11 @@ package axil_pkg;
             t.resp_valid_cycle = r_first;
             t.resp_cycle = c;
             t.resp_stall = r_stall;
+            t.wr_in_flight = x.wr_in_flight;
+            t.rd_in_flight = x.rd_in_flight;
+            t.other_pending = x.other_pending;
+            t.aw_ar_same_cycle = a.with_other;
+            t.served_first = answered_first(a.with_other);
             n_done++;
             ap.write(t);
           end
@@ -392,6 +519,48 @@ package axil_pkg;
         end else if (vif.mon_cb.rvalid) r_stall++;
       end
     endtask
+  endclass
+
+  // ------------------------------------------------------------------ coverage
+  // Concurrency on the bus, from the monitor's transactions (sampled as each response is accepted,
+  // with the values observed when the transaction was accepted):
+  //   cp_wr_depth / cp_rd_depth  writes / reads in flight at each accept (0, 1, 2; the agent's
+  //                              driver keeps at most two per direction): 2 means one answered
+  //                              by the slave later and one more already presented behind it
+  //   x_kind_other               each direction accepted with the other direction pending or not
+  //                              (a read accepted while a write is pending, and the reverse)
+  //   cp_same_cycle_first        AW and AR accepted in the same cycle, by which was answered first
+  class axil_coverage extends uvm_subscriber #(axil_item);
+    `uvm_component_utils(axil_coverage)
+    axil_kind_e kind;
+    int unsigned wr_depth, rd_depth;
+    bit other_pending, pair_first;
+
+    covergroup cg_outstanding;
+      cp_wr_depth: coverpoint wr_depth {bins d0 = {0}; bins d1 = {1}; bins d2 = {2};}
+      cp_rd_depth: coverpoint rd_depth {bins d0 = {0}; bins d1 = {1}; bins d2 = {2};}
+      cp_kind: coverpoint kind;
+      cp_other_pending: coverpoint other_pending;
+      x_kind_other: cross cp_kind, cp_other_pending;
+      cp_same_cycle_first: coverpoint kind iff (pair_first) {
+        bins write_first = {AXIL_WRITE};
+        bins read_first = {AXIL_READ};
+      }
+    endgroup
+
+    function new(string name, uvm_component parent);
+      super.new(name, parent);
+      cg_outstanding = new;
+    endfunction
+
+    function void write(axil_item t);
+      kind = t.kind;
+      wr_depth = t.wr_in_flight;
+      rd_depth = t.rd_in_flight;
+      other_pending = t.other_pending;
+      pair_first = t.aw_ar_same_cycle && t.served_first;
+      cg_outstanding.sample();
+    endfunction
   endclass
 
   // ------------------------------------------------------------------ agent
@@ -403,6 +572,7 @@ package axil_pkg;
     axil_sequencer sqr;
     axil_driver drv;
     axil_monitor mon;
+    axil_coverage cov;
 
     function new(string name, uvm_component parent);
       super.new(name, parent);
@@ -413,6 +583,7 @@ package axil_pkg;
         cfg = axil_cfg::type_id::create("cfg");
       uvm_config_db#(axil_cfg)::set(this, "*", "cfg", cfg);
       mon = axil_monitor::type_id::create("mon", this);
+      if (cfg.has_coverage) cov = axil_coverage::type_id::create("cov", this);
       if (cfg.is_active == UVM_ACTIVE) begin
         sqr = axil_sequencer::type_id::create("sqr", this);
         drv = axil_driver::type_id::create("drv", this);
@@ -420,7 +591,13 @@ package axil_pkg;
     endfunction
 
     function void connect_phase(uvm_phase phase);
+      if (cfg.has_coverage) mon.ap.connect(cov.analysis_export);
       if (cfg.is_active == UVM_ACTIVE) drv.seq_item_port.connect(sqr.seq_item_export);
+    endfunction
+
+    // Nothing on the bus (the monitor's view) and, if active, nothing queued in the driver.
+    function bit idle();
+      return mon.idle() && (cfg.is_active == UVM_PASSIVE || drv.idle());
     endfunction
   endclass
 endpackage
