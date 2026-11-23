@@ -546,7 +546,8 @@ import sys, xml.etree.ElementTree as ET
 sys.path[:0] = ["testbench", "testbench/uvm"]
 root = ET.parse("sim_build/checkpoint/uvm.xml").getroot()
 import test_uvm
-want = [f"test_uvm[{t}]" for t in test_uvm.TESTS] + ["test_uvm_violation", "test_uvm_coverage"]
+want = [f"test_uvm[{t}]" for t in test_uvm.TESTS]
+want += [f"test_uvm_violation[{c}]" for c in test_uvm.VIOLATIONS] + ["test_uvm_coverage"]
 cases = {c.get("name"): c for c in root.iter("testcase")}
 bad = [n for n in want if n not in cases or any(ch.tag in ("failure", "error", "skipped") for ch in cases[n])]
 print(f"{len(want) - len(bad)}/{len(want)} UVM tests passed: " + ", ".join(n for n in want if n not in bad))
@@ -577,6 +578,50 @@ sys.exit(1 if problems else 0)
 PY
 }
 
+# Phase 6: the committed per-run check counts (testbench/reports/uvm_checks.md) are this run's (the
+# fixed seeds make them deterministic), from a clean tree, with no mismatch.
+check_uvm_checks_report() {
+  python - <<'PY'
+import re, sys
+rows = lambda t: [l for l in t.splitlines() if l.startswith("| `accel_") or l.startswith("| **all**")]
+committed = open("testbench/reports/uvm_checks.md").read()
+fresh = open("sim_build/uvm/uvm_checks.md").read()
+problems = []
+if rows(committed) != rows(fresh): problems.append("committed rows differ from this run's (sim_build/uvm/uvm_checks.md)")
+if "(tree clean)" not in committed: problems.append("generated from a dirty tree")
+if any(not l.rstrip().endswith("| 0 |") for l in rows(committed) if l.startswith("| `")): problems.append("a run with mismatches")
+print(f"committed: {len(rows(committed)) - 1} runs; this run: {len(rows(fresh)) - 1} runs")
+for p in problems: print("  " + p)
+sys.exit(1 if problems else 0)
+PY
+}
+
+# Phase 6: the committed seed-sweep report (testbench/reports/uvm_seed_sweep.md, generated with
+# UVM_SEEDS=10) is for HEAD's RTL, bench and uvm-core, from a clean tree, every run passed and the
+# coverage goal met over the sweep. The nightly full.yml job reruns a sweep with new seeds.
+check_uvm_sweep_report() {
+  RTL="$(git rev-parse HEAD:rtl)" UVM="$(git rev-parse HEAD:testbench/uvm)" \
+  CORE="$(git rev-parse HEAD:third_party/uvm-core)" python - <<'PY'
+import os, re, sys
+t = open("testbench/reports/uvm_seed_sweep.md").read()
+problems = []
+res = re.search(r"^- Result: \*\*(.*)\*\*$", t, re.M)
+seeds = re.search(r"^- Seeds: (\d+) random seeds per test .*?, (\d+) runs$", t, re.M)
+runs = [l for l in t.splitlines() if l.startswith("| `accel_")]
+if not res or "goal NOT met" in res.group(1): problems.append("coverage goal not met")
+if not seeds or int(seeds.group(1)) < 10: problems.append("fewer than 10 seeds per test")
+elif len(runs) != int(seeds.group(2)): problems.append(f"{len(runs)} run rows, header says {seeds.group(2)}")
+if any(not l.rstrip().endswith("| 0 |") for l in runs): problems.append("a run with mismatches")
+if "(tree clean)" not in t: problems.append("generated from a dirty tree")
+for k, env in (("RTL tree", "RTL"), ("UVM bench tree", "UVM"), ("uvm-core", "CORE")):
+    m = re.search(rf"{k}: `([0-9a-f]+)`", t)
+    if not m or m.group(1) != os.environ[env]: problems.append(f"{k} {m and m.group(1)} != HEAD's {os.environ[env]}")
+print(f"sweep: {res and res.group(1)}; {seeds and seeds.group(0)[2:]}")
+for p in problems: print("  " + p)
+sys.exit(1 if problems else 0)
+PY
+}
+
 # Phase 6: every mutant of testbench/uvm/mutants.md killed by the UVM bench in a fresh run (one at
 # a time: each rebuilds the bench), and the committed report lists every row, all killed.
 check_uvm_mutants() {
@@ -588,14 +633,18 @@ check_uvm_mutants() {
   [ "$killed" -eq "$n" ]
 }
 
-# Phase 6: the README's UVM row quotes the committed UVM coverage and mutation reports.
+# Phase 6: the README's UVM row quotes the committed UVM coverage, seed-sweep and mutation reports.
 check_uvm_readme() {
   python - <<'PY'
 import re, sys
 row = [l for l in open("README.md").read().splitlines() if l.startswith("| UVM testbench")]
 cov = re.search(r"Result: \*\*(\d+) bins, (\d+) met", open("testbench/reports/uvm_coverage.md").read())
+sweep = open("testbench/reports/uvm_seed_sweep.md").read()
+swc = re.search(r"Result: \*\*(\d+) bins, (\d+) met", sweep)
+sws = re.search(r"^- Seeds: (\d+) random seeds per test .*?, (\d+) runs$", sweep, re.M)
 mut = re.search(r"\*\*(\d+) / (\d+) mutants killed", open("testbench/reports/uvm_mutation.md").read())
-want = [f"{cov[2]} / {cov[1]} coverage bins", f"{mut[1]} / {mut[2]} injected bugs caught"]
+want = [f"{cov[2]} / {cov[1]} coverage bins", f"{mut[1]} / {mut[2]} injected bugs caught",
+        f"{sws[1]} random seeds per test", f"{swc[2]} / {swc[1]} bins over {sws[2]} runs"]
 if len(row) != 1:
     print(f"README: {len(row)} UVM rows in the results table"); sys.exit(1)
 missing = [w for w in want if w not in row[0]]
@@ -615,11 +664,13 @@ check_uvm_core_pin() {
 phase_6() {
   echo "Phase 6: UVM testbench (accelerator AXI4-Lite slave)"
   check "uvm-core submodule pinned at 2020.3.1 and checked out (D-051)" check_uvm_core_pin
-  check "UVM regression passes (testbench/uvm: 7 tests, the protocol-violation test, coverage)" check_pytest uvm 9 testbench/uvm
-  check "UVM: every test by name, incl. the deliberate violation failing through a_awvalid_held" check_uvm_tests
+  check "UVM regression passes (testbench/uvm: 7 tests, 3 protocol-violation tests, coverage)" check_pytest uvm 11 testbench/uvm
+  check "UVM: every test by name, incl. each deliberate violation failing through its channel's assertion" check_uvm_tests
   check "UVM coverage: goal met; committed report (testbench/reports/uvm_coverage.md) is this tree's and matches this run" check_uvm_coverage_report
+  check "UVM scoreboard check counts: committed report (testbench/reports/uvm_checks.md) matches this run" check_uvm_checks_report
+  check "UVM seed sweep: committed report (testbench/reports/uvm_seed_sweep.md) is this tree's, all runs passed, goal met" check_uvm_sweep_report
   check "UVM: every mutant in testbench/uvm/mutants.md killed (fresh run; committed report complete)" check_uvm_mutants
-  check "README's UVM row matches the committed UVM coverage and mutation reports" check_uvm_readme
+  check "README's UVM row matches the committed UVM coverage, seed-sweep and mutation reports" check_uvm_readme
   check "no RTL mutant applied to the working tree" check_no_mutant_applied
   check "unit tests pass (testbench/unit)" check_pytest unit 15 testbench/unit
   check "system tests pass (testbench/system)" check_pytest system 15 testbench/system
