@@ -10,11 +10,21 @@ For each patch:
   4. parse pytest's JUnit file and cocotb's results files (<node>.result.xml).
 
 Verdicts:
-  KILLED    the killing test failed, and, if the README names a required assertion, an
-            "Assertion failed" line in the simulator log names that assertion
-  WRONG     the killing test failed, but not through the required assertion
+  KILLED    the killing test failed and, if the row names a required kill mechanism, the
+            simulator log shows it (see below)
+  WRONG     the killing test failed, but not through the required mechanism
   SURVIVED  the killing test passed
   ERROR     the patch did not apply, the test was not collected, or no simulation ran
+
+Required kill mechanism (the table's fourth column; "—" for none): one or more backticked names,
+any one of which must appear. `a_name` (or a dotted `u_inst.a_name`) is an assertion: an
+"Assertion failed" line must name it. `[ID]` is a UVM message ID: a UVM_ERROR or UVM_FATAL line
+with that ID must appear in the UVM test's log (testbench/uvm). So a UVM kill through the
+scoreboard (`[SB]`), the hang watchdog (`[HANG]`) or the status monitor (`[STATUS]`) cannot be
+replaced by an unrelated failure without the verdict turning WRONG.
+
+The report's "First failure" for a UVM kill is the first assertion, UVM_ERROR or UVM_FATAL line of
+the simulator log (worktree paths removed); for a cocotb kill, the first failing cocotb test.
 
 Before the mutants, every distinct killing test runs once on the unmutated tree (baseline); a
 failing baseline aborts the run, since a kill would then mean nothing.
@@ -45,10 +55,14 @@ MUTANT_DIR = ROOT / "testbench" / "mutants"
 README = MUTANT_DIR / "README.md"
 LOG_DIR = ROOT / "sim_build" / "mutants"
 
-# | `m01_name` | bug | `testbench/unit/test_x.py::test_x[icarus-8]` | `a_name` or — |
+# | `m01_name` | bug | `testbench/unit/test_x.py::test_x[icarus-8]` | `a_name`, `[ID]` or — |
 ROW_RE = re.compile(
-    r"^\| `(?P<name>m\d+_\w+)` \| (?P<bug>[^|]+) \| `(?P<node>[^`]+)` \| (?P<sva>[^|]+) \|$"
+    r"^\| `(?P<name>m\d+_\w+)` \| (?P<bug>[^|]+) \| `(?P<node>[^`]+)` \| (?P<req>[^|]+) \|$"
 )
+UVM_ID_RE = re.compile(r"^\[(\w+)\]$")
+ASSERTION_RE = re.compile(r"^[A-Za-z_][\w.]*$")
+# A UVM report line of severity ERROR or FATAL, with its message ID (not the summary counts).
+UVM_MSG_RE = re.compile(r"^UVM_(?:ERROR|FATAL) .*? \[(?P<id>\w+)\] ")
 
 
 @dataclass(frozen=True)
@@ -56,7 +70,7 @@ class Mutant:
     name: str
     bug: str
     node: str  # pytest node id, relative to the repository root
-    assertion: str | None  # required assertion name for SVA kills
+    requires: tuple[str, ...] = ()  # any one of: assertion names, UVM message IDs as "[ID]"
 
     @property
     def patch(self) -> Path:
@@ -79,11 +93,45 @@ def parse_readme(text: str | None = None) -> list[Mutant]:
     for line in text.splitlines():
         m = ROW_RE.match(line.strip())
         if m:
-            sva = m["sva"].strip().strip("`")
-            mutants.append(
-                Mutant(m["name"], m["bug"].strip(), m["node"], None if sva in ("—", "-") else sva)
-            )
+            req = tuple(re.findall(r"`([^`]+)`", m["req"]))
+            bad = [r for r in req if not (UVM_ID_RE.match(r) or ASSERTION_RE.match(r))]
+            if bad:
+                raise ValueError(f"{m['name']}: not an assertion or a UVM ID: {bad}")
+            mutants.append(Mutant(m["name"], m["bug"].strip(), m["node"], req))
     return mutants
+
+
+def uvm_logs(wt: Path) -> list[Path]:
+    """The UVM simulator logs of a run in worktree `wt` (testbench/uvm writes one per test)."""
+    return sorted(p for p in (wt / "sim_build" / "uvm").glob("*.log") if p.name != "build.log")
+
+
+def failure_lines(text: str) -> list[str]:
+    """Assertion failures and UVM_ERROR / UVM_FATAL messages, in log order."""
+    return [
+        ln.strip() for ln in text.splitlines() if "Assertion failed" in ln or UVM_MSG_RE.match(ln)
+    ]
+
+
+def mechanism_hit(requires: tuple[str, ...], lines: list[str]) -> str | None:
+    """The first failure line that shows one of the required mechanisms, or None."""
+    for ln in lines:
+        for r in requires:
+            uvm_id = UVM_ID_RE.match(r)
+            if uvm_id:
+                m = UVM_MSG_RE.match(ln)
+                if m and m["id"] == uvm_id[1]:
+                    return ln
+            elif "Assertion failed" in ln and re.search(rf"(^|[\s.]){re.escape(r)}\b", ln):
+                return ln
+    return None
+
+
+def strip_paths(line: str, wt: Path) -> str:
+    """Drop the temporary worktree and the repository root from paths in a log line."""
+    for prefix in (f"{wt}/", f"{ROOT}/"):
+        line = line.replace(prefix, "")
+    return line
 
 
 def git(*args: str, cwd: Path = ROOT) -> str:
@@ -214,11 +262,19 @@ def run_one(parent: Path, mutant: Mutant | None, node: str) -> Result:
             if ap.returncode:
                 return Result(mutant, node, "ERROR", f"patch does not apply: {ap.stderr}", log)
         tests, failed = run_node(wt, node, log)
-        text = log.read_text(errors="replace")
-        asserts = [ln.strip() for ln in text.splitlines() if "Assertion failed" in ln]
-        detail = first_cocotb_failure(wt) or first_pytest_failure(
-            wt / "sim_build" / "mutant_junit.xml"
-        )
+        sim_logs = uvm_logs(wt)
+        # Failure lines: the UVM simulator logs if this is a UVM test, else the pytest log (which
+        # carries the simulator output of cocotb tests).
+        texts = [p.read_text(errors="replace") for p in sim_logs] or [
+            log.read_text(errors="replace")
+        ]
+        lines = [strip_paths(ln, wt) for t in texts for ln in failure_lines(t)]
+        if sim_logs:
+            for p in sim_logs:  # keep the UVM logs next to the pytest log
+                shutil.copy2(p, LOG_DIR / f"{tag}.{p.name}")
+        detail = (lines[0] if sim_logs and lines else None) or first_cocotb_failure(wt)
+        detail = detail or first_pytest_failure(wt / "sim_build" / "mutant_junit.xml")
+        detail = strip_paths(detail, wt) if detail else detail
         if tests == 0:
             return Result(mutant, node, "ERROR", "test not collected (check the node id)", log)
         if not simulation_ran(wt):
@@ -227,14 +283,15 @@ def run_one(parent: Path, mutant: Mutant | None, node: str) -> Result:
             return Result(mutant, node, "SURVIVED" if mutant else "PASS", "test passed", log)
         if mutant is None:
             return Result(None, node, "FAIL", detail or "failed", log)
-        if mutant.assertion:
-            hit = [a for a in asserts if mutant.assertion in a]
+        if mutant.requires:
+            hit = mechanism_hit(mutant.requires, lines)
+            want = " or ".join(mutant.requires)
             if not hit:
-                first = asserts[0] if asserts else "no assertion fired"
-                return Result(
-                    mutant, node, "WRONG", f"{mutant.assertion} did not fire ({first})", log
-                )
-            return Result(mutant, node, "KILLED", f"{hit[0]} | first failing test: {detail}", log)
+                first = lines[0] if lines else "no assertion or UVM error"
+                return Result(mutant, node, "WRONG", f"{want} not seen (first: {first})", log)
+            if sim_logs:
+                return Result(mutant, node, "KILLED", detail or hit, log)
+            return Result(mutant, node, "KILLED", f"{hit} | first failing test: {detail}", log)
         return Result(mutant, node, "KILLED", detail or "failed", log)
     finally:
         remove_worktree(wt)
@@ -252,13 +309,17 @@ def write_report(path: Path, results: list[Result], table: Path = README) -> Non
         "",
         f"**{killed} / {len(results)} mutants killed.**",
         "",
-        "| Mutant | Verdict | Killing test | First failure |",
-        "|---|---|---|---|",
+        "Required: the kill mechanism the table names (an assertion, or a UVM message ID in",
+        "brackets; any one of those listed), checked in the simulator log.",
+        "",
+        "| Mutant | Verdict | Killing test | Required | First failure |",
+        "|---|---|---|---|---|",
     ]
     for r in results:
         assert r.mutant is not None
         detail = r.detail.replace("|", "\\|")
-        lines.append(f"| `{r.mutant.name}` | {r.verdict} | `{r.node}` | {detail} |")
+        req = " or ".join(f"`{x}`" for x in r.mutant.requires) or "—"
+        lines.append(f"| `{r.mutant.name}` | {r.verdict} | `{r.node}` | {req} | {detail} |")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines) + "\n")
 

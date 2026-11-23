@@ -81,3 +81,4 @@ applied to the working tree.
 | `m52_soc_accel_region_4mb` | SoC address map gives the accelerator 4 MB instead of 8 MB: the buffer window decodes as unmapped | `testbench/system/test_soc.py::test_soc[quick]` | `a_no_write_error` |
 | `m53_axil_csr_waits_for_idle` | accelerator slave: CSR accesses wait for the memory port's ready, i.e. are held until a run ends | `testbench/system/test_accel_axil.py::test_accel_axil` | — |
 | `m54_axil_whi_waits_for_idle` | accelerator slave: a high-half (WHI) write waits for the memory port's ready, i.e. is held until a run ends | `testbench/system/test_accel_axil.py::test_accel_axil` | — |
+| `m55_perf_buf_rd_not_cleared` | BUF_RD cleared only by reset, not at START (it accumulates over runs) | `testbench/unit/test_perf_counters.py::test_perf_counters[icarus-32]` | — |

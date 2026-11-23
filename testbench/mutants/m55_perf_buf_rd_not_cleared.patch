@@ -1,0 +1,11 @@
+--- a/rtl/ctrl/perf_counters.sv
++++ b/rtl/ctrl/perf_counters.sv
+@@ -110,7 +110,7 @@
+     if (rst || i_clear) begin
+       cyc_total_q <= '0;
+       cyc_mac_q   <= '0;
+-      buf_rd_q    <= '0;
++      if (rst) buf_rd_q <= '0;
+       buf_wr_q    <= '0;
+       lay_q       <= '0;
+       lay_run_q   <= 1'b0;
