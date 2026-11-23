@@ -6,9 +6,9 @@ an MNIST network bit-exactly against a Python golden model. As a peripheral of a
 PicoRV32 (49.7× against an ideal one-instruction-per-cycle core at the same clock). Built and timing-closed at 50 MHz for the DE10-Lite (Intel MAX 10); verified in
 simulation.
 
-**Stack:** SystemVerilog · cocotb + pytest · Icarus Verilog · Verilator · Yosys · SymbiYosys ·
-Python, NumPy, PyTorch · RISC-V (PicoRV32, GCC, C) · AXI4-Lite · Quartus Prime Lite ·
-GitHub Actions
+**Stack:** SystemVerilog · UVM (IEEE 1800.2) · cocotb + pytest · Icarus Verilog · Verilator ·
+Yosys · SymbiYosys · Python, NumPy, PyTorch · RISC-V (PicoRV32, GCC, C) · AXI4-Lite ·
+Quartus Prime Lite · GitHub Actions
 
 <!-- badges:start -->
 [![CI](https://github.com/bibeksark7/cnn-accelerator/actions/workflows/ci.yml/badge.svg)](https://github.com/bibeksark7/cnn-accelerator/actions/workflows/ci.yml)
@@ -30,6 +30,7 @@ GitHub Actions
 | SoC speedup | 374.9× end to end over the same integer CNN on PicoRV32 (217.8× counting the image upload); against an ideal one-instruction-per-cycle core at the same clock, 49.7× (28.9× with the upload) | [speedup report](testbench/reports/soc_speedup.md), [SoC](#risc-v-soc) |
 | Mutation testing | 54 / 54 injected bugs caught (accelerator and SoC) | [mutation report](testbench/reports/mutation.md) |
 | Functional coverage | every goal met or documented as a gap (bins sampled from the design) | [coverage report](testbench/reports/coverage.md) |
+| UVM testbench (AXI4-Lite slave) | 7 tests + a protocol-violation test; 191 / 191 coverage bins; 17 / 17 injected bugs caught | [UVM coverage](testbench/reports/uvm_coverage.md), [UVM mutation report](testbench/reports/uvm_mutation.md) |
 
 The array is busy only 8.2 % of the cycles because its im2col operands are staged one byte per
 cycle before each tile streams, so staging takes about eight times as long as streaming; Milestone
@@ -150,9 +151,18 @@ Spec: [docs/spec.md §13](docs/spec.md).
 - **SoC tests**: unit tests for each AXI4-Lite block, the accelerator behind its AXI4-Lite slave
   with every accelerator assertion bound, and firmware-driven runs of the whole SoC with AXI4-Lite
   channel assertions on every slave.
+- **UVM testbench** (`testbench/uvm/`, Verilator + the IEEE 1800.2 reference library): an AXI4-Lite
+  agent with independent channel timing and two transactions in flight, a register model of the
+  CSR map, protocol assertions on the interface, and a scoreboard that predicts every response
+  and read, including which writes a running accelerator must ignore and which accesses it must
+  hold, without assuming any latency. Seven tests: register reset values and bit-bash, random bus
+  and error traffic, all 54 reference images uploaded and run through the bus bit-exact, polling
+  during runs, every descriptor error (directed and constrained-random), reset mid-run, and a
+  fully concurrent mix.
 - **Full run**: all 10,000 MNIST test images, with the commit and RTL tree recorded in the report.
 - **CI** (GitHub Actions): a fast job on every push (lint, every unit test, the quick-subset system
-  tests) and the full regression, formal proofs and slow tests included, nightly and on demand.
+  tests, the UVM bench) and the full regression, formal proofs and slow tests included, nightly and
+  on demand.
 
 Plan and status per feature: [docs/verification_plan.md](docs/verification_plan.md).
 
@@ -170,7 +180,8 @@ scripts/coverage_report.py --run         # functional coverage report
 scripts/full_run.py                      # 10,000-image run (needs the MNIST cache in data/)
 fpga/de10lite/build_win.sh               # Quartus build (Windows Quartus Prime Lite from WSL)
 
-git submodule update --init              # PicoRV32, for the SoC
+git submodule update --init              # PicoRV32 (the SoC) and uvm-core (the UVM bench)
+pytest testbench/uvm                     # UVM bench (Verilator; builds in about 2.5 minutes)
 make -C firmware APP=quick               # firmware (riscv64-unknown-elf-gcc, RV32IM)
 pytest testbench/system/test_soc.py      # the SoC running firmware (Verilator)
 scripts/soc_speedup.py --images 4        # speedup report (minutes of simulation per image)
@@ -198,8 +209,8 @@ time into the git-ignored `data/` directory and is never committed.
 |---|---|
 | `rtl/` | `core/` array and GEMM engine, `addr/` address generators, `post/` post-processing, pool, argmax, `mem/` buffers and ports, `ctrl/` CSR, sequencer, counters, `top/` accelerator and FPGA tops, `axi/` AXI4-Lite blocks, `soc/` SoC and its board top |
 | `firmware/` | `common/` startup, linker script, accelerator driver, software CNN; `apps/` smoke, quick subset, bench, board demo |
-| `third_party/` | PicoRV32 (git submodule) |
-| `testbench/` | `unit/`, `system/` (cocotb), `sva/` assertions, `formal/` proofs, `mutants/` bug patches, `reports/` |
+| `third_party/` | PicoRV32 and uvm-core (git submodules) |
+| `testbench/` | `unit/`, `system/` (cocotb), `uvm/` (UVM bench), `sva/` assertions, `formal/` proofs, `mutants/` bug patches, `reports/` |
 | `model/` | training, quantization, golden model, export; `artifacts/` committed weights and test vectors; `reports/` |
 | `fpga/de10lite/`, `fpga/de10lite_soc/` | build scripts, pins, constraints, build reports (accelerator demo, SoC) |
 | `scripts/` | lint, checkpoints, mutation runner, coverage and full-run reports |
