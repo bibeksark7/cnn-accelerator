@@ -424,8 +424,8 @@ check_soc_tests() {
   python - <<'PY'
 import sys, xml.etree.ElementTree as ET
 root = ET.parse("sim_build/checkpoint/system.xml").getroot()
-want = ["test_accel_axil", "test_soc[smoke]", "test_soc[quick]", "test_soc[demo]", "test_soc_bench",
-        "test_de10lite_soc_top",
+want = ["test_accel_axil", "test_soc[smoke]", "test_soc[quick]", "test_soc[demo]", "test_soc_demo_timeout",
+        "test_soc_bench", "test_de10lite_soc_top",
         "test_soc_bus_check_fires[buserr-a_no_write_error]", "test_soc_bus_check_fires[trap-a_no_trap]"]
 cases = {c.get("name"): c for c in root.iter("testcase")}
 bad = [n for n in want if n not in cases or any(ch.tag in ("failure", "error", "skipped") for ch in cases[n])]
@@ -514,7 +514,7 @@ phase_5() {
   echo "Phase 5: RISC-V SoC with AXI4-Lite"
   check "unit tests pass (testbench/unit, incl. the AXI4-Lite blocks)" check_pytest unit 15 testbench/unit
   check "system tests pass (accel_top, FPGA tops, accelerator AXI slave, SoC firmware, SoC board top)" check_pytest system 15 testbench/system
-  check "SoC: accelerator slave, firmware quick subset (50 images bit-exact), smoke, bench, board demo, board top, bus check live" check_soc_tests
+  check "SoC: accelerator slave, firmware quick subset (50 images bit-exact), smoke, bench, board demo, demo timeout, board top, bus check live" check_soc_tests
   check "formal proofs pass, and fail on their mutants (testbench/formal)" check_pytest formal 17 testbench/formal
   check "script and golden model tests (incl. the software CNN against the golden model)" check_pytest scripts_model 30 scripts/tests model/tests
   check "RTL lint (Quartus compat, Verilator -Wall, Icarus, Yosys check)" scripts/lint.sh
