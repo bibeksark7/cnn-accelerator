@@ -1,0 +1,5 @@
+`verilator_config
+// uvm-core is the IEEE 1800.2 reference library, used unmodified (docs/decisions.md D-051): the
+// project's lint rules do not apply to it, so every Verilator warning is switched off for its
+// files only.
+lint_off -file "*third_party/uvm-core/*"
