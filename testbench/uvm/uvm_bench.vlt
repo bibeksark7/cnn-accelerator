@@ -1,0 +1,7 @@
+`verilator_config
+// The UVM bench's own lint waiver (docs/decisions.md D-052). Verilator's WIDTH rules are meant for
+// RTL: in class-based bench code they flag the standard idioms (`if (!x.randomize())`, the 64-bit
+// uvm_reg_data_t arguments of the register API, $urandom_range results), and casting each one
+// would bury the bench's logic. Every other Verilator warning stays an error for these files; the
+// RTL stays -Wall clean (scripts/lint.sh).
+lint_off -rule WIDTH -file "*testbench/uvm/*"
