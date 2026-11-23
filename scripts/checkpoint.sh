@@ -539,6 +539,83 @@ phase_5() {
   fi
 }
 
+# Phase 6: the UVM tests of this checkpoint's run passed, by name (a deselected one cannot count).
+check_uvm_tests() {
+  python - <<'PY'
+import sys, xml.etree.ElementTree as ET
+sys.path[:0] = ["testbench", "testbench/uvm"]
+root = ET.parse("sim_build/checkpoint/uvm.xml").getroot()
+import test_uvm
+want = [f"test_uvm[{t}]" for t in test_uvm.TESTS] + ["test_uvm_violation", "test_uvm_coverage"]
+cases = {c.get("name"): c for c in root.iter("testcase")}
+bad = [n for n in want if n not in cases or any(ch.tag in ("failure", "error", "skipped") for ch in cases[n])]
+print(f"{len(want) - len(bad)}/{len(want)} UVM tests passed: " + ", ".join(n for n in want if n not in bad))
+for n in bad: print(f"  missing or not passed: {n}")
+sys.exit(1 if bad else 0)
+PY
+}
+
+# Phase 6: the committed UVM coverage report is this tree's: same result as this checkpoint's run,
+# generated from a clean tree of HEAD's RTL, bench and uvm-core, goal met.
+check_uvm_coverage_report() {
+  RTL="$(git rev-parse HEAD:rtl)" UVM="$(git rev-parse HEAD:testbench/uvm)" \
+  CORE="$(git rev-parse HEAD:third_party/uvm-core)" python - <<'PY'
+import os, re, sys
+committed = open("testbench/reports/uvm_coverage.md").read()
+fresh = open("sim_build/uvm/uvm_coverage.md").read()
+res = lambda t: re.search(r"^- Result: \*\*(.*)\*\*$", t, re.M).group(1)
+problems = []
+if res(committed) != res(fresh): problems.append(f"committed result '{res(committed)}' != this run's '{res(fresh)}'")
+if "goal NOT met" in res(committed): problems.append("goal not met")
+if "(tree clean)" not in committed: problems.append("generated from a dirty tree")
+for k, env in (("RTL tree", "RTL"), ("UVM bench tree", "UVM"), ("uvm-core", "CORE")):
+    m = re.search(rf"{k}: `([0-9a-f]+)`", committed)
+    if not m or m.group(1) != os.environ[env]: problems.append(f"{k} {m and m.group(1)} != HEAD's {os.environ[env]}")
+print(f"committed: {res(committed)}")
+for p in problems: print("  " + p)
+sys.exit(1 if problems else 0)
+PY
+}
+
+# Phase 6: every mutant of testbench/uvm/mutants.md killed by the UVM bench in a fresh run (one at
+# a time: each rebuilds the bench), and the committed report lists every row, all killed.
+check_uvm_mutants() {
+  local n killed
+  python scripts/run_mutants.py --table testbench/uvm/mutants.md -j 1 --report "$REPORT_DIR/uvm_mutation.md" || return 1
+  n="$(grep -c '^| `m[0-9]' testbench/uvm/mutants.md)"
+  killed="$(grep -c '| KILLED |' testbench/reports/uvm_mutation.md)"
+  echo "committed report: $killed KILLED rows for $n mutants in the table"
+  [ "$killed" -eq "$n" ]
+}
+
+check_uvm_core_pin() {
+  local want=78c06547a2a0a29b3dc9dcafae62b75b2ff61544 have
+  have="$(git rev-parse HEAD:third_party/uvm-core)"
+  echo "third_party/uvm-core at $have (tag 2020.3.1 is $want)"
+  [ "$have" = "$want" ] && [ "$(git -C third_party/uvm-core rev-parse HEAD)" = "$want" ]
+}
+
+phase_6() {
+  echo "Phase 6: UVM testbench (accelerator AXI4-Lite slave)"
+  check "uvm-core submodule pinned at 2020.3.1 and checked out (D-051)" check_uvm_core_pin
+  check "UVM regression passes (testbench/uvm: 7 tests, the protocol-violation test, coverage)" check_pytest uvm 9 testbench/uvm
+  check "UVM: every test by name, incl. the deliberate violation failing through a_awvalid_held" check_uvm_tests
+  check "UVM coverage: goal met; committed report (testbench/reports/uvm_coverage.md) is this tree's and matches this run" check_uvm_coverage_report
+  check "UVM: every mutant in testbench/uvm/mutants.md killed (fresh run; committed report complete)" check_uvm_mutants
+  check "no RTL mutant applied to the working tree" check_no_mutant_applied
+  check "unit tests pass (testbench/unit)" check_pytest unit 15 testbench/unit
+  check "system tests pass (testbench/system)" check_pytest system 15 testbench/system
+  check "formal proofs pass, and fail on their mutants (testbench/formal)" check_pytest formal 17 testbench/formal
+  check "script and golden model tests (incl. the mutant tables)" check_pytest scripts_model 30 scripts/tests model/tests
+  check "RTL lint (Quartus compat, Verilator -Wall, Icarus, Yosys check)" scripts/lint.sh
+  check "ruff format + ruff check clean" check_ruff
+  check "README badges match the committed coverage and mutation reports" python scripts/readme_badges.py --check
+  check "README and architecture FPGA numbers match the committed build reports" python scripts/check_fpga_numbers.py
+  check "docs present (spec, verification plan, decisions, bug log)" check_docs_exist docs/spec.md docs/verification_plan.md docs/decisions.md docs/bug_log.md
+  run_local_checks "optional local repository checks"
+  check "full CI job (full.yml, UVM included) green for HEAD" check_ci_green_on_head
+}
+
 phase="${1:-}"
 case "$phase" in
   0) phase_0 ;;
@@ -547,7 +624,8 @@ case "$phase" in
   3) phase_3 ;;
   4) phase_4 ;;
   5) phase_5 ;;
-  *) echo "usage: $0 <phase>   (implemented: 0, 1, 2, 3, 4, 5)" >&2; exit 2 ;;
+  6) phase_6 ;;
+  *) echo "usage: $0 <phase>   (implemented: 0, 1, 2, 3, 4, 5, 6)" >&2; exit 2 ;;
 esac
 
 echo
