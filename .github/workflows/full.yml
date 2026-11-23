@@ -114,6 +114,18 @@ jobs:
         if: always()
         run: python scripts/check_junit.py sim_build/model.xml --min-tests 20
 
+      - name: UVM testbench (accelerator AXI4-Lite slave; Verilator + uvm-core)
+        if: always()
+        env:
+          BUILD_JOBS: 4  # the runner has 16 GB; locally the UVM build used about 4.8 GB at -j 2
+        run: |
+          source scripts/env.sh
+          pytest testbench/uvm --junitxml=sim_build/uvm.xml
+
+      - name: Check UVM results file
+        if: always()
+        run: python scripts/check_junit.py sim_build/uvm.xml --min-tests 9
+
       - name: Upload simulation results
         if: failure()
         uses: actions/upload-artifact@v7

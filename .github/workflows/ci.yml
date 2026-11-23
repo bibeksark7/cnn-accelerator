@@ -1,9 +1,9 @@
 name: CI
 
-# Fast checks on every push and pull request, as four parallel jobs so the workflow finishes in
+# Fast checks on every push and pull request, as five parallel jobs so the workflow finishes in
 # well under 10 minutes: ruff, RTL lint and the script and golden-model tests; the Icarus unit
-# tests; the other unit tests (Verilator, SVA-fires, synthesis checks); and the quick-subset
-# system tests (pytest -m "not full"). The slow tests (marked `full`), the formal proofs and the
+# tests; the other unit tests (Verilator, SVA-fires, synthesis checks); the quick-subset system
+# tests (pytest -m "not full"); and the UVM testbench (testbench/uvm, about 5 minutes). The slow tests (marked `full`), the formal proofs and the
 # rest run in full.yml (nightly and on manual trigger); checkpoints require full.yml green for
 # HEAD.
 
@@ -32,6 +32,8 @@ jobs:
             name: unit, Verilator
           - part: system
             name: quick-subset system tests
+          - part: uvm
+            name: UVM testbench
     steps:
       - uses: actions/checkout@v7
         with:
@@ -73,10 +75,18 @@ jobs:
           source scripts/env.sh
           pytest testbench/system -m "not full" --junitxml=sim_build/results.xml
 
+      - name: UVM testbench (accelerator AXI4-Lite slave; Verilator + uvm-core)
+        if: matrix.part == 'uvm'
+        env:
+          BUILD_JOBS: 4  # the runner has 16 GB; locally the UVM build used about 4.8 GB at -j 2
+        run: |
+          source scripts/env.sh
+          pytest testbench/uvm --junitxml=sim_build/results.xml
+
       - name: Check the results file
         if: always()
         env:
-          MIN_TESTS: ${{ matrix.part == 'lint' && 30 || matrix.part == 'system' && 10 || 30 }}
+          MIN_TESTS: ${{ matrix.part == 'lint' && 30 || matrix.part == 'system' && 10 || matrix.part == 'uvm' && 9 || 30 }}
         run: python scripts/check_junit.py sim_build/results.xml --min-tests "$MIN_TESTS"
 
       - name: Upload simulation results
