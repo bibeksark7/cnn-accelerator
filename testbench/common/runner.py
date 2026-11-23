@@ -12,6 +12,7 @@ import os
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
+import cocotb_tools.runner as _cocotb_runner
 from cocotb_tools.check_results import get_results
 from cocotb_tools.runner import get_runner
 
@@ -19,6 +20,10 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 RTL_DIR = REPO_ROOT / "rtl"
 SIM_BUILD_DIR = REPO_ROOT / "sim_build"
 SVA_DIR = REPO_ROOT / "testbench" / "sva"
+
+# C++ build parallelism for Verilator (cocotb's default is 4): 2 unless BUILD_JOBS says
+# otherwise, so builds stay within the development machine's memory (several run at once).
+_cocotb_runner.MAX_PARALLEL_BUILD_JOBS = int(os.environ.get("BUILD_JOBS", "2"))
 
 # Simulators every unit test can be parameterized over.
 SIMULATORS = ("icarus", "verilator")
