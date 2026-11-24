@@ -44,8 +44,10 @@ cycle before each tile streams, so staging takes about eight times as long as st
 - **A test suite that could not see saturation** (BUG-014): with saturation removed from the
   requantizer, every system test still passed, because no quick-subset image saturates. A
   deliberate CI failure run exposed it; the 4 test images that do saturate now run in CI.
-- **Assertions that fired after a one-cycle reset** (BUG-010): `$past`-based properties looked
-  back into the reset cycle; the fix excludes the cycle after reset.
+- **A register mirror that ran two cycles late** (BUG-023): the UVM scoreboard updated the register
+  model only after `write()` had returned, so a check right after a write compared the design with
+  a stale value. Adding `uvm_reg_access_seq` (frontdoor write, backdoor read) exposed it; the
+  mirror is now updated in the time step of the write response.
 
 Every bug: symptom, how it was found, root cause, fix and regression test in
 [docs/bug_log.md](docs/bug_log.md).
