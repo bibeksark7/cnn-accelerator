@@ -14,7 +14,7 @@ Quartus Prime Lite · GitHub Actions
 [![CI](https://github.com/bibeksark7/cnn-accelerator/actions/workflows/ci.yml/badge.svg)](https://github.com/bibeksark7/cnn-accelerator/actions/workflows/ci.yml)
 [![full regression](https://github.com/bibeksark7/cnn-accelerator/actions/workflows/full.yml/badge.svg)](https://github.com/bibeksark7/cnn-accelerator/actions/workflows/full.yml)
 [![functional coverage](https://img.shields.io/badge/functional%20coverage-107%2F110%20bins%2C%203%20documented%20gaps-brightgreen)](testbench/reports/coverage.md)
-[![mutants killed](https://img.shields.io/badge/mutants%20killed-54%2F54-brightgreen)](testbench/reports/mutation.md)
+[![mutants killed](https://img.shields.io/badge/mutants%20killed-55%2F55-brightgreen)](testbench/reports/mutation.md)
 <!-- badges:end -->
 
 ## Results
@@ -28,9 +28,9 @@ Quartus Prime Lite · GitHub Actions
 | Timing on MAX 10 (10M50DAF484C7G) | 65.85 MHz Fmax; worst slack at 50 MHz over all three corners: +4.813 ns setup, +0.095 ns hold | [Fmax](fpga/de10lite/reports/fmax.rpt), [timing per corner](fpga/de10lite/reports/timing_corners.rpt), [summary](fpga/de10lite/reports/de10lite.sta.summary) |
 | Resources (whole demo) | 8,322 LEs (17 %), 5,587 registers, 340,608 memory bits (20 %), 68 9-bit multipliers | [fit summary](fpga/de10lite/reports/de10lite.fit.summary) |
 | SoC speedup | 374.9× end to end over the same integer CNN on PicoRV32 (217.8× counting the image upload); against an ideal one-instruction-per-cycle core at the same clock, 49.7× (28.9× with the upload) | [speedup report](testbench/reports/soc_speedup.md), [SoC](#risc-v-soc) |
-| Mutation testing | 54 / 54 injected bugs caught (accelerator and SoC) | [mutation report](testbench/reports/mutation.md) |
+| Mutation testing | 55 / 55 injected bugs caught (accelerator and SoC) | [mutation report](testbench/reports/mutation.md) |
 | Functional coverage | every goal met or documented as a gap (bins sampled from the design) | [coverage report](testbench/reports/coverage.md) |
-| UVM testbench (AXI4-Lite slave) | 7 tests + a protocol-violation test; 191 / 191 coverage bins; 17 / 17 injected bugs caught | [UVM coverage](testbench/reports/uvm_coverage.md), [UVM mutation report](testbench/reports/uvm_mutation.md) |
+| UVM testbench (AXI4-Lite slave) | 7 tests + 3 protocol-violation tests; 207 / 207 coverage bins with one fixed seed per test, and 207 / 207 bins over 70 runs with 10 random seeds per test; 18 / 18 injected bugs caught, each through its named mechanism | [UVM coverage](testbench/reports/uvm_coverage.md), [seed sweep](testbench/reports/uvm_seed_sweep.md), [scoreboard checks](testbench/reports/uvm_checks.md), [UVM mutation report](testbench/reports/uvm_mutation.md) |
 
 The array is busy only 8.2 % of the cycles because its im2col operands are staged one byte per
 cycle before each tile streams, so staging takes about eight times as long as streaming; Milestone
@@ -144,21 +144,25 @@ Spec: [docs/spec.md §13](docs/spec.md).
 - **Formal proofs** (SymbiYosys): the MAC cell, argmax (unbounded at reduced width, bounded at
   full width) and the post-processing pipeline's handshake, including progress properties.
 - **Functional coverage** sampled from DUT signals, with goals and written reasons for gaps.
-- **Mutation testing**: 54 single-bug patches, each caught by its named test: in the accelerator
-  (rounding, saturation, ReLU, skew, ping-pong, handshakes, control path) and in the SoC (AXI4-Lite
+- **Mutation testing**: 55 single-bug patches, each caught by its named test: in the accelerator
+  (rounding, saturation, ReLU, skew, ping-pong, handshakes, control path,
+  counters) and in the SoC (AXI4-Lite
   handshakes and buffering, interconnect routing and DECERR, byte-write merging, register rules,
   the address map).
 - **SoC tests**: unit tests for each AXI4-Lite block, the accelerator behind its AXI4-Lite slave
   with every accelerator assertion bound, and firmware-driven runs of the whole SoC with AXI4-Lite
   channel assertions on every slave.
 - **UVM testbench** (`testbench/uvm/`, Verilator + the IEEE 1800.2 reference library): an AXI4-Lite
-  agent with independent channel timing and two transactions in flight, a register model of the
-  CSR map, protocol assertions on the interface, and a scoreboard that predicts every response
-  and read, including which writes a running accelerator must ignore and which accesses it must
-  hold, without assuming any latency. Seven tests: register reset values and bit-bash, random bus
-  and error traffic, all 54 reference images uploaded and run through the bus bit-exact, polling
-  during runs, every descriptor error (directed and constrained-random), reset mid-run, and a
-  fully concurrent mix.
+  agent with independent channel timing and two transactions in flight per direction, a register
+  model of the CSR map with a backdoor for IMG_SEL and the descriptor table, the design's own
+  AXI4-Lite channel checker bound to the interface, and a scoreboard that checks every response
+  and every read whose value is determined, including which writes a running accelerator must
+  ignore and which accesses it must hold, without assuming any latency (checked and unpredictable
+  reads per test: [scoreboard checks](testbench/reports/uvm_checks.md)). Seven tests: register
+  reset values, bit-bash and frontdoor-against-backdoor access, random bus and error traffic, all
+  54 reference images uploaded and run through the bus bit-exact, polling during runs, every
+  descriptor error (directed and constrained-random), reset mid-run, and a fully concurrent mix.
+  Each test runs with one fixed seed on every push and with 10 random seeds nightly.
 - **Full run**: all 10,000 MNIST test images, with the commit and RTL tree recorded in the report.
 - **CI** (GitHub Actions): a fast job on every push (lint, every unit test, the quick-subset system
   tests, the UVM bench) and the full regression, formal proofs and slow tests included, nightly and
