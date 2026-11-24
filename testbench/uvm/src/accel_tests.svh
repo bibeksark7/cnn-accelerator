@@ -12,7 +12,9 @@
 //   accel_infer_test     the network uploaded through the bus, then every reference image (the
 //                        quick subset and the saturating images) run back to back, slots reused
 //   accel_poll_test      runs with a second sequence polling and poking the slave throughout
-//   accel_error_test     each §9 descriptor error, then a correct run again
+//   accel_error_test     each §9 descriptor error, then a correct run again. The env's agent is
+//                        passive here (a separate active agent is the bus master), then a reset
+//                        requested while a read is in flight must wait for its response
 //   accel_reset_test     reset in the middle of a run and while idle; WHI, CSRs, buffers after it
 //   accel_random_test    runs, uploads, random reads and error traffic all at once, extreme timing
 //   accel_violation_test the driver breaks the AXI4-Lite rules on purpose (+VIOLATION=AW, W or AR:
@@ -23,6 +25,10 @@ class accel_base_test extends uvm_test;
   `uvm_component_utils(accel_base_test)
   accel_env env;
   axil_cfg agent_cfg;
+  // Set by a subclass's new(): the env's agent only monitors, and `master`, an active agent outside
+  // the env on the same interface, drives the bus. The register model has no frontdoor then.
+  bit passive_env = 0;
+  axil_agent master;
   int unsigned min_golden_runs = 0, min_checked_reads = 1, min_runs = 0;
 
   function new(string name, uvm_component parent);
@@ -32,11 +38,24 @@ class accel_base_test extends uvm_test;
   function void build_phase(uvm_phase phase);
     agent_cfg = axil_cfg::type_id::create("agent_cfg");
     configure_agent(agent_cfg);
+    if (passive_env) begin
+      axil_cfg master_cfg = axil_cfg::type_id::create("master_cfg");
+      configure_agent(master_cfg);
+      master_cfg.has_coverage = 0;  // the env's agent has it
+      agent_cfg.is_active = UVM_PASSIVE;
+      uvm_config_db#(axil_cfg)::set(this, "master", "cfg", master_cfg);
+      master = axil_agent::type_id::create("master", this);
+    end
     uvm_config_db#(axil_cfg)::set(this, "env", "agent_cfg", agent_cfg);
     env = accel_env::type_id::create("env", this);
   endfunction
 
   virtual function void configure_agent(axil_cfg cfg);
+  endfunction
+
+  // The sequencer of whichever agent drives the bus.
+  function axil_sequencer sqr();
+    return passive_env ? master.sqr : env.agent.sqr;
   endfunction
 
   function accel_base_seq seq_cfg(accel_base_seq s, int unsigned max_delay = 3,
@@ -62,7 +81,7 @@ class accel_base_test extends uvm_test;
   task load_net(int unsigned max_delay = 3);
     accel_load_net_seq s = accel_load_net_seq::type_id::create("load_net");
     void'(seq_cfg(s, max_delay));
-    s.start(env.agent.sqr);
+    s.start(sqr());
   endtask
 
   task load_image(int image, int slot, int unsigned max_delay = 3);
@@ -70,14 +89,14 @@ class accel_base_test extends uvm_test;
     void'(seq_cfg(s, max_delay));
     s.image = image;
     s.slot = slot;
-    s.start(env.agent.sqr);
+    s.start(sqr());
   endtask
 
   task run_slot(int slot, int unsigned max_delay = 3);
     accel_run_seq s = accel_run_seq::type_id::create("run");
     void'(seq_cfg(s, max_delay));
     s.slot = slot;
-    s.start(env.agent.sqr);
+    s.start(sqr());
   endtask
 
   function void report_phase(uvm_phase phase);
@@ -128,7 +147,7 @@ class accel_reg_test extends accel_base_test;
     foreach (env.regs.desc[w]) env.regs.desc[w].write(st, env.refd.desc[w]);
     void'(seq_cfg(csr));
     csr.n = 1500;
-    csr.start(env.agent.sqr);
+    csr.start(sqr());
     env.regs.img_sel.write(st, 9);
     env.reset_dut(3);
     rst_seq.start(null);  // IMG_SEL back to 0
@@ -137,7 +156,7 @@ class accel_reg_test extends accel_base_test;
     end
     csr.allow_writes = 0;
     csr.n = 300;
-    csr.start(env.agent.sqr);
+    csr.start(sqr());
   endtask
 endclass
 
@@ -162,9 +181,9 @@ class accel_bus_test extends accel_base_test;
     c.n = 1000;
     e.n = 1500;  // no runs here, so CSR writes (IMG_SEL, DESC with restore) are safe in parallel
     fork
-      b.start(env.agent.sqr);
-      c.start(env.agent.sqr);
-      e.start(env.agent.sqr);
+      b.start(sqr());
+      c.start(sqr());
+      e.start(sqr());
     join
   endtask
 endclass
@@ -208,10 +227,10 @@ class accel_poll_test extends accel_base_test;
       p.slot = 15 - k;
       p.first_held = k % 3;
       fork
-        r.start(env.agent.sqr);
+        r.start(sqr());
         begin
           env.wait_cycles(20);
-          p.start(env.agent.sqr);
+          p.start(sqr());
         end
       join
     end
@@ -222,17 +241,44 @@ class accel_error_test extends accel_base_test;
   `uvm_component_utils(accel_error_test)
   function new(string name, uvm_component parent);
     super.new(name, parent);
-    min_runs = 9 + 12;
-    min_golden_runs = 1;
+    min_runs = 10 + 12;
+    min_golden_runs = 2;
+    passive_env = 1;
   endfunction
+
+  // A reset requested while a read is in flight, its response held off by the master: reset_dut
+  // must wait for it. The env's agent has no driver, so only its monitor can tell.
+  task reset_during_read();
+    accel_read_seq rd = accel_read_seq::type_id::create("slow_read");
+    bit done = 0;
+    if (env.agent.drv != null || env.agent.sqr != null)
+      `uvm_error("TEST", "the env's agent is not passive")
+    void'(seq_cfg(rd, 0, 0));
+    rd.min_resp_delay = 40;
+    rd.addr = 23'(CSR_ID);
+    fork
+      begin
+        rd.start(sqr());
+        done = 1;
+      end
+      begin
+        while (env.agent.idle()) env.wait_cycles(1);
+        env.reset_dut();
+        if (!done) `uvm_fatal("TEST", "reset_dut did not wait for the read in flight")
+      end
+    join
+  endtask
+
   task body();
     accel_desc_error_seq e = accel_desc_error_seq::type_id::create("desc_errors");
     load_net();
     load_image(0, 6);  // class 7: the runs after the first show RESULT cleared by START
     void'(seq_cfg(e));
     e.slot = 6;
-    e.start(env.agent.sqr);
+    e.start(sqr());
     run_slot(6);  // the restored table runs correctly
+    reset_during_read();
+    run_slot(6);  // and again after the reset (buffers and DESC kept)
   endtask
 endclass
 
@@ -249,14 +295,14 @@ class accel_reset_test extends accel_base_test;
     void'(seq_cfg(s));
     s.addr = addr;
     s.data = data;
-    s.start(env.agent.sqr);
+    s.start(sqr());
   endtask
 
   task read(bit [22:0] addr);
     accel_read_seq s = accel_read_seq::type_id::create("read");
     void'(seq_cfg(s));
     s.addr = addr;
-    s.start(env.agent.sqr);
+    s.start(sqr());
   endtask
 
   task body();
@@ -273,13 +319,13 @@ class accel_reset_test extends accel_base_test;
       accel_start_seq st = accel_start_seq::type_id::create("start");
       void'(seq_cfg(st));
       st.slot = 2;
-      st.start(env.agent.sqr);
+      st.start(sqr());
       env.wait_cycles(reset_at[i]);
       env.reset_dut($urandom_range(1, 6));
       rst_seq.start(null);
       csr.allow_writes = 0;
       csr.n = 80;
-      csr.start(env.agent.sqr);
+      csr.start(sqr());
     end
     // A reset while idle, then WHI: cleared by reset (a high-half write, reset, a low-half write
     // stores {0, low}).
@@ -328,8 +374,8 @@ class accel_random_test extends accel_base_test;
           c.n = 200;
           e.n = 100;
           fork
-            c.start(env.agent.sqr);
-            e.start(env.agent.sqr);
+            c.start(sqr());
+            e.start(sqr());
           join
         end
       end
@@ -366,10 +412,10 @@ class accel_violation_test extends accel_base_test;
       slow.addr = buf_addr(7, 0, 0);
       next.addr = buf_addr(7, 1, 0);
       fork
-        slow.start(env.agent.sqr);
+        slow.start(sqr());
         begin
           env.wait_cycles(1);
-          next.start(env.agent.sqr);
+          next.start(sqr());
         end
       join
     end else begin
@@ -381,10 +427,10 @@ class accel_violation_test extends accel_base_test;
       slow.addr = buf_addr(7, 0, 0);
       next.addr = buf_addr(7, 1, 0);
       fork
-        slow.start(env.agent.sqr);
+        slow.start(sqr());
         begin
           env.wait_cycles(1);
-          next.start(env.agent.sqr);
+          next.start(sqr());
         end
       join
     end

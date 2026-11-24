@@ -452,12 +452,11 @@ class accel_scoreboard extends uvm_component;
   // a run, CYC_TOTAL within 2 of the number of cycles BUSY was high (a bound around "cycles from
   // START to DONE", which also covers the counters settling one cycle after DONE; not a latency).
   // Once settled (read SETTLE cycles or more after BUSY fell; they are final one cycle after DONE):
-  // unchanging until the next START or reset; CYC_MAC at most CYC_TOTAL, BUF_RD at most
-  // 5 · CYC_TOTAL and BUF_WR at most 2 · CYC_TOTAL (a cycle counts at most one MAC step, five
-  // buffer reads and two writes); and, after a golden run, equal to the first golden run's values
-  // (the reference network's schedule does not depend on the image).
+  // unchanging until the next START or reset; CYC_MAC, BUF_RD and BUF_WR each at most CYC_TOTAL
+  // (for the buffer counters tighter than the spec, which allows five reads and two writes per
+  // cycle: a property of this engine, D-052); and, after a golden run, equal to the first golden
+  // run's values (the reference network's schedule does not depend on the image).
   localparam longint SETTLE = 3;
-  localparam int CTR_PER_CYCLE[4] = '{1, 1, 5, 2};
   function void counter_read(axil_item t, csr_e k, int cls, longint s);
     int i = int'(k) - int'(R_CYC_TOTAL);
     string name = ctr_name(i);
@@ -514,9 +513,9 @@ class accel_scoreboard extends uvm_component;
       if (!ctr_final_known[i] || ctr_bound_checked[i]) continue;
       ctr_bound_checked[i] = 1;
       n_counter_bounds++;
-      if (longint'(ctr_final[i]) > CTR_PER_CYCLE[i] * longint'(ctr_final[0]))
-        fail(t, $sformatf("%s = %0d exceeds %0d x CYC_TOTAL (%0d)", ctr_name(i), ctr_final[i],
-                          CTR_PER_CYCLE[i], ctr_final[0]));
+      if (ctr_final[i] > ctr_final[0])
+        fail(t, $sformatf("%s = %0d exceeds CYC_TOTAL (%0d)", ctr_name(i), ctr_final[i],
+                          ctr_final[0]));
     end
   endfunction
 

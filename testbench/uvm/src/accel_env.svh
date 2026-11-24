@@ -54,8 +54,8 @@ class accel_env extends uvm_env;
     regs.set_backdoors(bif, sb);
   endfunction
 
-  // Hang guard: a transaction on the bus (the monitor's view) and none completed for HANG_CYCLES
-  // cycles. A buffer-window
+  // Hang guard: a transaction on the bus (the monitor's view), or queued in an active agent's
+  // driver, and none completed for HANG_CYCLES cycles. A buffer-window
   // access legitimately holds the slave until a run ends (about 47,000 cycles), so the bound is
   // far above one run; it only turns a hang into a failure instead of a wall-clock timeout.
   localparam int unsigned HANG_CYCLES = 400_000;
@@ -63,7 +63,7 @@ class accel_env extends uvm_env;
     int unsigned last_done = 0, quiet = 0;
     forever begin
       repeat (1000) @(posedge vif.clk);
-      if (agent.mon.idle() || agent.mon.n_done != last_done) quiet = 0;
+      if (agent.idle() || agent.mon.n_done != last_done) quiet = 0;
       else quiet += 1000;
       last_done = agent.mon.n_done;
       if (quiet >= HANG_CYCLES)

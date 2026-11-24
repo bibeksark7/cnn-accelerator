@@ -43,7 +43,7 @@ module tb_top;
   );
 
   initial begin
-    uvm_config_db#(virtual axil_if)::set(null, "uvm_test_top.env*", "vif", aif);
+    uvm_config_db#(virtual axil_if)::set(null, "uvm_test_top*", "vif", aif);
     uvm_config_db#(virtual accel_status_if)::set(null, "uvm_test_top.env*", "status_vif", sif);
     uvm_config_db#(virtual accel_backdoor_if)::set(null, "uvm_test_top.env", "backdoor_vif", bif);
     run_test();
