@@ -396,8 +396,8 @@ caught by `scripts/lint.sh` before any commit and are not listed.
   failed its first check: after a frontdoor write of `~v`, the backdoor read (one time unit after
   `write()` returned) found the new value in the design, but the mirror still held the old one
   (`Register "regs.IMG_SEL" value read from DUT (0xf) does not match mirrored value (0x0)`; 33
-  such errors, one per register). Each was followed by a scoreboard error on the frontdoor read
-  back (`IMG_SEL read 00000000, predicted 0000000f`; 48 in all).
+  such errors, one per register). The same run had 48 scoreboard read mismatches, such as
+  `IMG_SEL read 00000000, predicted 0000000f` on the frontdoor read back of IMG_SEL.
 - **How found.** The new sequence (frontdoor write, backdoor check; backdoor write, frontdoor
   check), run against a backdoor added for IMG_SEL and the descriptor table.
 - **Root cause.** Verification bug. The scoreboard is the register model's predictor (auto-predict

@@ -1453,7 +1453,26 @@ dependency, available to CI through `actions/checkout` with submodules.
 - **Agent** (`axil_pkg`, reusable): a pipelined driver (writes and reads in their own threads, up
   to two in flight per direction, AW and W with independent delays, BREADY / RREADY delayed or
   raised before VALID) and a monitor that rebuilds each transaction with the cycle of every
-  handshake and the stall cycles of each channel.
+  handshake and the stall cycles of each channel. The monitor also records, at each acceptance,
+  how many writes and reads are in flight, whether the other direction is pending, and which of
+  an AW and AR accepted together is answered first; and it decides when the bus is idle (nothing
+  presented and unanswered), so the env's reset and hang guard work with a passive agent:
+  `accel_error_test` runs the env that way, with a separate active agent as the bus master, and
+  requests a reset while a read is in flight. The agent's own coverage (`axil_coverage`, `cg_outstanding`) samples those monitor fields.
+- **Concurrency coverage defined by what is in flight, not by what the slave holds.** The slave
+  has one-entry AW, W and AR buffers freed by the response (spec §13.3), so at most one
+  transaction per direction is ever accepted and unanswered: a depth of 2 "outstanding at the
+  slave" cannot occur. The bins therefore count transactions presented on the bus and not yet
+  answered (the master's view: one held by the slave plus one waiting for READY gives 2), sampled
+  at every acceptance; "pending" (accepted, unanswered) is used for the read-during-write and
+  write-during-read bins.
+- **Protocol checker:** the AXI4-Lite channel rules on the agent's interface are the design's
+  own checker modules (`valid_ready_sva` per channel, `axil_resp_order_sva`), bound to `axil_if`
+  (`axil_if_bind.sv`), the same modules every cocotb and SoC test binds to `axil_slave_port`. One
+  statement of spec §13.3 serves every bench, so a rule fixed in one place is fixed for all.
+  `axil_if` keeps only the rules that checker does not state (no EXOKAY, the master quiet in
+  reset, the slave quiet after reset). The violation test withdraws AWVALID, WVALID or ARVALID in
+  turn and requires that channel's `a_valid_held` to fire first.
 - **Scoreboard as the predictor:** it models the CSRs, WHI and a shadow of every buffer word the
   bench wrote, and applies transactions in completion order (the slave serves one at a time,
   spec §13.4, so this is service order). Busy-dependent rules (IMG_SEL / DESC writes ignored and
@@ -1464,6 +1483,23 @@ dependency, available to CI through `actions/checkout` with submodules.
   when the network and the image slot equal the reference, the logits and class are the Python
   export's. The register model's mirror is predicted by the scoreboard (`UVM_PREDICT_WRITE`),
   not by `uvm_reg_predictor`, because only the scoreboard knows whether a write was performed.
+  It predicts in the time step in which the monitor publishes the response, which is the one in
+  which the driver returns it, so the mirror is current when `write()` returns (BUG-023); only
+  the "BUSY rose after START" check waits for later cycles.
+- **Register model fields and backdoor:** STATUS has BUSY, DONE, ERROR and LAYER fields and CTRL
+  a START field, as in spec §10.2. UVM's HDL-path backdoor needs simulator-specific C code that
+  uvm-core does not have for Verilator, so IMG_SEL and the descriptor table get a user-defined
+  `uvm_reg_backdoor` that reads and writes the design through hierarchical references in an
+  interface (`accel_backdoor_if`), used only while idle. A backdoor write changes the design
+  without a bus transaction, so it also updates the scoreboard's model. `uvm_reg_access_seq`
+  (frontdoor against backdoor) runs on those 33 registers; the others are marked
+  `NO_REG_ACCESS_TEST` (constants, or values only the scoreboard can predict).
+- **Performance counters after a run:** once settled (three cycles after BUSY falls; they are
+  final one cycle after DONE, spec §10.2) they must not change until the next START; CYC_MAC,
+  BUF_RD and BUF_WR are each at most CYC_TOTAL; and after every golden run all four equal the first golden run's values: the
+  reference network's schedule does not depend on the image. For BUF_RD and BUF_WR the bound is
+  tighter than spec §10.2, which counts up to five reads and two writes per cycle: it is a property
+  of this engine (one operand byte staged per cycle) and must be reviewed if the engine changes.
 - **Randomization:** per-transaction timing and high-volume stimulus are procedural
   (`$urandom_range`, `randcase`, seeded by `+verilator+seed`). Measured: constrained
   `randomize()` takes about 15 ms per call with Verilator's default sampler and about 3 ms with
@@ -1475,13 +1511,25 @@ dependency, available to CI through `actions/checkout` with submodules.
   outcome); bins collected with `--coverage-user` per test and merged by
   `scripts/uvm_coverage.py`, which fails on any unmet bin not listed as a documented gap.
 - **DPI:** only uvm-core's message, regular-expression and command-line C code
-  (`testbench/uvm/uvm_dpi.cc`); not the HDL backdoor, so register access is frontdoor only.
+  (`testbench/uvm/uvm_dpi.cc`); not the HDL backdoor (see the register backdoor above).
 - **Lint:** the bench's own files are compiled with every Verilator warning fatal except WIDTH
   (`testbench/uvm/uvm_bench.vlt`): its rules are meant for RTL and flag standard bench idioms
   (`if (!x.randomize())`, the 64-bit register-API arguments). The RTL stays `-Wall` clean.
 - **Pass criterion:** exit 0, no UVM_ERROR / UVM_FATAL / UVM_WARNING, and the test's own
-  "TEST PASSED" line, which requires the scoreboard to have checked a minimum (golden runs,
-  checked reads, runs) so a test that checked nothing fails.
+  "TEST PASSED" line, which requires no UVM_ERROR, UVM_FATAL or UVM_WARNING in its report server
+  and the scoreboard to have checked a minimum (golden runs, checked reads, runs), so a test that
+  checked nothing fails. Per-run counts of checked and unpredictable reads go to
+  `testbench/reports/uvm_checks.md`.
+- **Seeds:** every push runs each test with a fixed seed (deterministic, so the committed
+  coverage and check-count reports can be compared with a fresh run). The nightly full job adds a
+  sweep of 10 random seeds per test (`UVM_SEEDS`), seeded from the workflow run, with the seed in
+  each test's name and the replay command in its failure message; coverage is merged over the
+  sweep and must meet the same goal, so the fixed seeds are not hand-picked to reach it.
+  `testbench/reports/uvm_seed_sweep.md` records a local sweep of the committed bench.
+- **Mutant kill mechanism:** a UVM mutant row can require an assertion or a UVM message ID
+  (`[SB]`, `[HANG]`, `[STATUS]`); `scripts/run_mutants.py` reads the simulator log, and a kill
+  through anything else counts as WRONG, so a mutant cannot pass as killed by an unrelated
+  failure.
 - **Build:** once per session, `-j 2` by default (`BUILD_JOBS`). Measured from scratch: about
   2.5 minutes and about 4.8 GB more memory in use (two compiler processes, the largest 2.6 GB);
   CI builds at `-j 4` (16 GB runners).
