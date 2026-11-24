@@ -390,7 +390,7 @@ caught by `scripts/lint.sh` before any commit and are not listed.
 - **Regression test.** The coverage goal in `test_uvm_coverage` (bin
   `cg_access_busy.x_access_busy.<A_BUF_LOW_WRITE, busy>`).
 
-## BUG-023 — Register mirror predicted two cycles after write() returned (Phase 6 review)
+## BUG-023 — Register mirror predicted two cycles after write() returned (Phase 6)
 
 - **Symptom.** With `uvm_reg_access_seq` added to `accel_reg_test`, every register it covers
   failed its first check: after a frontdoor write of `~v`, the backdoor read (one time unit after
